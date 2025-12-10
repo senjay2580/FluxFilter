@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { formatLastSyncTime, triggerSync, markSynced } from '../lib/autoSync';
 
+interface SyncButtonProps {
+  compact?: boolean; // 紧凑模式（只显示图标）
+}
+
 /**
- * 同步测试按钮组件
- * 用于手动触发视频同步，方便测试
+ * 同步按钮组件
  */
-const SyncButton: React.FC = () => {
+const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState(formatLastSyncTime());
@@ -32,6 +35,37 @@ const SyncButton: React.FC = () => {
     }
   };
 
+  // 紧凑模式 - 只显示图标
+  if (compact) {
+    return (
+      <button
+        onClick={handleSync}
+        disabled={syncing}
+        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+          syncing 
+            ? 'bg-white/5 border border-white/10 cursor-not-allowed' 
+            : 'bg-white/5 border border-white/10 hover:border-cyber-lime/50'
+        }`}
+        title={syncing ? '同步中...' : `同步视频 (${lastSync})`}
+      >
+        {syncing ? (
+          <svg className="w-4 h-4 animate-spin text-cyber-lime" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-25" />
+            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+            <path d="M3 3v5h5" />
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+            <path d="M16 21h5v-5" />
+          </svg>
+        )}
+      </button>
+    );
+  }
+
+  // 完整模式
   return (
     <div className="fixed bottom-24 right-4 z-50">
       {/* 消息提示 */}

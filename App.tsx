@@ -154,6 +154,7 @@ const App = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <SyncButton compact />
             <button 
               onClick={() => setIsCalendarOpen(true)}
               className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 transition-colors"
@@ -395,9 +396,6 @@ const App = () => {
           setActiveFilter('custom');
         }}
       />
-
-      {/* 同步测试按钮 */}
-      <SyncButton />
     </div>
   );
 };
