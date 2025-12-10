@@ -30,10 +30,7 @@ export default defineConfig(({ mode }) => {
         react(),
         VitePWA({
           registerType: 'autoUpdate',
-          includeAssets: ['favicon-196.png', 'apple-icon-180.png', 'assets/logo.svg'],
-          devOptions: {
-            enabled: true
-          },
+          includeAssets: ['favicon.ico', 'assets/logo.svg'],
           manifest: {
             name: 'Fluxf',
             short_name: 'Fluxf',
@@ -46,27 +43,15 @@ export default defineConfig(({ mode }) => {
             start_url: '/',
             icons: [
               {
-                src: 'manifest-icon-192.maskable.png',
-                sizes: '192x192',
-                type: 'image/png',
+                src: 'pwa-icon.svg',
+                sizes: '192x192 512x512',
+                type: 'image/svg+xml',
                 purpose: 'any'
               },
               {
-                src: 'manifest-icon-192.maskable.png',
-                sizes: '192x192',
-                type: 'image/png',
-                purpose: 'maskable'
-              },
-              {
-                src: 'manifest-icon-512.maskable.png',
-                sizes: '512x512',
-                type: 'image/png',
-                purpose: 'any'
-              },
-              {
-                src: 'manifest-icon-512.maskable.png',
-                sizes: '512x512',
-                type: 'image/png',
+                src: 'pwa-icon.svg',
+                sizes: '192x192 512x512',
+                type: 'image/svg+xml',
                 purpose: 'maskable'
               }
             ]

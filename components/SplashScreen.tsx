@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import LogoSvg from '../assets/logo.svg';
-import { usePWAInstall } from '../hooks/usePWAInstall';
 
 interface SplashScreenProps {
   onComplete: () => void;
@@ -11,7 +10,6 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onSync }) => {
   const [status, setStatus] = useState<'loading' | 'syncing' | 'done'>('loading');
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('正在启动...');
-  const { isInstallable, isInstalled, install } = usePWAInstall();
 
   useEffect(() => {
     const init = async () => {
@@ -135,7 +133,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onSync }) => {
         </div>
 
         {/* 状态文字 */}
-        <div className="flex items-center gap-2 text-gray-500 text-xs mb-6">
+        <div className="flex items-center gap-2 text-gray-500 text-xs">
           {status !== 'done' && (
             <div className="w-3 h-3 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
           )}
@@ -146,32 +144,6 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onSync }) => {
           )}
           <span>{message}</span>
         </div>
-
-        {/* 安装按钮 */}
-        {isInstallable && status === 'done' && (
-          <button
-            onClick={install}
-            className="px-6 py-2.5 bg-gradient-to-r from-cyber-lime to-lime-400 text-black font-medium text-sm rounded-full
-                       shadow-[0_0_20px_rgba(163,230,53,0.4)] hover:shadow-[0_0_30px_rgba(163,230,53,0.6)]
-                       transition-all hover:scale-105 active:scale-95 flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7,10 12,15 17,10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            安装应用
-          </button>
-        )}
-        
-        {isInstalled && (
-          <div className="text-cyber-lime/60 text-xs flex items-center gap-1">
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 13l4 4L19 7" />
-            </svg>
-            已安装
-          </div>
-        )}
       </div>
 
       {/* 底部信息 */}
