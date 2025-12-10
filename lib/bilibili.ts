@@ -13,10 +13,10 @@ import type { BilibiliVideoItem, BilibiliSpaceResponse, UpsertVideoParams } from
 import { encWbi } from './wbi';
 
 // B站API基础URL
-// 开发模式使用代理，生产模式需要通过服务端请求
+// 开发模式使用 Vite 代理，生产模式使用 Vercel Serverless Function
 const BILIBILI_API_BASE = import.meta.env.DEV 
   ? '/bili-api'  // 开发模式：通过 Vite 代理
-  : 'https://api.bilibili.com';  // 生产模式：服务端调用
+  : '/api/bilibili?path=';  // 生产模式：通过 Vercel API 代理
 
 // ============================================
 // 限流配置 - 有Cookie版（快速）
@@ -129,7 +129,10 @@ export async function getUploaderVideos(
   pageSize: number = 30
 ): Promise<{ videos: BilibiliVideoItem[]; total: number }> {
   // 使用动态接口（限流更宽松）
-  const url = `${BILIBILI_API_BASE}/x/polymer/web-dynamic/v1/feed/space?host_mid=${mid}`;
+  const apiPath = `/x/polymer/web-dynamic/v1/feed/space`;
+  const url = import.meta.env.DEV
+    ? `${BILIBILI_API_BASE}${apiPath}?host_mid=${mid}`
+    : `${BILIBILI_API_BASE}${apiPath}&host_mid=${mid}`;
 
   try {
     const response = await fetch(url, { headers: getHeaders() });
