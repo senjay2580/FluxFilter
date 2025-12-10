@@ -12,10 +12,13 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onSync }) => {
   const [message, setMessage] = useState('正在启动...');
 
   useEffect(() => {
+    let isMounted = true;
+    
     const init = async () => {
-      // 阶段1: 初始化
+      // 阶段1: 初始化 - 确保至少显示 800ms
       setMessage('正在初始化...');
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 800));
+      if (!isMounted) return;
       setProgress(20);
 
       // 阶段2: 同步数据
@@ -24,24 +27,39 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onSync }) => {
       setProgress(40);
       
       try {
-        await onSync();
+        // 确保同步至少需要 1 秒
+        const [result] = await Promise.all([
+          onSync(),
+          new Promise(r => setTimeout(r, 1000))
+        ]);
+        if (!isMounted) return;
         setProgress(80);
         setMessage('同步完成');
       } catch (e) {
+        if (!isMounted) return;
         setMessage('同步失败，使用缓存数据');
       }
+      
+      await new Promise(r => setTimeout(r, 300));
+      if (!isMounted) return;
       
       // 阶段3: 完成
       setProgress(100);
       setStatus('done');
       setMessage('准备就绪');
       
-      await new Promise(r => setTimeout(r, 600));
-      onComplete();
+      await new Promise(r => setTimeout(r, 500));
+      if (isMounted) {
+        onComplete();
+      }
     };
 
     init();
-  }, [onComplete, onSync]);
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#050510] flex flex-col items-center justify-center overflow-hidden">

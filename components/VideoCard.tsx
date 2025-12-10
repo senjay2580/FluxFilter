@@ -86,13 +86,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
     >
       
       {/* Thumbnail */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden">
+      <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-800">
         <img 
           src={thumbnail || ''} 
           alt={title} 
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
           loading="lazy"
           referrerPolicy="no-referrer"
+          onError={(e) => {
+            (e.target as HTMLImageElement).style.display = 'none';
+          }}
         />
         {/* 多层渐变遮罩 */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-80"></div>
@@ -146,8 +149,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
             <img 
               src={avatar} 
               alt={author} 
-              className="relative w-9 h-9 rounded-full border-2 border-white/20 group-hover:border-cyber-lime/50 transition-all duration-300 object-cover ring-2 ring-black/20"
+              className="relative w-9 h-9 rounded-full border-2 border-white/20 group-hover:border-cyber-lime/50 transition-all duration-300 object-cover ring-2 ring-black/20 bg-gray-700"
               referrerPolicy="no-referrer"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><circle cx="12" cy="8" r="4"/><path d="M12 14c-6 0-8 3-8 6v1h16v-1c0-3-2-6-8-6z"/></svg>';
+              }}
             />
           </div>
           

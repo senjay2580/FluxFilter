@@ -343,11 +343,17 @@ const App = () => {
                     {videos.slice(0, 3).map((v, index) => (
                         <div key={v.bvid} 
                              className="snap-center shrink-0 w-56 aspect-[3/4] rounded-2xl overflow-hidden relative group cursor-pointer
+                                        bg-gray-800
                                         shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:shadow-[0_12px_40px_rgba(163,230,53,0.2)]
                                         border border-white/10 hover:border-cyber-lime/30 transition-all duration-300
                                         hover:-translate-y-2 hover:scale-[1.02]"
                              onClick={() => window.open(`https://www.bilibili.com/video/${v.bvid}`, '_blank')}>
-                            <img src={v.pic || ''} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" referrerPolicy="no-referrer" />
+                            <img 
+                              src={v.pic || ''} 
+                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
+                              referrerPolicy="no-referrer"
+                              onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }}
+                            />
                             
                             {/* 多层渐变 */}
                             <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
