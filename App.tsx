@@ -147,14 +147,21 @@ const App = () => {
     return result;
   }, [videos, activeTab, watchLaterIds, activeFilter, customDateFilter, searchTerm]);
 
-  // Infinite Scroll Handler
+  // Infinite Scroll Handler - 节流优化
   useEffect(() => {
+    let ticking = false;
     const handleScroll = () => {
-      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
-        setVisibleCount(prev => Math.min(prev + 5, filteredVideos.length));
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+            setVisibleCount(prev => Math.min(prev + 5, filteredVideos.length));
+          }
+          ticking = false;
+        });
+        ticking = true;
       }
     };
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, [filteredVideos.length]);
 
@@ -183,153 +190,18 @@ const App = () => {
     <PullToRefresh onRefresh={handlePullRefresh}>
     <div className="min-h-screen bg-cyber-dark pb-24 font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden">
       
-      {/* 星空渐变背景 */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {/* 深空渐变 */}
+      {/* 简化背景 - 移动端性能优化 */}
+      <div className="fixed inset-0 pointer-events-none">
+        {/* 静态渐变背景 */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a1a] via-[#050510] to-[#0d0d20]" />
         
-        {/* 星云效果 */}
-        <div className="absolute top-0 left-0 w-full h-full">
-          <div className="absolute top-[10%] left-[10%] w-96 h-96 bg-purple-900/20 rounded-full blur-[120px] animate-nebula" />
-          <div className="absolute top-[40%] right-[5%] w-80 h-80 bg-cyber-lime/10 rounded-full blur-[100px] animate-nebula" style={{ animationDelay: '2s' }} />
-          <div className="absolute bottom-[20%] left-[20%] w-72 h-72 bg-cyan-500/10 rounded-full blur-[100px] animate-nebula" style={{ animationDelay: '4s' }} />
-          <div className="absolute top-[60%] right-[30%] w-64 h-64 bg-pink-500/5 rounded-full blur-[80px] animate-nebula" style={{ animationDelay: '3s' }} />
-        </div>
-        
-        {/* 星星层 */}
-        <div className="absolute inset-0">
-          {[...Array(20)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full bg-white animate-twinkle"
-              style={{
-                width: `${Math.random() * 2 + 1}px`,
-                height: `${Math.random() * 2 + 1}px`,
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 5}s`,
-                animationDuration: `${2 + Math.random() * 3}s`,
-                opacity: Math.random() * 0.7 + 0.3,
-              }}
-            />
-          ))}
-        </div>
-        
-        {/* 大星星（带光芒） */}
-        <div className="absolute inset-0">
-          {[...Array(3)].map((_, i) => (
-            <div
-              key={`star-${i}`}
-              className="absolute animate-twinkle-bright"
-              style={{
-                left: `${10 + i * 12}%`,
-                top: `${15 + (i % 3) * 25}%`,
-                animationDelay: `${i * 0.7}s`,
-              }}
-            >
-              <div className="w-1 h-1 bg-white rounded-full shadow-[0_0_10px_2px_rgba(255,255,255,0.8)]" />
-            </div>
-          ))}
-        </div>
-        
-        {/* 流星 */}
-        <div className="absolute inset-0 overflow-hidden">
-          {[0,].map((i) => (
-            <div
-              key={`meteor-${i}`}
-              className="absolute animate-shooting-star"
-              style={{
-                top: `${10 + i * 25}%`,
-                left: '0%',
-                animationDelay: `${i * 4}s`,
-                transform: 'rotate(15deg)',
-              }}
-            >
-              <div 
-                className="w-28 h-0.5 bg-gradient-to-l from-white via-white/60 to-transparent rounded-full"
-                style={{ 
-                  boxShadow: '0 0 8px 2px rgba(255,255,255,0.4)',
-                }}
-              />
-            </div>
-          ))}
-        </div>
-        
-        {/* 极光效果 */}
-        <div className="absolute bottom-0 left-0 right-0 h-64 overflow-hidden opacity-30">
-          <div className="absolute inset-0 bg-gradient-to-t from-cyber-lime/20 via-cyan-500/10 to-transparent animate-aurora" />
-          <div className="absolute inset-0 bg-gradient-to-t from-purple-500/10 via-pink-500/5 to-transparent animate-aurora" style={{ animationDelay: '2s' }} />
-        </div>
+        {/* 静态光晕 - 无动画 */}
+        <div className="absolute top-[10%] left-[10%] w-72 h-72 bg-purple-900/15 rounded-full blur-3xl" />
+        <div className="absolute top-[40%] right-[5%] w-64 h-64 bg-cyber-lime/8 rounded-full blur-3xl" />
+        <div className="absolute bottom-[20%] left-[20%] w-56 h-56 bg-cyan-500/8 rounded-full blur-3xl" />
         
         {/* 顶部渐变遮罩 */}
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-[#0a0a1a] to-transparent" />
-        
-        {/* CSS 动画 */}
-        <style>{`
-          @keyframes nebula {
-            0%, 100% { 
-              transform: scale(1) translate(0, 0);
-              opacity: 0.15;
-            }
-            50% { 
-              transform: scale(1.1) translate(10px, -10px);
-              opacity: 0.25;
-            }
-          }
-          .animate-nebula {
-            animation: nebula 15s ease-in-out infinite;
-          }
-          
-          @keyframes twinkle {
-            0%, 100% { opacity: 0.3; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.2); }
-          }
-          .animate-twinkle {
-            animation: twinkle ease-in-out infinite;
-          }
-          
-          @keyframes twinkle-bright {
-            0%, 100% { opacity: 0.5; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.5); }
-          }
-          .animate-twinkle-bright {
-            animation: twinkle-bright 3s ease-in-out infinite;
-          }
-          
-          @keyframes shooting-star {
-            0% { 
-              transform: rotate(35deg) translateX(-50px);
-              opacity: 0;
-            }
-            10% { 
-              opacity: 1;
-            }
-            70% { 
-              opacity: 0.8;
-            }
-            100% { 
-              transform: rotate(35deg) translateX(120vh);
-              opacity: 0;
-            }
-          }
-          .animate-shooting-star {
-            animation: shooting-star 2s ease-out infinite;
-          }
-          
-          @keyframes aurora {
-            0%, 100% { 
-              transform: translateX(-20%) skewX(-5deg);
-              opacity: 0.2;
-            }
-            50% { 
-              transform: translateX(20%) skewX(5deg);
-              opacity: 0.4;
-            }
-          }
-          .animate-aurora {
-            animation: aurora 10s ease-in-out infinite;
-          }
-        `}</style>
       </div>
       
       {/* Header & Sticky Filter */}

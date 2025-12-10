@@ -73,21 +73,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
   return (
     <div 
       className="group relative rounded-2xl overflow-hidden 
-                 bg-white/[0.03] backdrop-blur-xl
+                 bg-cyber-card/90
                  border border-white/[0.08] 
-                 shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_0_0_1px_rgba(255,255,255,0.05)]
-                 hover:shadow-[0_16px_48px_rgba(0,0,0,0.4),0_0_30px_rgba(163,230,53,0.1),inset_0_0_0_1px_rgba(255,255,255,0.1)]
-                 hover:border-white/[0.15] hover:bg-white/[0.05]
-                 active:scale-[0.97] transition-all duration-500 cursor-pointer
-                 hover:-translate-y-1.5"
+                 shadow-lg
+                 hover:shadow-xl hover:border-white/[0.15]
+                 active:scale-[0.98] transition-all duration-300 cursor-pointer
+                 will-change-transform"
       onClick={handleClick}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
-      {/* 高级光泽层 */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] via-transparent to-transparent pointer-events-none rounded-2xl" />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent pointer-events-none rounded-2xl" />
       
       {/* Thumbnail */}
       <div className="relative aspect-[16/10] w-full overflow-hidden">
@@ -142,12 +138,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
         )}
       </div>
 
-      {/* Content - 毛玻璃底部 */}
-      <div className="p-3 relative bg-gradient-to-t from-black/40 via-black/20 to-transparent backdrop-blur-sm">
+      {/* Content */}
+      <div className="p-3 bg-cyber-card">
         <div className="flex gap-2.5 items-start">
           {/* 头像 */}
           <div className="relative shrink-0">
-            <div className="absolute -inset-1 bg-gradient-to-br from-cyber-lime/40 to-cyan-400/40 rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             <img 
               src={avatar} 
               alt={author} 
