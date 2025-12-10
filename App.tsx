@@ -10,7 +10,6 @@ import TodoList from './components/TodoList';
 import Loader3D, { LoaderPulse } from './components/Loader3D';
 import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
-import SplashScreen from './components/SplashScreen';
 import LogoSvg from './assets/logo.svg';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import type { VideoWithUploader } from './lib/database.types';
@@ -25,7 +24,6 @@ const App = () => {
   const [isAddUploaderOpen, setIsAddUploaderOpen] = useState(false);
   const [isTodoOpen, setIsTodoOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showSplash, setShowSplash] = useState(true);
   
   // 真实数据状态
   const [videos, setVideos] = useState<VideoWithUploader[]>([]);
@@ -66,7 +64,10 @@ const App = () => {
     }
   }, []);
 
-  // 初始加载 - 由 SplashScreen 处理，这里不再重复调用
+  // 初始加载
+  useEffect(() => {
+    fetchVideos();
+  }, [fetchVideos]);
 
   // 监听同步完成事件，刷新数据
   useEffect(() => {
@@ -170,21 +171,6 @@ const App = () => {
     await fetchVideos();
     showToast('刷新成功 ✓');
   }, [fetchVideos]);
-
-  // 启动页完成回调
-  const handleSplashComplete = useCallback(() => {
-    setShowSplash(false);
-  }, []);
-
-  // 显示启动页
-  if (showSplash) {
-    return (
-      <SplashScreen 
-        onComplete={handleSplashComplete}
-        onSync={fetchVideos}
-      />
-    );
-  }
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh}>

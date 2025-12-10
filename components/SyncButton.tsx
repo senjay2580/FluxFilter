@@ -28,6 +28,11 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
       if (result.success && result.videosAdded && result.videosAdded > 0) {
         window.dispatchEvent(new CustomEvent('sync-complete'));
       }
+      
+      // 3秒后自动关闭弹窗
+      setTimeout(() => {
+        setMessage(null);
+      }, 3000);
     } catch (error) {
       setMessage('同步失败: ' + String(error));
     } finally {
@@ -64,6 +69,18 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
             </svg>
           )}
         </button>
+
+        {/* 点击外部关闭 */}
+        {(syncing || message) && (
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => {
+              if (!syncing) {
+                setMessage(null);
+              }
+            }}
+          />
+        )}
 
         {/* 进度弹窗 */}
         {(syncing || message) && (

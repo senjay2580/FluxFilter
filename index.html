@@ -83,7 +83,50 @@
 </script>
 </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- 初始加载 UI - React 加载后会被替换 -->
+      <div id="initial-loader" style="
+        position: fixed;
+        inset: 0;
+        background: #050510;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      ">
+        <svg width="64" height="64" viewBox="0 0 100 100" style="margin-bottom: 16px;">
+          <defs>
+            <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#a3e635"/>
+              <stop offset="100%" style="stop-color:#22d3ee"/>
+            </linearGradient>
+          </defs>
+          <text x="50" y="65" text-anchor="middle" font-size="50" font-weight="bold" fill="url(#grad)" font-family="sans-serif">Ff</text>
+        </svg>
+        <div style="
+          width: 120px;
+          height: 3px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 3px;
+          overflow: hidden;
+        ">
+          <div style="
+            width: 40%;
+            height: 100%;
+            background: linear-gradient(90deg, #a3e635, #22d3ee);
+            border-radius: 3px;
+            animation: loading 1s ease-in-out infinite;
+          "></div>
+        </div>
+        <style>
+          @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(350%); }
+          }
+        </style>
+      </div>
+    </div>
   <script type="module" src="/index.tsx"></script>
 </body>
 </html>
