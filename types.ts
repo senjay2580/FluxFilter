@@ -19,4 +19,4 @@ export interface DateFilter {
   day?: number;
 }
 
-export type Tab = 'home' | 'watchLater';
+export type Tab = 'home' | 'watchLater' | 'rss';

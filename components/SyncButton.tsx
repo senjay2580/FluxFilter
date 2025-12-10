@@ -35,33 +35,99 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     }
   };
 
-  // 紧凑模式 - 只显示图标
+  // 紧凑模式 - 显示图标 + 弹出进度窗口
   if (compact) {
     return (
-      <button
-        onClick={handleSync}
-        disabled={syncing}
-        className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
-          syncing 
-            ? 'bg-white/5 border border-white/10 cursor-not-allowed' 
-            : 'bg-white/5 border border-white/10 hover:border-cyber-lime/50'
-        }`}
-        title={syncing ? '同步中...' : `同步视频 (${lastSync})`}
-      >
-        {syncing ? (
-          <svg className="w-4 h-4 animate-spin text-cyber-lime" viewBox="0 0 24 24" fill="none">
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-25" />
-            <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-          </svg>
-        ) : (
-          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-            <path d="M16 21h5v-5" />
-          </svg>
+      <div className="relative">
+        {/* 同步按钮 */}
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+            syncing 
+              ? 'bg-cyber-lime/20 border border-cyber-lime/50' 
+              : 'bg-white/5 border border-white/10 hover:border-cyber-lime/50'
+          }`}
+          title={syncing ? '同步中...' : `同步视频 (${lastSync})`}
+        >
+          {syncing ? (
+            <svg className="w-4 h-4 animate-spin text-cyber-lime" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-25" />
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 21h5v-5" />
+            </svg>
+          )}
+        </button>
+
+        {/* 进度弹窗 */}
+        {(syncing || message) && (
+          <div className="absolute top-12 right-0 w-64 bg-cyber-card border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+            {/* 头部 */}
+            <div className={`px-4 py-2.5 flex items-center justify-between ${
+              message?.includes('失败') || message?.includes('错误')
+                ? 'bg-red-500/20' 
+                : message?.includes('成功') || message?.includes('完成')
+                  ? 'bg-green-500/20'
+                  : 'bg-cyber-lime/10'
+            }`}>
+              <span className="text-sm font-medium text-white flex items-center gap-2">
+                {syncing ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin text-cyber-lime" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-25" />
+                      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    同步中...
+                  </>
+                ) : message?.includes('失败') || message?.includes('错误') ? (
+                  <>
+                    <span className="text-red-400">✕</span>
+                    同步失败
+                  </>
+                ) : (
+                  <>
+                    <span className="text-green-400">✓</span>
+                    同步完成
+                  </>
+                )}
+              </span>
+              {/* 关闭/取消按钮 */}
+              <button 
+                onClick={() => {
+                  setSyncing(false);
+                  setMessage(null);
+                }}
+                className="text-gray-400 hover:text-white transition-colors"
+                title={syncing ? '取消同步' : '关闭'}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 内容 */}
+            <div className="px-4 py-3">
+              <p className="text-xs text-gray-300 leading-relaxed">
+                {message || '正在连接...'}
+              </p>
+            </div>
+
+            {/* 底部 */}
+            <div className="px-4 py-2 bg-white/5 border-t border-white/5">
+              <p className="text-[10px] text-gray-500">
+                上次同步: {lastSync}
+              </p>
+            </div>
+          </div>
         )}
-      </button>
+      </div>
     );
   }
 

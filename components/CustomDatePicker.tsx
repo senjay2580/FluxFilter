@@ -134,7 +134,11 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
           {calendarDays.map((date, idx) => {
             if (!date) return <div key={idx} className="aspect-square" />;
             
-            const dateKey = date.toISOString().split('T')[0];
+            // 使用本地时间生成 key（与 videoCountByDate 一致）
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const dateKey = `${year}-${month}-${day}`;
             const count = videoCountByDate[dateKey] || 0;
             const heat = getHeatLevel(count);
             
