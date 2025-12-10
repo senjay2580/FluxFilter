@@ -30,6 +30,10 @@ export default defineConfig(({ mode }) => {
         react(),
         VitePWA({
           registerType: 'autoUpdate',
+          devOptions: {
+            enabled: true,
+            type: 'module'
+          },
           includeAssets: ['favicon.ico', 'assets/logo.svg'],
           manifest: {
             name: 'Fluxf',
@@ -37,7 +41,7 @@ export default defineConfig(({ mode }) => {
             description: 'B站视频聚合与筛选工具',
             theme_color: '#050510',
             background_color: '#050510',
-            display: 'fullscreen',
+            display: 'standalone',
             orientation: 'portrait',
             scope: '/',
             start_url: '/',
@@ -45,12 +49,20 @@ export default defineConfig(({ mode }) => {
               {
                 src: 'manifest-icon-192.maskable.png',
                 sizes: '192x192',
-                type: 'image/png'
+                type: 'image/png',
+                purpose: 'any'
               },
               {
                 src: 'manifest-icon-512.maskable.png',
                 sizes: '512x512',
-                type: 'image/png'
+                type: 'image/png',
+                purpose: 'any'
+              },
+              {
+                src: 'manifest-icon-192.maskable.png',
+                sizes: '192x192',
+                type: 'image/png',
+                purpose: 'maskable'
               },
               {
                 src: 'manifest-icon-512.maskable.png',
