@@ -1,0 +1,35 @@
+# ============================================
+# GitHub Actions 定时任务 - 同步B站视频
+# 免费方案，替代 Vercel Cron
+# ============================================
+
+name: Sync Bilibili Videos
+
+on:
+  # 定时任务（UTC时区）
+  schedule:
+    # 北京时间 6:30 = UTC 22:30 (前一天)
+    - cron: '30 22 * * *'
+    # 北京时间 17:00 = UTC 9:00
+    - cron: '0 9 * * *'
+  
+  # 支持手动触发
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Trigger Sync API
+        run: |
+          curl -X POST "${{ secrets.VERCEL_URL }}/api/sync" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json" \
+            --fail --silent --show-error
+        env:
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+      - name: Log Result
+        run: echo "✅ 视频同步任务完成 - $(date)"

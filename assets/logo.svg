@@ -1,0 +1,15 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a3e635"/>
+      <stop offset="100%" style="stop-color:#22d3ee"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Large F - bold, shifted left -->
+  <text x="8" y="30" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="url(#logoGrad)">F</text>
+  
+  <!-- Small f - italic, overlapping -->
+  <text x="18" y="32" font-family="Georgia, serif" font-size="20" font-style="italic" fill="#ffffff" opacity="0.9">f</text>
+</svg>

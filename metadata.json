@@ -1,0 +1,7 @@
+{
+  "name": "NeonStream AI",
+  "description": "A cyberpunk-styled mobile streaming application for AI-generated video content with advanced date filtering and infinite scrolling.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
