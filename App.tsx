@@ -176,18 +176,66 @@ const App = () => {
     <PullToRefresh onRefresh={handlePullRefresh}>
     <div className="min-h-screen bg-cyber-dark pb-24 font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden">
       
-      {/* 简化背景 - 移动端性能优化 */}
-      <div className="fixed inset-0 pointer-events-none">
-        {/* 静态渐变背景 */}
+      {/* 星空渐变背景 */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        {/* 深空渐变 */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a1a] via-[#050510] to-[#0d0d20]" />
         
-        {/* 静态光晕 - 无动画 */}
-        <div className="absolute top-[10%] left-[10%] w-72 h-72 bg-purple-900/15 rounded-full blur-3xl" />
-        <div className="absolute top-[40%] right-[5%] w-64 h-64 bg-cyber-lime/8 rounded-full blur-3xl" />
-        <div className="absolute bottom-[20%] left-[20%] w-56 h-56 bg-cyan-500/8 rounded-full blur-3xl" />
+        {/* 星云效果 - 轻量动画 */}
+        <div className="absolute top-0 left-0 w-full h-full">
+          <div className="absolute top-[10%] left-[10%] w-96 h-96 bg-purple-900/20 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
+          <div className="absolute top-[40%] right-[5%] w-80 h-80 bg-cyber-lime/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '2s', animationDuration: '10s' }} />
+          <div className="absolute bottom-[20%] left-[20%] w-72 h-72 bg-cyan-500/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '4s', animationDuration: '12s' }} />
+        </div>
+        
+        {/* 星星层 */}
+        <div className="absolute inset-0">
+          {[...Array(15)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full bg-white"
+              style={{
+                width: `${1 + Math.random()}px`,
+                height: `${1 + Math.random()}px`,
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                opacity: 0.3 + Math.random() * 0.5,
+                animation: `twinkle ${2 + Math.random() * 3}s ease-in-out infinite`,
+                animationDelay: `${Math.random() * 5}s`,
+              }}
+            />
+          ))}
+        </div>
+        
+        {/* 流星 */}
+        
         
         {/* 顶部渐变遮罩 */}
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-[#0a0a1a] to-transparent" />
+        
+        {/* CSS 动画 */}
+        <style>{`
+          @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+          }
+          @keyframes shooting-star {
+            0% { 
+              transform: translateX(0) translateY(0);
+              opacity: 0;
+            }
+            10% { 
+              opacity: 1;
+            }
+            90% { 
+              opacity: 0.8;
+            }
+            100% { 
+              transform: translateX(100vw) translateY(50vh);
+              opacity: 0;
+            }
+          }
+        `}</style>
       </div>
       
       {/* Header & Sticky Filter */}

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PWA 诊断工具</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #0a0a1a;
+      color: #fff;
+    }
+    .section {
+      background: #1a1a2e;
+      padding: 20px;
+      margin: 20px 0;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+    .status {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-left: 10px;
+    }
+    .success { background: #10b981; color: #fff; }
+    .error { background: #ef4444; color: #fff; }
+    .warning { background: #f59e0b; color: #000; }
+    button {
+      background: #a3e635;
+      color: #000;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      margin: 10px 10px 10px 0;
+    }
+    button:hover {
+      background: #84cc16;
+    }
+    pre {
+      background: #000;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 PWA 诊断工具</h1>
+  
+  <div class="section">
+    <h2>1. Service Worker 状态</h2>
+    <div id="sw-status">检查中...</div>
+  </div>
+  
+  <div class="section">
+    <h2>2. Manifest 状态</h2>
+    <div id="manifest-status">检查中...</div>
+  </div>
+  
+  <div class="section">
+    <h2>3. 安装提示事件</h2>
+    <div id="prompt-status">等待 beforeinstallprompt 事件...</div>
+    <button id="install-btn" style="display:none;">手动触发安装</button>
+  </div>
+  
+  <div class="section">
+    <h2>4. 浏览器信息</h2>
+    <div id="browser-info"></div>
+  </div>
+  
+  <div class="section">
+    <h2>5. 诊断建议</h2>
+    <div id="suggestions"></div>
+  </div>
+
+  <script>
+    let deferredPrompt;
+    const suggestions = [];
+
+    // 检查 Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        const swStatus = document.getElementById('sw-status');
+        if (registrations.length > 0) {
+          swStatus.innerHTML = `<span class="status success">✓ 已注册</span><br>` +
+            `<small>数量: ${registrations.length}</small>`;
+        } else {
+          swStatus.innerHTML = `<span class="status error">✗ 未注册</span>`;
+          suggestions.push('Service Worker 未注册，请检查 vite-plugin-pwa 配置');
+        }
+      });
+    } else {
+      document.getElementById('sw-status').innerHTML = 
+        `<span class="status error">✗ 不支持</span>`;
+      suggestions.push('浏览器不支持 Service Worker');
+    }
+
+    // 检查 Manifest
+    fetch('/manifest.webmanifest')
+      .then(res => res.json())
+      .then(manifest => {
+        const manifestStatus = document.getElementById('manifest-status');
+        const checks = [];
+        
+        if (manifest.name) checks.push('✓ name');
+        else { checks.push('✗ name'); suggestions.push('manifest 缺少 name'); }
+        
+        if (manifest.icons && manifest.icons.length >= 2) checks.push('✓ icons');
+        else { checks.push('✗ icons'); suggestions.push('manifest 图标不足（需要 192px 和 512px）'); }
+        
+        if (manifest.start_url) checks.push('✓ start_url');
+        else { checks.push('✗ start_url'); suggestions.push('manifest 缺少 start_url'); }
+        
+        if (manifest.display) checks.push('✓ display');
+        else { checks.push('✗ display'); suggestions.push('manifest 缺少 display'); }
+        
+        manifestStatus.innerHTML = `<span class="status success">✓ 已加载</span><br>` +
+          `<small>${checks.join(' | ')}</small><br>` +
+          `<pre>${JSON.stringify(manifest, null, 2)}</pre>`;
+      })
+      .catch(err => {
+        document.getElementById('manifest-status').innerHTML = 
+          `<span class="status error">✗ 加载失败</span><br><small>${err.message}</small>`;
+        suggestions.push('manifest.webmanifest 文件不存在或无法访问');
+      });
+
+    // 监听 beforeinstallprompt
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      
+      const promptStatus = document.getElementById('prompt-status');
+      promptStatus.innerHTML = `<span class="status success">✓ 事件已触发</span><br>` +
+        `<small>可以安装 PWA！</small>`;
+      
+      document.getElementById('install-btn').style.display = 'inline-block';
+    });
+
+    // 手动安装
+    document.getElementById('install-btn').addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      
+      document.getElementById('prompt-status').innerHTML += 
+        `<br><small>用户选择: ${outcome}</small>`;
+      
+      deferredPrompt = null;
+    });
+
+    // 浏览器信息
+    const browserInfo = document.getElementById('browser-info');
+    browserInfo.innerHTML = `
+      <small>
+        User Agent: ${navigator.userAgent}<br>
+        是否 HTTPS: ${location.protocol === 'https:' ? '✓ 是' : '✗ 否'}<br>
+        是否 Standalone: ${window.matchMedia('(display-mode: standalone)').matches ? '✓ 是' : '✗ 否'}
+      </small>
+    `;
+
+    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+      suggestions.push('⚠️ 必须使用 HTTPS（Vercel 自动提供）');
+    }
+
+    // 显示建议
+    setTimeout(() => {
+      const suggestionsEl = document.getElementById('suggestions');
+      if (suggestions.length === 0) {
+        suggestionsEl.innerHTML = `<span class="status success">✓ 配置正常</span><br>` +
+          `<small>如果安装提示仍未出现，请：<br>` +
+          `1. 点击页面任意位置（满足交互要求）<br>` +
+          `2. 等待 30 秒以上（满足停留时间要求）<br>` +
+          `3. 或者手动安装：Chrome 菜单 → "安装应用"</small>`;
+      } else {
+        suggestionsEl.innerHTML = suggestions.map(s => 
+          `<div style="margin: 10px 0;">⚠️ ${s}</div>`
+        ).join('');
+      }
+    }, 2000);
+  </script>
+</body>
+</html>
