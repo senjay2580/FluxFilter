@@ -12,54 +12,48 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onSync }) => {
   const [message, setMessage] = useState('正在启动...');
 
   useEffect(() => {
-    let isMounted = true;
-    
-    const init = async () => {
-      // 阶段1: 初始化 - 确保至少显示 800ms
-      setMessage('正在初始化...');
-      await new Promise(r => setTimeout(r, 800));
-      if (!isMounted) return;
-      setProgress(20);
-
-      // 阶段2: 同步数据
-      setStatus('syncing');
-      setMessage('正在同步数据...');
-      setProgress(40);
-      
+    const timer = setTimeout(async () => {
       try {
-        // 确保同步至少需要 1 秒
-        const [result] = await Promise.all([
-          onSync(),
-          new Promise(r => setTimeout(r, 1000))
-        ]);
-        if (!isMounted) return;
+        // 阶段1: 初始化
+        setMessage('正在初始化...');
+        setProgress(20);
+        
+        await new Promise(r => setTimeout(r, 600));
+        
+        // 阶段2: 同步数据
+        setStatus('syncing');
+        setMessage('正在同步数据...');
+        setProgress(40);
+        
+        try {
+          await Promise.race([
+            onSync(),
+            new Promise((_, reject) => setTimeout(() => reject('timeout'), 5000))
+          ]);
+        } catch (e) {
+          console.log('Sync error or timeout:', e);
+        }
+        
         setProgress(80);
         setMessage('同步完成');
+        
+        await new Promise(r => setTimeout(r, 400));
+        
+        // 阶段3: 完成
+        setProgress(100);
+        setStatus('done');
+        setMessage('准备就绪');
+        
+        await new Promise(r => setTimeout(r, 400));
+        onComplete();
       } catch (e) {
-        if (!isMounted) return;
-        setMessage('同步失败，使用缓存数据');
-      }
-      
-      await new Promise(r => setTimeout(r, 300));
-      if (!isMounted) return;
-      
-      // 阶段3: 完成
-      setProgress(100);
-      setStatus('done');
-      setMessage('准备就绪');
-      
-      await new Promise(r => setTimeout(r, 500));
-      if (isMounted) {
+        console.error('Splash error:', e);
         onComplete();
       }
-    };
-
-    init();
+    }, 100);
     
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    return () => clearTimeout(timer);
+  }, [onComplete, onSync]);
 
   return (
     <div className="fixed inset-0 z-[100] bg-[#050510] flex flex-col items-center justify-center overflow-hidden">

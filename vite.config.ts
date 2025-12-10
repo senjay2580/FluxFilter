@@ -37,7 +37,7 @@ export default defineConfig(({ mode }) => {
             description: 'B站视频聚合与筛选工具',
             theme_color: '#050510',
             background_color: '#050510',
-            display: 'standalone',
+            display: 'fullscreen',
             orientation: 'portrait',
             scope: '/',
             start_url: '/',
