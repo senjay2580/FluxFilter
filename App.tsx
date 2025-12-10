@@ -66,10 +66,7 @@ const App = () => {
     }
   }, []);
 
-  // 初始加载
-  useEffect(() => {
-    fetchVideos();
-  }, [fetchVideos]);
+  // 初始加载 - 由 SplashScreen 处理，这里不再重复调用
 
   // 监听同步完成事件，刷新数据
   useEffect(() => {
