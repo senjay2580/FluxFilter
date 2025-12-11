@@ -13,16 +13,39 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState(formatLastSyncTime());
+  const [progress, setProgress] = useState(0); // 进度百分比
+  const [totalSteps, setTotalSteps] = useState(0);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
 
   const handleSync = async () => {
     setSyncing(true);
+    setSyncStatus('syncing');
     setMessage(null);
+    setProgress(0);
+    setCurrentStep(0);
 
     try {
-      const result = await triggerSync((progress) => {
-        setMessage(progress);
+      const result = await triggerSync((progressMsg) => {
+        setMessage(progressMsg);
+        
+        // 解析进度信息 "[1/5] UP主名..."
+        const match = progressMsg.match(/\[(\d+)\/(\d+)\]/);
+        if (match) {
+          const current = parseInt(match[1]);
+          const total = parseInt(match[2]);
+          setCurrentStep(current);
+          setTotalSteps(total);
+          setProgress(Math.round((current / total) * 100));
+        } else if (progressMsg.includes('获取UP主')) {
+          setProgress(5);
+        }
       });
+      
+      // 同步完成，设置100%
+      setProgress(100);
       setMessage(result.message);
+      setSyncStatus(result.success ? 'success' : 'error');
       setLastSync(formatLastSyncTime());
       
       // 同步成功后触发刷新事件
@@ -33,9 +56,12 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
       // 3秒后自动关闭弹窗
       setTimeout(() => {
         setMessage(null);
+        setSyncStatus('idle');
+        setProgress(0);
       }, 3000);
     } catch (error) {
       setMessage('同步失败: ' + String(error));
+      setSyncStatus('error');
     } finally {
       setSyncing(false);
     }
@@ -103,47 +129,66 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
               
             {/* 头部 */}
             <div className={`px-4 py-2.5 flex items-center justify-between ${
-              message?.includes('失败') || message?.includes('错误')
-                ? 'bg-red-500/20' 
-                : message?.includes('成功') || message?.includes('完成')
-                  ? 'bg-green-500/20'
-                  : 'bg-cyber-lime/10'
+              syncStatus === 'error' ? 'bg-red-500/20' 
+              : syncStatus === 'success' ? 'bg-green-500/20'
+              : 'bg-cyber-lime/10'
             }`}>
               <span className="text-sm font-medium text-white flex items-center gap-2">
-                {syncing ? (
+                {syncStatus === 'syncing' ? (
                   <>
                     <svg className="w-4 h-4 animate-spin text-cyber-lime" viewBox="0 0 24 24" fill="none">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-25" />
                       <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
                     </svg>
-                    同步中...
+                    同步中 {progress > 0 ? `${progress}%` : ''}
                   </>
-                ) : message?.includes('失败') || message?.includes('错误') ? (
+                ) : syncStatus === 'error' ? (
                   <>
                     <span className="text-red-400">✕</span>
                     同步失败
                   </>
-                ) : (
+                ) : syncStatus === 'success' ? (
                   <>
                     <span className="text-green-400">✓</span>
                     同步完成
                   </>
+                ) : (
+                  <>同步</>
                 )}
               </span>
-              {/* 关闭/取消按钮 */}
+              {/* 关闭按钮 */}
               <button 
                 onClick={() => {
                   setSyncing(false);
                   setMessage(null);
+                  setSyncStatus('idle');
+                  setProgress(0);
                 }}
                 className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
-                title={syncing ? '取消同步' : '关闭'}
+                title="关闭"
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />
                 </svg>
               </button>
             </div>
+
+            {/* 进度条 */}
+            {syncStatus === 'syncing' && (
+              <div className="px-4 pt-3">
+                <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-cyber-lime to-emerald-400 rounded-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                {totalSteps > 0 && (
+                  <p className="text-[10px] text-gray-500 mt-1 text-right">
+                    {currentStep} / {totalSteps} UP主
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* 内容 */}
             <div className="px-4 py-3">
