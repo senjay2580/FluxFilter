@@ -878,10 +878,27 @@ const App = () => {
         }}
       />
 
-      {/* Toast 提示 */}
+      {/* Toast 提示 - 右上角毛玻璃 */}
       {toast && (
-        <div className="fixed bottom-28 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 bg-cyber-lime text-black rounded-full text-sm font-medium shadow-lg animate-bounce">
-          {toast}
+        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+          <div className="relative px-4 py-3 rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
+            {/* 毛玻璃背景层 */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
+            {/* 文字层 - 不模糊 */}
+            <div className="relative flex items-center gap-2">
+              <span className="text-cyber-lime">✓</span>
+              <span className="text-white text-sm font-medium">{toast}</span>
+            </div>
+          </div>
+          <style>{`
+            @keyframes slide-in-right {
+              from { transform: translateX(100%); opacity: 0; }
+              to { transform: translateX(0); opacity: 1; }
+            }
+            .animate-slide-in-right {
+              animation: slide-in-right 0.3s ease-out;
+            }
+          `}</style>
         </div>
       )}
 
