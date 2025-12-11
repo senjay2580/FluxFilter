@@ -11,6 +11,7 @@
 
 import type { BilibiliVideoItem, BilibiliSpaceResponse, UpsertVideoParams } from './database.types';
 import { encWbi } from './wbi';
+import { getUserBilibiliCookie } from './auth';
 
 // B站API基础URL
 // 开发模式使用 Vite 代理，生产模式使用 Vercel Serverless Function
@@ -36,16 +37,43 @@ let lastSuccessTime = 0;
 // 上次请求时间（用于控制请求频率）
 let lastRequestTime = 0;
 
-// B站 Cookie（登录后获取）
-const BILIBILI_COOKIE = 'SESSDATA=c6747333%2C1780928236%2C85831%2Ac1CjDy8MuO8cdZB4EBFiblhBFC5PDGwGMnioPLQMhLRr3jWQobb8a4TKBakBUv9l-42rgSVmlOVkdHY0x5eXFDVENZakFkS3hNd2o3dlQ0ZHVxQjBGQVByRmIxZ3diUVFXTm5sN293R0dlYmx6cG5FeFViWm9KcDdZQ0l0NXZaU2RBeGMzbTR2WFNBIIEC; bili_jct=ca20dfd2f0cc1b6b61920ac972a5f046; DedeUserID=662516002';
+// 缓存的Cookie
+let cachedCookie: string | null = null;
 
-// 请求头配置
-const getHeaders = () => ({
-  'Accept': 'application/json, text/plain, */*',
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Referer': 'https://www.bilibili.com',
-  'Cookie': BILIBILI_COOKIE,
-});
+/**
+ * 获取B站Cookie（从数据库用户表读取）
+ */
+async function getBilibiliCookie(): Promise<string> {
+  if (cachedCookie) return cachedCookie;
+  
+  const cookie = await getUserBilibiliCookie();
+  if (cookie) {
+    cachedCookie = cookie;
+    return cookie;
+  }
+  
+  // 未配置Cookie时返回空字符串
+  console.warn('未配置B站Cookie，部分功能可能受限');
+  return '';
+}
+
+/**
+ * 清除Cookie缓存（用户切换或更新Cookie时调用）
+ */
+export function clearCookieCache(): void {
+  cachedCookie = null;
+}
+
+// 请求头配置（异步获取Cookie）
+const getHeaders = async () => {
+  const cookie = await getBilibiliCookie();
+  return {
+    'Accept': 'application/json, text/plain, */*',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://www.bilibili.com',
+    'Cookie': cookie,
+  };
+};
 
 /**
  * 等待至少间隔时间后再请求
@@ -72,7 +100,7 @@ async function fetchWithRetry<T>(
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await fetch(url, { headers: getHeaders() });
+      const response = await fetch(url, { headers: await getHeaders() });
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -135,7 +163,7 @@ export async function getUploaderVideos(
     : `${BILIBILI_API_BASE}${apiPath}&host_mid=${mid}`;
 
   try {
-    const response = await fetch(url, { headers: getHeaders() });
+    const response = await fetch(url, { headers: await getHeaders() });
     const data = await response.json();
 
     if (data.code !== 0) {

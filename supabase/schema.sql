@@ -7,20 +7,11 @@
 -- 0. 用户表（核心：存储用户信息和B站Cookie）
 CREATE TABLE IF NOT EXISTS "user" (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE,           -- 邮箱（可选，用于登录）
-    nickname VARCHAR(100),               -- 昵称
-    avatar_url VARCHAR(500),             -- 头像URL
-    
+    username VARCHAR(100),               -- 昵称
+    password VARCHAR(255),               -- 密码
     -- B站认证信息（用户自行填写）
     bilibili_cookie TEXT,                -- B站Cookie（重要：用户自己填写）
-    bilibili_mid BIGINT,                 -- B站UID
-    bilibili_name VARCHAR(100),          -- B站昵称
-    bilibili_face VARCHAR(500),          -- B站头像
     
-    -- 用户设置
-    sync_interval INT DEFAULT 30,        -- 自动同步间隔（分钟）
-    auto_sync BOOLEAN DEFAULT false,     -- 是否开启自动同步
-    theme VARCHAR(20) DEFAULT 'dark',    -- 主题设置
     
     -- 时间戳
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -28,15 +19,12 @@ CREATE TABLE IF NOT EXISTS "user" (
     last_login_at TIMESTAMPTZ
 );
 
--- 用户表索引
-CREATE INDEX IF NOT EXISTS idx_user_email ON "user"(email);
-CREATE INDEX IF NOT EXISTS idx_user_bilibili_mid ON "user"(bilibili_mid);
+
 
 -- 1. UP主配置表（存储要追踪的B站UP主，按用户隔离）
 CREATE TABLE IF NOT EXISTS uploader (
     id BIGSERIAL PRIMARY KEY,
     user_id UUID NOT NULL,               -- 所属用户ID（必须）
-    mid BIGINT NOT NULL,                 -- B站用户ID
     name VARCHAR(100) NOT NULL,          -- UP主昵称
     face VARCHAR(500),                   -- 头像URL
     sign TEXT,                           -- 个性签名
@@ -51,9 +39,8 @@ CREATE TABLE IF NOT EXISTS uploader (
 );
 
 -- UP主表索引
-CREATE INDEX IF NOT EXISTS idx_uploader_user_id ON uploader(user_id);
+CREATE INDEX IF NOT EXISTS idx_uploader_user_id ON uploader(user_id);   
 CREATE INDEX IF NOT EXISTS idx_uploader_mid ON uploader(mid);
-CREATE INDEX IF NOT EXISTS idx_uploader_active ON uploader(user_id, is_active);
 
 -- 2. 视频表（存储UP主发布的视频，按用户隔离）
 CREATE TABLE IF NOT EXISTS video (

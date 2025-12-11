@@ -12,12 +12,19 @@ import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
 import HotCarousel from './components/HotCarousel';
 import SettingsModal from './components/SettingsModal';
+import AuthPage from './components/AuthPage';
 import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
+import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
+import { clearCookieCache } from './lib/bilibili';
 import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 
 const App = () => {
+  // 认证状态
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [watchLaterIds, setWatchLaterIds] = useState<Set<string>>(new Set());
   const [watchlistLoading, setWatchlistLoading] = useState(false);
@@ -29,6 +36,39 @@ const App = () => {
   const [isTodoOpen, setIsTodoOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // 检查登录状态
+  useEffect(() => {
+    const checkAuth = async () => {
+      const userId = getStoredUserId();
+      if (userId) {
+        const user = await getCurrentUser();
+        if (user) {
+          setCurrentUser(user);
+          setIsAuthenticated(true);
+          return;
+        }
+      }
+      setIsAuthenticated(false);
+    };
+    checkAuth();
+  }, []);
+  
+  // 登录成功回调
+  const handleLoginSuccess = async () => {
+    const user = await getCurrentUser();
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    clearCookieCache(); // 清除Cookie缓存，使用新用户的Cookie
+  };
+  
+  // 退出登录
+  const handleLogout = () => {
+    logout();
+    clearCookieCache();
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+  };
   
   // 真实数据状态
   const [videos, setVideos] = useState<VideoWithUploader[]>([]);
@@ -272,6 +312,20 @@ const App = () => {
     await fetchVideos();
     showToast('刷新成功');
   }, [fetchVideos]);
+
+  // 认证检查中显示加载
+  if (isAuthenticated === null) {
+    return (
+      <div className="h-screen bg-[#0a0a0f] flex items-center justify-center">
+        <LoaderPulse size="lg" />
+      </div>
+    );
+  }
+
+  // 未登录显示登录页
+  if (!isAuthenticated) {
+    return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+  }
 
   return (
     <PullToRefresh onRefresh={handlePullRefresh} scrollContainerRef={mainRef}>
@@ -839,6 +893,7 @@ const App = () => {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        onLogout={handleLogout}
       />
     </div>
     </PullToRefresh>
