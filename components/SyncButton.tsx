@@ -91,7 +91,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
             />
             {/* 进度弹窗 - 底部抽屉 */}
             <div 
-              className="fixed bottom-0 left-0 right-0 bg-cyber-card/95 backdrop-blur-xl border-t border-white/10 shadow-2xl z-[60] rounded-t-2xl pb-safe"
+              className="fixed bottom-0 left-0 right-0 bg-[#0f101a] border-t border-white/10 shadow-2xl z-[60] rounded-t-2xl pb-safe"
               style={{
                 animation: 'slideUp 0.3s ease-out'
               }}
@@ -102,7 +102,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
               </div>
               
             {/* 头部 */}
-            <div className={`px-4 py-2.5 flex items-center justify-between backdrop-blur-sm ${
+            <div className={`px-4 py-2.5 flex items-center justify-between ${
               message?.includes('失败') || message?.includes('错误')
                 ? 'bg-red-500/20' 
                 : message?.includes('成功') || message?.includes('完成')
@@ -153,7 +153,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
             </div>
 
             {/* 底部 */}
-            <div className="px-4 py-2 bg-white/5 backdrop-blur-sm border-t border-white/5">
+            <div className="px-4 py-2 bg-white/5 border-t border-white/5">
               <p className="text-[10px] text-gray-500">
                 上次同步: {lastSync}
               </p>

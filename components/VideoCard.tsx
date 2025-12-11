@@ -36,6 +36,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
 
   // 长按状态
   const [longPressTriggered, setLongPressTriggered] = React.useState(false);
+  const [pressing, setPressing] = React.useState(false);
   const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
   const handleClick = () => {
@@ -53,17 +54,21 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
 
   // 长按开始
   const handleTouchStart = () => {
+    if (!onAddToWatchlist) return;
     setLongPressTriggered(false);
+    setPressing(true);
     longPressTimer.current = setTimeout(() => {
       setLongPressTriggered(true);
-      // 触发震动反馈（如果支持）
+      setPressing(false);
+      // 触发震动反馈
       if (navigator.vibrate) navigator.vibrate(50);
       handleAddToWatchlist();
-    }, 500); // 500ms 长按
+    }, 500);
   };
 
   // 长按结束
   const handleTouchEnd = () => {
+    setPressing(false);
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
@@ -116,29 +121,46 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
           {duration}
         </div>
 
-        {/* 已收藏星标 */}
+        {/* 已收藏星标 - 磨玻璃效果 */}
         {isInWatchlist && (
-          <div className="absolute top-2 left-2 p-1.5 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-lg shadow-[0_0_12px_rgba(251,191,36,0.5)]">
-            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
-              <path d="m16.7 14.5l3.8-3.25l3 .25l-4.4 3.825L20.4 21l-2.55-1.55zm-2.35-7.3L13.3 4.75L14.45 2l2.3 5.425zM4.325 21l1.625-7.025L.5 9.25l7.2-.625L10.5 2l2.8 6.625l7.2.625l-5.45 4.725L16.675 21L10.5 17.275z"/>
+          <div className="absolute top-2 left-2 p-1.5 bg-black/30 backdrop-blur-md rounded-lg border border-white/20 shadow-lg">
+            <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
             </svg>
           </div>
         )}
 
-        {/* Add to Watchlist Button */}
-        {onAddToWatchlist && (
-          <button
-            onClick={handleAddToWatchlist}
-            className={`absolute top-2 right-2 p-2 rounded-xl backdrop-blur-md transition-all border
-              ${isInWatchlist 
-                ? 'bg-white/20 text-cyber-lime border-cyber-lime/30 shadow-lg' 
-                : 'bg-black/50 text-white border-white/10 opacity-0 group-hover:opacity-100 hover:bg-black/70 hover:border-white/20'
-              }`}
-            title={isInWatchlist ? '移除待看' : '加入待看'}
-          >
-            <ClockIcon className="w-4 h-4" />
-          </button>
+        {/* 长按进度提示 */}
+        {pressing && (
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+            <div className="relative w-16 h-16">
+              <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2" />
+                <circle 
+                  cx="18" cy="18" r="16" fill="none" 
+                  stroke="#a3e635" strokeWidth="2" 
+                  strokeDasharray="100" 
+                  strokeDashoffset="0"
+                  className="animate-long-press"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <ClockIcon className="w-6 h-6 text-cyber-lime" />
+              </div>
+            </div>
+            <style>{`
+              @keyframes long-press-progress {
+                from { stroke-dashoffset: 100; }
+                to { stroke-dashoffset: 0; }
+              }
+              .animate-long-press {
+                animation: long-press-progress 0.5s linear forwards;
+              }
+            `}</style>
+          </div>
         )}
+
       </div>
 
       {/* Content */}

@@ -162,13 +162,28 @@ export async function addToWatchlist(bvid: string, note?: string, userId?: strin
   return data as WatchlistItem;
 }
 
-/** 从待看列表移除 */
+/** 从待看列表移除（按ID） */
 export async function removeFromWatchlist(id: number) {
   const { error } = await supabase
     .from('watchlist')
     .delete()
     .eq('id', id);
   
+  if (error) throw error;
+}
+
+/** 从待看列表移除（按bvid） */
+export async function removeFromWatchlistByBvid(bvid: string, userId?: string) {
+  let query = supabase
+    .from('watchlist')
+    .delete()
+    .eq('bvid', bvid);
+  
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { error } = await query;
   if (error) throw error;
 }
 

@@ -12,12 +12,13 @@ import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
 import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
-import type { VideoWithUploader } from './lib/database.types';
+import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
+import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 
 const App = () => {
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [watchLaterIds, setWatchLaterIds] = useState<Set<string>>(new Set());
+  const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [customDateFilter, setCustomDateFilter] = useState<DateFilter>({});
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -38,17 +39,27 @@ const App = () => {
   // 滑动切换Tab
   const touchStartX = React.useRef<number>(0);
   const touchEndX = React.useRef<number>(0);
+  const isSwiping = React.useRef<boolean>(false);
   const tabs: Tab[] = ['home', 'watchLater', 'rss', 'todo'];
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
+    touchEndX.current = e.touches[0].clientX; // 重置为起始位置
+    isSwiping.current = false;
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     touchEndX.current = e.touches[0].clientX;
+    // 水平移动超过10px才算滑动
+    if (Math.abs(touchEndX.current - touchStartX.current) > 10) {
+      isSwiping.current = true;
+    }
   }, []);
 
   const handleTouchEnd = useCallback(() => {
+    // 没有发生滑动则不处理
+    if (!isSwiping.current) return;
+    
     const diff = touchStartX.current - touchEndX.current;
     const threshold = 80; // 滑动阈值
 
@@ -96,10 +107,29 @@ const App = () => {
     }
   }, []);
 
+  // 从 Supabase 获取待看列表
+  const fetchWatchlist = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
+    
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('watchlist')
+        .select('bvid');
+      
+      if (fetchError) throw fetchError;
+      
+      const bvidSet = new Set(data?.map(item => item.bvid) || []);
+      setWatchLaterIds(bvidSet);
+    } catch (err) {
+      console.error('获取待看列表失败:', err);
+    }
+  }, []);
+
   // 初始加载
   useEffect(() => {
     fetchVideos();
-  }, [fetchVideos]);
+    fetchWatchlist();
+  }, [fetchVideos, fetchWatchlist]);
 
   // 监听同步完成事件，刷新数据
   useEffect(() => {
@@ -119,20 +149,52 @@ const App = () => {
     setTimeout(() => setToast(null), 2000);
   };
 
-  // Toggle Watch Later
-  const toggleWatchLater = (id: string) => {
+  // Toggle Watch Later - 同步到 Supabase
+  const toggleWatchLater = useCallback(async (bvid: string) => {
+    if (watchlistLoading) return;
+    
+    const isInList = watchLaterIds.has(bvid);
+    
+    // 乐观更新UI
     setWatchLaterIds(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-        showToast('已从待看列表移除');
+      if (isInList) {
+        newSet.delete(bvid);
       } else {
-        newSet.add(id);
-        showToast('已加入待看列表 ✓');
+        newSet.add(bvid);
       }
       return newSet;
     });
-  };
+    
+    showToast(isInList ? '已从待看列表移除' : '已加入待看列表 ✓');
+    
+    // 同步到 Supabase
+    if (isSupabaseConfigured) {
+      try {
+        setWatchlistLoading(true);
+        if (isInList) {
+          await removeFromWatchlistByBvid(bvid);
+        } else {
+          await addToWatchlist(bvid);
+        }
+      } catch (err) {
+        console.error('待看列表操作失败:', err);
+        // 回滚UI状态
+        setWatchLaterIds(prev => {
+          const newSet = new Set(prev);
+          if (isInList) {
+            newSet.add(bvid);
+          } else {
+            newSet.delete(bvid);
+          }
+          return newSet;
+        });
+        showToast('操作失败，请重试');
+      } finally {
+        setWatchlistLoading(false);
+      }
+    }
+  }, [watchLaterIds, watchlistLoading]);
 
   // Filter Logic
   const filteredVideos = useMemo(() => {
@@ -699,6 +761,8 @@ const App = () => {
                         <VideoCard 
                             key={video.bvid} 
                             video={video}
+                            onAddToWatchlist={toggleWatchLater}
+                            isInWatchlist={watchLaterIds.has(video.bvid)}
                         />
                     ))}
                 </div>
