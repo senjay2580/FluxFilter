@@ -119,7 +119,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
   return (
     <>
     <div 
-      className="group relative rounded-2xl overflow-visible
+      className="video-card group relative rounded-2xl overflow-visible
                  bg-cyber-card/90
                  border border-white/[0.08] 
                  shadow-lg
