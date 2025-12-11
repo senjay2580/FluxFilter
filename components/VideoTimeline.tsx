@@ -150,6 +150,12 @@ const DateHeader = memo(({ date, count }: { date: string; count: number }) => (
 DateHeader.displayName = 'DateHeader';
 
 const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoClick }) => {
+  // 锁定外部滚动，只允许内部容器滚动
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
   // 按发布时间分组和排序
   const groupedVideos = useMemo(() => {
     // 按 pubdate 降序排序
@@ -194,7 +200,7 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
   }, [onVideoClick]);
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#050510]">
+    <div className="fixed inset-0 z-50 bg-[#050510] overflow-hidden">
       {/* 顶部导航 */}
       <div className="sticky top-0 z-10 bg-[#050510]/90 backdrop-blur-xl border-b border-white/10">
         <div className="flex items-center px-4 py-3">
@@ -229,7 +235,7 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
       </div>
 
       {/* 时间轴内容 */}
-      <div className="h-[calc(100vh-64px)] overflow-y-auto">
+      <div className="h-[calc(100vh-64px)] overflow-y-auto overscroll-none">
         <div className="max-w-xl mx-auto px-4 py-6 pl-20">
           {groupedVideos.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-500">

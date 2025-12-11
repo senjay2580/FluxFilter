@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" class="dark">
+<html lang="zh-CN" class="dark" style="overscroll-behavior: none;">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -42,13 +42,14 @@
       }
     </script>
     <style>
+      html, body {
+        overscroll-behavior: none !important;
+        -webkit-overflow-scrolling: touch;
+      }
       body {
         background-color: #050510;
         color: #ffffff;
         -webkit-tap-highlight-color: transparent;
-        /* 移动端滚动优化 */
-        -webkit-overflow-scrolling: touch;
-        overscroll-behavior: contain;
       }
       /* GPU 加速优化 */
       * {

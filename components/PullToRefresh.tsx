@@ -4,9 +4,10 @@ interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
   children: React.ReactNode;
   scrollContainerRef?: React.RefObject<HTMLDivElement>;
+  disabled?: boolean;  // 禁用下拉刷新（如全屏弹窗打开时）
 }
 
-const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scrollContainerRef }) => {
+const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scrollContainerRef, disabled = false }) => {
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef(0);
@@ -31,7 +32,7 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
     let isRefreshing = false;
 
     const handleTouchStart = (e: TouchEvent) => {
-      if (isRefreshing) return;
+      if (isRefreshing || disabled) return;
       const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
       if (scrollTop <= 5) {
         startY.current = e.touches[0].clientY;
@@ -90,7 +91,7 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [scrollContainerRef]); // 只依赖 scrollContainerRef
+  }, [scrollContainerRef, disabled]); // 依赖 scrollContainerRef 和 disabled
 
   const progress = Math.min(pullDistance / threshold, 1);
   const rotation = pullDistance * 3;

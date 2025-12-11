@@ -485,7 +485,7 @@ const App = () => {
   }
 
   return (
-    <PullToRefresh onRefresh={handlePullRefresh} scrollContainerRef={mainRef}>
+    <PullToRefresh onRefresh={handlePullRefresh} scrollContainerRef={mainRef} disabled={showTimeline}>
     <div className="h-screen bg-cyber-dark font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden flex flex-col">
       
       {/* PWA 安装提示 */}
