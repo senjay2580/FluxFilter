@@ -11,6 +11,7 @@ import Loader3D, { LoaderPulse } from './components/Loader3D';
 import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
 import LogoSvg from './assets/logo.svg';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import type { VideoWithUploader } from './lib/database.types';
 
@@ -180,6 +181,9 @@ const App = () => {
   return (
     <PullToRefresh onRefresh={handlePullRefresh} scrollContainerRef={mainRef}>
     <div className="h-screen bg-cyber-dark font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden flex flex-col">
+      
+      {/* PWA 安装提示 */}
+      <PWAInstallPrompt />
       
       {/* 星空渐变背景 */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
