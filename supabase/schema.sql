@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS "user" (
 -- 1. UP主配置表（存储要追踪的B站UP主，按用户隔离）
 CREATE TABLE IF NOT EXISTS uploader (
     id BIGSERIAL PRIMARY KEY,
+    mid BIGINT NOT NULL,                 -- UP主ID
     user_id UUID NOT NULL,               -- 所属用户ID（必须）
     name VARCHAR(100) NOT NULL,          -- UP主昵称
     face VARCHAR(500),                   -- 头像URL
@@ -153,14 +154,18 @@ CREATE TRIGGER update_watchlist_updated_at
 -- ============================================
 -- Row Level Security (RLS) - 数据隔离
 -- ============================================
-ALTER TABLE "user" ENABLE ROW LEVEL SECURITY;
+-- 注意：user表不启用RLS，允许注册和登录
+-- ALTER TABLE "user" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE uploader ENABLE ROW LEVEL SECURITY;
 ALTER TABLE video ENABLE ROW LEVEL SECURITY;
 ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
 
--- RLS策略：用户只能访问自己的数据
--- 注意：需要在应用层设置 auth.uid() 或通过 JWT 传递 user_id
+-- RLS策略：允许匿名访问（因为我们不使用Supabase Auth）
+CREATE POLICY "Allow all for uploader" ON uploader FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for video" ON video FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for watchlist" ON watchlist FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Allow all for sync_log" ON sync_log FOR ALL USING (true) WITH CHECK (true);
 
 -- ============================================
 -- 视图：获取视频详情（含UP主信息）
@@ -173,21 +178,6 @@ SELECT
 FROM video v
 LEFT JOIN uploader u ON v.user_id = u.user_id AND v.mid = u.mid
 ORDER BY v.pubdate DESC;
-
--- ============================================
--- 视图：用户数据统计
--- ============================================
-CREATE OR REPLACE VIEW user_stats AS
-SELECT 
-    u.id AS user_id,
-    u.nickname,
-    u.email,
-    u.bilibili_name,
-    (SELECT COUNT(*) FROM uploader WHERE user_id = u.id AND is_active = true) AS uploader_count,
-    (SELECT COUNT(*) FROM video WHERE user_id = u.id) AS video_count,
-    (SELECT COUNT(*) FROM watchlist WHERE user_id = u.id AND is_watched = false) AS unwatched_count,
-    (SELECT MAX(finished_at) FROM sync_log WHERE user_id = u.id AND status = 'success') AS last_sync_at
-FROM "user" u;
 
 -- ============================================
 -- 函数：UPSERT 视频（插入或更新，按用户隔离）
@@ -239,14 +229,14 @@ $$ LANGUAGE plpgsql;
 -- 函数：创建新用户
 -- ============================================
 CREATE OR REPLACE FUNCTION create_user(
-    p_email VARCHAR DEFAULT NULL,
-    p_nickname VARCHAR DEFAULT NULL
+    p_username VARCHAR,
+    p_password VARCHAR
 ) RETURNS UUID AS $$
 DECLARE
     new_user_id UUID;
 BEGIN
-    INSERT INTO "user" (email, nickname)
-    VALUES (p_email, COALESCE(p_nickname, '用户' || SUBSTR(gen_random_uuid()::text, 1, 8)))
+    INSERT INTO "user" (username, password)
+    VALUES (p_username, p_password)
     RETURNING id INTO new_user_id;
     
     RETURN new_user_id;
@@ -258,7 +248,6 @@ $$ LANGUAGE plpgsql;
 -- ============================================
 COMMENT ON TABLE "user" IS '用户表：存储用户信息和B站Cookie，实现多用户隔离';
 COMMENT ON COLUMN "user".bilibili_cookie IS 'B站Cookie，用户自行填写，用于API请求认证';
-COMMENT ON COLUMN "user".sync_interval IS '自动同步间隔，单位：分钟';
 
 COMMENT ON TABLE uploader IS 'UP主表：用户关注的B站UP主，按user_id隔离';
 COMMENT ON TABLE video IS '视频表：UP主发布的视频，按user_id隔离';

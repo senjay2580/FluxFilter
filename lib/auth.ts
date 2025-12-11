@@ -81,13 +81,12 @@ export async function getUserBilibiliCookie(): Promise<string | null> {
 export async function register(username: string, password: string): Promise<{ user: User | null; error: string | null }> {
   try {
     // 检查用户名是否已存在
-    const { data: existing } = await supabase
+    const { data: existingUsers } = await supabase
       .from('user')
       .select('id')
-      .eq('username', username)
-      .single();
+      .eq('username', username);
     
-    if (existing) {
+    if (existingUsers && existingUsers.length > 0) {
       return { user: null, error: '用户名已被注册' };
     }
     
@@ -97,14 +96,18 @@ export async function register(username: string, password: string): Promise<{ us
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      console.error('注册错误:', error);
+      return { user: null, error: error.message || '注册失败' };
+    }
     
     setStoredUserId(data.id);
     currentUser = data;
     
     return { user: data, error: null };
-  } catch (err) {
-    return { user: null, error: String(err) };
+  } catch (err: any) {
+    console.error('注册异常:', err);
+    return { user: null, error: err?.message || '注册失败，请稍后重试' };
   }
 }
 
