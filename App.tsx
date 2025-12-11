@@ -41,15 +41,20 @@ const App = () => {
   // 检查登录状态
   useEffect(() => {
     const checkAuth = async () => {
+      // 最小延迟让加载动画显示
+      const minDelay = new Promise(r => setTimeout(r, 800));
+      
       const userId = getStoredUserId();
       if (userId) {
         const user = await getCurrentUser();
+        await minDelay;
         if (user) {
           setCurrentUser(user);
           setIsAuthenticated(true);
           return;
         }
       }
+      await minDelay;
       setIsAuthenticated(false);
     };
     checkAuth();
@@ -325,13 +330,12 @@ const App = () => {
     showToast('刷新成功');
   }, [fetchVideos]);
 
-  // 认证检查中显示启动页
+  // 认证检查中显示加载动画
   if (isAuthenticated === null) {
     return (
-      <SplashScreen 
-        onComplete={() => {}} 
-        onSync={async () => {}} 
-      />
+      <div className="h-screen bg-[#050510] flex items-center justify-center">
+        <Loader3D text="正在加载..." />
+      </div>
     );
   }
 

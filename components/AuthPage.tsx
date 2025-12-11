@@ -64,9 +64,9 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
       {/* 固定Logo区域 */}
       <div className="pt-16 pb-8 text-center relative z-10">
         <div className="inline-block mb-4">
-          <img src={LogoSvg} alt="FluxFilter" className="w-20 h-20 drop-shadow-[0_0_30px_rgba(163,230,53,0.3)]" />
+          <img src={LogoSvg} alt="Fluxf" className="w-20 h-20 drop-shadow-[0_0_30px_rgba(163,230,53,0.3)]" />
         </div>
-        <h1 className="text-3xl font-bold text-white tracking-tight">FluxFilter</h1>
+        <h1 className="text-3xl font-bold text-white tracking-tight">Fluxf</h1>
         <p className="text-gray-500 mt-2 text-sm">B站UP主视频追踪器</p>
       </div>
 
