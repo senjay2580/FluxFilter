@@ -546,10 +546,10 @@ const App = () => {
       {/* PWA 安装提示 */}
       <PWAInstallPrompt />
 
-      {/* 高优先级待办提醒弹窗 */}
-      <HighPriorityTodoReminder 
+      {/* 高优先级待办提醒弹窗 - 暂时禁用排查问题 */}
+      {/* <HighPriorityTodoReminder 
         onNavigateToTodo={() => setActiveTab('todo')}
-      />
+      /> */}
 
       {/* 网络错误提示 */}
       {networkError && (
