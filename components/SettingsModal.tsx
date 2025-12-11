@@ -254,11 +254,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
 
         {/* 内容区 */}
         <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : activeTab === 'account' ? (
+          {activeTab === 'account' ? (
             /* 账户设置 */
             <div className="p-4 space-y-4">
               {/* Cookie配置 */}

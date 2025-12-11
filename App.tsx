@@ -324,13 +324,9 @@ const App = () => {
     showToast('刷新成功');
   }, [fetchVideos]);
 
-  // 认证检查中显示加载
+  // 认证检查中显示空白背景
   if (isAuthenticated === null) {
-    return (
-      <div className="h-screen bg-[#0a0a0f] flex items-center justify-center">
-        <LoaderPulse size="lg" />
-      </div>
-    );
+    return <div className="h-screen bg-[#0a0a0f]" />;
   }
 
   // 未登录显示登录页
