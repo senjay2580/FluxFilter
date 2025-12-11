@@ -24,6 +24,12 @@ export default defineConfig(({ mode }) => {
               });
             },
           },
+          // RSS 代理
+          '/rss-proxy': {
+            target: 'https://api.rss2json.com/v1/api.json',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/rss-proxy/, ''),
+          },
         },
       },
       plugins: [

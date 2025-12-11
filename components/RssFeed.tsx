@@ -1,16 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-// RSS 源配置
+// RSS 源配置 - 使用 rss2json API
 const RSS_SOURCES = [
-  { id: '36kr', name: '36氪', category: 'AI科技' },
-  { id: 'sspai', name: '少数派', category: 'AI科技' },
-  { id: 'hn', name: 'Hacker News', category: 'AI科技' },
-  { id: 'infoq', name: 'InfoQ', category: '技术' },
-  { id: 'ruanyifeng', name: '阮一峰周刊', category: '技术' },
-  { id: 'ifanr', name: '爱范儿', category: '科技' },
-  { id: 'geekpark', name: '极客公园', category: '科技' },
-  { id: 'uisdc', name: '优设', category: '设计' },
-  { id: 'pmcaff', name: '人人都是PM', category: '产品' },
+  { id: 'sspai', name: '少数派', url: 'https://sspai.com/feed', category: 'AI科技' },
+  { id: '36kr', name: '36氪', url: 'https://36kr.com/feed', category: 'AI科技' },
+  { id: 'hn', name: 'Hacker News', url: 'https://hnrss.org/frontpage', category: 'AI科技' },
+  { id: 'ruanyifeng', name: '阮一峰周刊', url: 'https://www.ruanyifeng.com/blog/atom.xml', category: '技术' },
+  { id: 'oschina', name: '开源中国', url: 'https://www.oschina.net/news/rss', category: '技术' },
+  { id: 'ifanr', name: '爱范儿', url: 'https://www.ifanr.com/feed', category: '科技' },
+  { id: 'zhihu', name: '知乎热榜', url: 'https://rss.mifaw.com/articles/5c8bb11a3c41f61efd36683e/5c91d2e23882afa09dff4901', category: '热门' },
 ];
 
 interface Article {
@@ -23,50 +21,48 @@ interface Article {
   category: string;
 }
 
-// 解析 RSS XML
-function parseRssXml(xml: string, sourceName: string, category: string): Article[] {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(xml, 'text/xml');
-  const items = doc.querySelectorAll('item, entry');
+// 格式化相对时间
+function formatTimeAgo(dateStr: string): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '未知';
   
-  const articles: Article[] = [];
-  items.forEach((item, index) => {
-    if (index >= 10) return; // 每个源最多10条
+  const now = new Date();
+  const diffHours = Math.floor((now.getTime() - date.getTime()) / 3600000);
+  
+  if (diffHours < 1) return '刚刚';
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffHours < 168) return `${Math.floor(diffHours / 24)}天前`;
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+// 使用 rss2json API 获取数据
+async function fetchRssSource(source: typeof RSS_SOURCES[0]): Promise<Article[]> {
+  try {
+    // 使用 rss2json.com 免费 API（每天1000次请求）
+    const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+    const response = await fetch(apiUrl);
     
-    const title = item.querySelector('title')?.textContent || '';
-    const description = item.querySelector('description, summary, content')?.textContent || '';
-    const link = item.querySelector('link')?.textContent || item.querySelector('link')?.getAttribute('href') || '';
-    const pubDate = item.querySelector('pubDate, published, updated')?.textContent || '';
+    if (!response.ok) throw new Error('Fetch failed');
     
-    // 清理 HTML 标签
-    const cleanExcerpt = description.replace(/<[^>]*>/g, '').slice(0, 150);
+    const data = await response.json();
     
-    // 格式化日期
-    let formattedDate = '未知';
-    if (pubDate) {
-      const date = new Date(pubDate);
-      if (!isNaN(date.getTime())) {
-        const now = new Date();
-        const diffHours = Math.floor((now.getTime() - date.getTime()) / 3600000);
-        if (diffHours < 1) formattedDate = '刚刚';
-        else if (diffHours < 24) formattedDate = `${diffHours}小时前`;
-        else if (diffHours < 168) formattedDate = `${Math.floor(diffHours / 24)}天前`;
-        else formattedDate = `${date.getMonth() + 1}月${date.getDate()}日`;
-      }
+    if (data.status !== 'ok' || !data.items) {
+      throw new Error('Invalid response');
     }
     
-    articles.push({
-      id: `${sourceName}-${index}`,
-      title: title.trim(),
-      excerpt: cleanExcerpt.trim() || '暂无摘要',
-      author: sourceName,
-      publishedAt: formattedDate,
-      link,
-      category,
-    });
-  });
-  
-  return articles;
+    return data.items.slice(0, 10).map((item: any, index: number) => ({
+      id: `${source.id}-${index}`,
+      title: item.title || '无标题',
+      excerpt: (item.description || '').replace(/<[^>]*>/g, '').slice(0, 150) || '暂无摘要',
+      author: item.author || source.name,
+      publishedAt: formatTimeAgo(item.pubDate),
+      link: item.link || '',
+      category: source.category,
+    }));
+  } catch (e) {
+    console.warn(`Failed to fetch ${source.name}:`, e);
+    return [];
+  }
 }
 
 interface RssFeedProps {
@@ -80,7 +76,7 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
-  const categories = ['全部', 'AI科技', '技术', '科技', '设计', '产品'];
+  const categories = ['全部', 'AI科技', '技术', '科技', '热门'];
   
   // 获取 RSS 数据
   const fetchRss = useCallback(async () => {
@@ -88,36 +84,37 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef }) => {
     setError(null);
     
     try {
-      const allArticles: Article[] = [];
-      
       // 根据选择的源获取数据
       const sourcesToFetch = selectedSource === '全部' 
         ? RSS_SOURCES 
         : RSS_SOURCES.filter(s => s.id === selectedSource);
       
-      for (const source of sourcesToFetch) {
-        try {
-          const response = await fetch(`/api/rss?source=${source.id}`);
-          if (response.ok) {
-            const xml = await response.text();
-            const parsed = parseRssXml(xml, source.name, source.category);
-            allArticles.push(...parsed);
-          }
-        } catch (e) {
-          console.warn(`Failed to fetch ${source.name}:`, e);
-        }
-      }
+      // 并行获取所有源
+      const results = await Promise.all(
+        sourcesToFetch.map(source => fetchRssSource(source))
+      );
       
-      // 按时间排序（简单排序）
+      const allArticles = results.flat();
+      
+      // 按时间排序
       allArticles.sort((a, b) => {
-        if (a.publishedAt.includes('刚刚')) return -1;
-        if (b.publishedAt.includes('刚刚')) return 1;
-        if (a.publishedAt.includes('小时')) return -1;
-        if (b.publishedAt.includes('小时')) return 1;
-        return 0;
+        const order = ['刚刚', '小时', '天', '月'];
+        const getOrder = (s: string) => order.findIndex(o => s.includes(o));
+        const aOrder = getOrder(a.publishedAt);
+        const bOrder = getOrder(b.publishedAt);
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        
+        // 同级别内按数字排序
+        const aNum = parseInt(a.publishedAt) || 0;
+        const bNum = parseInt(b.publishedAt) || 0;
+        return aNum - bNum;
       });
       
       setArticles(allArticles);
+      
+      if (allArticles.length === 0) {
+        setError('暂无数据，请稍后重试');
+      }
     } catch (e) {
       setError('加载失败，请稍后重试');
     } finally {
