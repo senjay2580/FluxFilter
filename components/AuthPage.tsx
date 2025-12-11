@@ -107,7 +107,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="输入用户名"
-                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
+                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
                 />
               </div>
 
@@ -118,7 +118,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={mode === 'register' ? '设置密码（至少6位）' : '输入密码'}
-                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
+                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
                 />
               </div>
 
