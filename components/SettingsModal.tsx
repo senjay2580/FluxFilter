@@ -13,6 +13,15 @@ interface Uploader {
   is_active: boolean;
 }
 
+interface VideoItem {
+  id: number;
+  bvid: string;
+  title: string;
+  pic: string | null;
+  duration: number;
+  pubdate: string;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -22,10 +31,11 @@ interface SettingsModalProps {
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout }) => {
   const [activeTab, setActiveTab] = useState<'account' | 'uploaders' | 'videos'>('account');
   const [uploaders, setUploaders] = useState<Uploader[]>([]);
+  const [videos, setVideos] = useState<VideoItem[]>([]);
   const [videoCount, setVideoCount] = useState(0);
-  const [watchlistCount, setWatchlistCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [deletingVideo, setDeletingVideo] = useState<number | null>(null);
   
   // 用户信息
   const [user, setUser] = useState<User | null>(null);
@@ -57,21 +67,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       
       setUploaders(uploaderData || []);
 
-      // 获取视频数量（按用户过滤）
-      const { count } = await supabase
+      // 获取视频列表（按用户过滤）
+      const { data: videoData, count } = await supabase
         .from('video')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', currentUser.id);
+        .select('id, bvid, title, pic, duration, pubdate', { count: 'exact' })
+        .eq('user_id', currentUser.id)
+        .order('pubdate', { ascending: false })
+        .limit(100);
       
+      setVideos(videoData || []);
       setVideoCount(count || 0);
-
-      // 获取待看列表数量
-      const { count: wCount } = await supabase
-        .from('watchlist')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', currentUser.id);
-      
-      setWatchlistCount(wCount || 0);
     } catch (err) {
       console.error('获取数据失败:', err);
     } finally {
@@ -133,23 +138,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
     }
   };
 
-  // 清空所有视频（同时清空待看列表）
-  const handleClearVideos = async () => {
-    if (!confirm(`确定要清空所有 ${videoCount} 个视频吗？\n\n注意：待看列表中的视频也会被删除！此操作不可恢复！`)) return;
+  // 删除单个视频
+  const handleDeleteVideo = async (id: number, bvid: string) => {
+    if (!confirm('确定要删除这个视频吗？')) return;
     
     if (!user?.id) return;
     
+    setDeletingVideo(id);
     try {
-      // 先删除待看列表（因为可能引用视频）
-      await supabase.from('watchlist').delete().eq('user_id', user.id);
+      // 先删除待看列表中的引用
+      await supabase.from('watchlist').delete().eq('user_id', user.id).eq('bvid', bvid);
       // 再删除视频
-      await supabase.from('video').delete().eq('user_id', user.id);
-      setVideoCount(0);
-      setWatchlistCount(0);
-      alert('视频和待看列表已清空');
+      await supabase.from('video').delete().eq('id', id);
+      setVideos(prev => prev.filter(v => v.id !== id));
+      setVideoCount(prev => prev - 1);
     } catch (err) {
-      console.error('清空失败:', err);
-      alert('清空失败');
+      console.error('删除失败:', err);
+      alert('删除失败');
+    } finally {
+      setDeletingVideo(null);
     }
   };
 
@@ -357,65 +364,89 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
               )}
             </div>
           ) : (
-            /* 数据管理 */
-            <div className="p-4 space-y-4">
-              {/* 数据统计 */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-4 bg-white/5 rounded-xl text-center">
-                  <p className="text-2xl font-bold text-cyber-lime">{videoCount}</p>
-                  <p className="text-xs text-gray-500 mt-1">视频缓存</p>
-                </div>
-                <div className="p-4 bg-white/5 rounded-xl text-center">
-                  <p className="text-2xl font-bold text-amber-400">{watchlistCount}</p>
-                  <p className="text-xs text-gray-500 mt-1">待看列表</p>
-                </div>
+            /* 视频管理 - 视频列表 */
+            <div className="p-4 space-y-3">
+              {/* 标题 */}
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm text-gray-400">共 {videoCount} 个视频</p>
               </div>
 
-              {/* 清空操作 */}
-              <div className="p-4 bg-white/5 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white font-medium">清空数据</p>
-                    <p className="text-xs text-gray-500 mt-1">删除所有视频和待看列表</p>
-                  </div>
-                  <button
-                    onClick={handleClearVideos}
-                    disabled={videoCount === 0 && watchlistCount === 0}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      videoCount === 0 && watchlistCount === 0
-                        ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                        : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
-                    }`}
-                  >
-                    清空全部
-                  </button>
-                </div>
-              </div>
-
-              {/* 数据说明 */}
-              <div className="p-4 bg-gradient-to-br from-white/5 to-white/[0.02] rounded-xl border border-white/5">
-                <p className="text-white font-medium mb-3 flex items-center gap-2">
-                  <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M12 16v-4m0-4h.01" />
+              {/* 视频列表 */}
+              {videos.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <svg className="w-12 h-12 mx-auto mb-3 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M10 9l5 3-5 3V9z" />
                   </svg>
-                  数据说明
+                  <p>暂无视频</p>
+                  <p className="text-xs mt-1">同步UP主后视频会出现在这里</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {videos.map(video => (
+                    <div
+                      key={video.id}
+                      className="flex items-center gap-3 p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-colors group"
+                    >
+                      {/* 封面 */}
+                      <div className="w-20 h-12 rounded-lg overflow-hidden bg-black/30 flex-shrink-0">
+                        {video.pic ? (
+                          <img
+                            src={video.pic.startsWith('//') ? `https:${video.pic}` : video.pic}
+                            alt={video.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-gray-600">
+                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="2" y="4" width="20" height="16" rx="2" />
+                              <path d="M10 9l5 3-5 3V9z" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 标题和时长 */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{video.title}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-gray-500">
+                            {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}
+                          </span>
+                          <span className="text-xs text-gray-600">•</span>
+                          <span className="text-xs text-gray-500">
+                            {new Date(video.pubdate).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 删除按钮 */}
+                      <button
+                        onClick={() => handleDeleteVideo(video.id, video.bvid)}
+                        disabled={deletingVideo === video.id}
+                        className="p-2 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-500/20 transition-all flex-shrink-0"
+                        title="删除视频"
+                      >
+                        {deletingVideo === video.id ? (
+                          <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <svg className="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 提示 */}
+              {videos.length > 0 && videoCount > 100 && (
+                <p className="text-xs text-gray-500 text-center pt-2">
+                  仅显示最近 100 个视频
                 </p>
-                <ul className="text-xs text-gray-400 space-y-2">
-                  <li className="flex items-start gap-2">
-                    <span className="text-cyber-lime mt-0.5">•</span>
-                    <span>视频数据会在每次同步时自动更新</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-amber-400 mt-0.5">•</span>
-                    <span>清空数据会同时删除视频和待看列表</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <span className="text-gray-500 mt-0.5">•</span>
-                    <span>UP主列表不会被清空，下次同步会重新获取视频</span>
-                  </li>
-                </ul>
-              </div>
+              )}
             </div>
           )}
         </div>
