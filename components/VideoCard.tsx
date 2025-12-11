@@ -467,39 +467,6 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
       document.body
     )}
 
-    <style>{`
-      @keyframes drawer-overlay-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes drawer-slide-up {
-        from { 
-          opacity: 0;
-          transform: translateY(100%);
-        }
-        to { 
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-      @keyframes scaleIn {
-        from { opacity: 0; transform: scale(0.9); }
-        to { opacity: 1; transform: scale(1); }
-      }
-      .animate-drawer-overlay-in {
-        animation: drawer-overlay-in 0.25s ease-out;
-      }
-      .animate-drawer-slide-up {
-        animation: drawer-slide-up 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-      }
-      .pb-safe {
-        padding-bottom: env(safe-area-inset-bottom, 16px);
-      }
-    `}</style>
     </>
   );
 };

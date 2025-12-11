@@ -18,6 +18,7 @@ import AuthPage from './components/AuthPage';
 import VideoTimeline from './components/VideoTimeline';
 import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
+import HighPriorityTodoReminder from './components/HighPriorityTodoReminder';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
 import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
 import { clearCookieCache } from './lib/bilibili';
@@ -544,6 +545,14 @@ const App = () => {
       
       {/* PWA 安装提示 */}
       <PWAInstallPrompt />
+
+      {/* 高优先级待办提醒弹窗 */}
+      <HighPriorityTodoReminder 
+        onNavigateToTodo={() => {
+          setSettingsInitialView('todo');
+          setIsSettingsOpen(true);
+        }}
+      />
 
       {/* 网络错误提示 */}
       {networkError && (
@@ -1118,16 +1127,17 @@ const App = () => {
             {!loading && filteredVideos.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
                     {filteredVideos.slice(0, visibleCount).map((video) => (
-                        <VideoCard 
-                            key={video.bvid} 
-                            video={video}
-                            onAddToWatchlist={toggleWatchLater}
-                            onRemoveFromWatchlist={toggleWatchLater}
-                            isInWatchlist={watchLaterIds.has(video.bvid)}
-                            openMenuId={openMenuId}
-                            onMenuToggle={setOpenMenuId}
-                            onDelete={handleDeleteVideo}
-                        />
+                        <div key={video.bvid} className="video-card-container">
+                            <VideoCard 
+                                video={video}
+                                onAddToWatchlist={toggleWatchLater}
+                                onRemoveFromWatchlist={toggleWatchLater}
+                                isInWatchlist={watchLaterIds.has(video.bvid)}
+                                openMenuId={openMenuId}
+                                onMenuToggle={setOpenMenuId}
+                                onDelete={handleDeleteVideo}
+                            />
+                        </div>
                     ))}
                 </div>
             )}
