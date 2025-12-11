@@ -4,6 +4,7 @@
 
 export interface Uploader {
   id: number;
+  user_id: string;
   mid: number;
   name: string;
   face: string | null;
@@ -15,6 +16,7 @@ export interface Uploader {
 
 export interface Video {
   id: number;
+  user_id: string;
   bvid: string;
   aid: number | null;
   mid: number;

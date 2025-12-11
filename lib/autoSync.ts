@@ -141,6 +141,7 @@ async function syncWithUploaders(
       const videoDataList = todayVideos.map(video => {
         const data = transformVideoToDbFormat(video, up.mid);
         return {
+          user_id: up.user_id,  // 添加用户ID
           bvid: data.bvid,
           aid: data.aid,
           mid: data.mid,
@@ -161,7 +162,7 @@ async function syncWithUploaders(
 
       const { error: insertError } = await supabase
         .from('video')
-        .upsert(videoDataList, { onConflict: 'bvid' });
+        .upsert(videoDataList, { onConflict: 'user_id,bvid' });
 
       if (!insertError) {
         totalAdded += todayVideos.length;
@@ -269,6 +270,7 @@ async function syncFromSupabase(
       const videoDataList = todayVideos.map(video => {
         const data = transformVideoToDbFormat(video, up.mid);
         return {
+          user_id: up.user_id,  // 添加用户ID
           bvid: data.bvid,
           aid: data.aid,
           mid: data.mid,
@@ -290,7 +292,7 @@ async function syncFromSupabase(
       // 批量 upsert（一次请求插入多个）
       const { error: insertError } = await supabase
         .from('video')
-        .upsert(videoDataList, { onConflict: 'bvid' });
+        .upsert(videoDataList, { onConflict: 'user_id,bvid' });
 
       if (!insertError) {
         totalAdded += todayVideos.length;
