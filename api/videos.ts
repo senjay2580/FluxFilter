@@ -35,10 +35,7 @@ export default async function handler(request: Request) {
   try {
     let query = supabase
       .from('video')
-      .select(`
-        *,
-        uploader:mid (name, face)
-      `)
+      .select('*')
       .order('pubdate', { ascending: false })
       .range(offset, offset + limit - 1);
 
@@ -55,9 +52,22 @@ export default async function handler(request: Request) {
         .lte('pubdate', endOfDay.toISOString());
     }
 
-    const { data, error, count } = await query;
+    const { data: videoData, error, count } = await query;
 
     if (error) throw error;
+
+    // 获取UP主信息
+    const mids = [...new Set(videoData?.map(v => v.mid) || [])];
+    const { data: uploaderData } = await supabase
+      .from('uploader')
+      .select('mid, name, face')
+      .in('mid', mids);
+    
+    const uploaderMap = new Map(uploaderData?.map(u => [u.mid, u]) || []);
+    const data = videoData?.map(v => ({
+      ...v,
+      uploader: uploaderMap.get(v.mid) || null
+    }));
 
     return new Response(JSON.stringify({
       data,

@@ -132,16 +132,29 @@ const App = () => {
       setLoading(true);
       setError(null);
       
-      const { data, error: fetchError } = await supabase
+      // 先获取视频
+      const { data: videoData, error: fetchError } = await supabase
         .from('video')
-        .select(`
-          *,
-          uploader:mid (name, face)
-        `)
+        .select('*')
         .order('pubdate', { ascending: false });
 
       if (fetchError) throw fetchError;
-      setVideos((data as VideoWithUploader[]) || []);
+      
+      // 获取相关的UP主信息
+      const mids = [...new Set(videoData?.map(v => v.mid) || [])];
+      const { data: uploaderData } = await supabase
+        .from('uploader')
+        .select('mid, name, face')
+        .in('mid', mids);
+      
+      // 合并数据
+      const uploaderMap = new Map(uploaderData?.map(u => [u.mid, u]) || []);
+      const videosWithUploader = videoData?.map(v => ({
+        ...v,
+        uploader: uploaderMap.get(v.mid) || null
+      })) || [];
+      
+      setVideos(videosWithUploader as VideoWithUploader[]);
     } catch (err) {
       console.error('获取视频失败:', err);
       setError(err instanceof Error ? err.message : '加载失败');

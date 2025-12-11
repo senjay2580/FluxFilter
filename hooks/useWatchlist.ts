@@ -23,18 +23,38 @@ export function useWatchlist(): UseWatchlistReturn {
       setLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await supabase
+      const { data: watchlistData, error: fetchError } = await supabase
         .from('watchlist')
-        .select(`
-          *,
-          video:bvid (
-            bvid, title, pic, duration, pubdate, mid,
-            uploader:mid (name, face)
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
+
+      // 获取相关视频信息
+      const bvids = watchlistData?.map(w => w.bvid) || [];
+      const { data: videoData } = await supabase
+        .from('video')
+        .select('bvid, title, pic, duration, pubdate, mid')
+        .in('bvid', bvids);
+      
+      // 获取UP主信息
+      const mids = [...new Set(videoData?.map(v => v.mid) || [])];
+      const { data: uploaderData } = await supabase
+        .from('uploader')
+        .select('mid, name, face')
+        .in('mid', mids);
+      
+      const uploaderMap = new Map(uploaderData?.map(u => [u.mid, u]) || []);
+      const videoMap = new Map(videoData?.map(v => [v.bvid, {
+        ...v,
+        uploader: uploaderMap.get(v.mid) || null
+      }]) || []);
+      
+      const data = watchlistData?.map(w => ({
+        ...w,
+        video: videoMap.get(w.bvid) || null
+      }));
+
       setWatchlist(data || []);
 
     } catch (err) {
