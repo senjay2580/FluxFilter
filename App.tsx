@@ -11,6 +11,7 @@ import Loader3D, { LoaderPulse } from './components/Loader3D';
 import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
 import HotCarousel from './components/HotCarousel';
+import SettingsModal from './components/SettingsModal';
 import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
@@ -26,6 +27,7 @@ const App = () => {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isAddUploaderOpen, setIsAddUploaderOpen] = useState(false);
   const [isTodoOpen, setIsTodoOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   
   // 真实数据状态
@@ -342,6 +344,14 @@ const App = () => {
               title="视频日历"
             >
               <CalendarIcon className="w-4 h-4 text-gray-400" />
+            </button>
+            {/* 个人头像/设置 */}
+            <button 
+              onClick={() => setIsSettingsOpen(true)}
+              className="w-8 h-8 rounded-full bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center text-black font-bold text-xs hover:scale-110 transition-transform"
+              title="设置"
+            >
+              F
             </button>
           </div>
         </div>
@@ -815,7 +825,7 @@ const App = () => {
         isOpen={isAddUploaderOpen}
         onClose={() => setIsAddUploaderOpen(false)}
         onSuccess={() => {
-          showToast('UP主添加成功 ✓');
+          showToast('UP主添加成功');
         }}
       />
 
@@ -823,6 +833,12 @@ const App = () => {
       <TodoList
         isOpen={isTodoOpen}
         onClose={() => setIsTodoOpen(false)}
+      />
+
+      {/* 设置/个人中心 */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
     </div>
     </PullToRefresh>

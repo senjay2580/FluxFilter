@@ -74,6 +74,133 @@ export async function triggerSync(
 }
 
 /**
+ * 触发同步 - 指定UP主列表
+ */
+export async function triggerSyncWithUploaders(
+  uploaders: Uploader[],
+  onProgress?: (msg: string) => void
+): Promise<{ success: boolean; message: string; videosAdded?: number }> {
+  try {
+    return await syncWithUploaders(uploaders, onProgress);
+  } catch (error: any) {
+    console.error('同步失败:', error);
+    const errMsg = error?.message || String(error);
+    
+    if (errMsg.includes('-799') || errMsg.includes('频繁')) {
+      return { success: false, message: '⏳ B站限流中，请等待2分钟后再试' };
+    }
+    if (errMsg.includes('-352') || errMsg.includes('风控')) {
+      return { success: false, message: '🛡️ B站风控触发，请稍后再试' };
+    }
+    
+    return { success: false, message: '同步失败: ' + errMsg };
+  }
+}
+
+/**
+ * 同步指定UP主列表
+ */
+async function syncWithUploaders(
+  uploaders: Uploader[],
+  onProgress?: (msg: string) => void
+): Promise<{ success: boolean; message: string; videosAdded?: number }> {
+  if (!isSupabaseConfigured) {
+    return { success: false, message: '⚠️ 请先配置 Supabase 环境变量' };
+  }
+
+  if (!uploaders || uploaders.length === 0) {
+    return { success: true, message: '⚠️ 没有选择UP主', videosAdded: 0 };
+  }
+
+  let totalAdded = 0;
+  const results: string[] = [];
+
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayTimestamp = Math.floor(todayStart.getTime() / 1000);
+
+  for (let i = 0; i < uploaders.length; i++) {
+    const up = uploaders[i];
+    onProgress?.(`🔄 [${i + 1}/${uploaders.length}] ${up.name}...`);
+    
+    try {
+      const { videos } = await getUploaderVideos(up.mid, 1, SYNC_CONFIG.videosPerUploader);
+      
+      const todayVideos = SYNC_CONFIG.onlyToday 
+        ? videos.filter(v => v.pubdate >= todayTimestamp)
+        : videos;
+
+      if (todayVideos.length === 0) {
+        results.push(`${up.name}: 0`);
+        if (i < uploaders.length - 1) {
+          await sleep(SYNC_CONFIG.delayBetweenUploaders);
+        }
+        continue;
+      }
+
+      const videoDataList = todayVideos.map(video => {
+        const data = transformVideoToDbFormat(video, up.mid);
+        return {
+          bvid: data.bvid,
+          aid: data.aid,
+          mid: data.mid,
+          title: data.title,
+          pic: data.pic,
+          description: data.description,
+          duration: data.duration,
+          view_count: data.view_count,
+          danmaku_count: data.danmaku_count,
+          reply_count: data.reply_count,
+          favorite_count: data.favorite_count,
+          coin_count: data.coin_count,
+          share_count: data.share_count,
+          like_count: data.like_count,
+          pubdate: data.pubdate,
+        };
+      });
+
+      const { error: insertError } = await supabase
+        .from('video')
+        .upsert(videoDataList, { onConflict: 'bvid' });
+
+      if (!insertError) {
+        totalAdded += todayVideos.length;
+        results.push(`${up.name}: ${todayVideos.length}`);
+      } else {
+        results.push(`${up.name}: 写入失败`);
+      }
+
+      if (i < uploaders.length - 1) {
+        await sleep(SYNC_CONFIG.delayBetweenUploaders);
+      }
+
+    } catch (error: any) {
+      const errMsg = error?.message || '';
+      
+      if (errMsg.includes('-799') || errMsg.includes('频繁')) {
+        results.push(`${up.name}: 限流`);
+        await sleep(10000);
+        continue;
+      }
+      
+      if (errMsg.includes('-352') || errMsg.includes('风控')) {
+        throw error;
+      }
+      
+      results.push(`${up.name}: 失败`);
+    }
+  }
+
+  markSynced();
+
+  return {
+    success: true,
+    message: `✅ 同步完成！${results.join('，')}`,
+    videosAdded: totalAdded,
+  };
+}
+
+/**
  * 从 Supabase 同步
  */
 async function syncFromSupabase(
