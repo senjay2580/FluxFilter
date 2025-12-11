@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { register, login } from '../lib/auth';
+import LogoSvg from '../assets/logo.svg';
 
 interface AuthPageProps {
   onLoginSuccess: () => void;
@@ -52,104 +53,107 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#0a0a0f] flex flex-col">
       {/* 背景装饰 */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-cyber-lime/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-cyan-500/5 rounded-full blur-3xl" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-cyber-lime/8 rounded-full blur-[120px]" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-emerald-500/5 rounded-full blur-[100px]" />
+        <div className="absolute bottom-1/4 right-0 w-[300px] h-[300px] bg-cyan-500/5 rounded-full blur-[80px]" />
       </div>
 
-      <div className="w-full max-w-md relative z-10">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-cyber-lime to-emerald-400 mb-4">
-            <svg className="w-8 h-8 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-              <path d="M3 3v5h5" />
-              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-              <path d="M16 21h5v-5" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-white">FluxF</h1>
-          <p className="text-gray-500 mt-1">B站视频追踪器</p>
+      {/* 固定Logo区域 */}
+      <div className="pt-16 pb-8 text-center relative z-10">
+        <div className="inline-block mb-4">
+          <img src={LogoSvg} alt="FluxFilter" className="w-20 h-20 drop-shadow-[0_0_30px_rgba(163,230,53,0.3)]" />
         </div>
+        <h1 className="text-3xl font-bold text-white tracking-tight">FluxFilter</h1>
+        <p className="text-gray-500 mt-2 text-sm">B站UP主视频追踪器</p>
+      </div>
 
-        {/* 登录/注册卡片 */}
-        <div className="bg-[#12131a] border border-white/10 rounded-2xl p-6 shadow-2xl">
-          {/* 切换标签 */}
-          <div className="flex bg-white/5 rounded-xl p-1 mb-6">
-            <button
-              onClick={() => { setMode('login'); setError(null); }}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-                mode === 'login' 
-                  ? 'bg-cyber-lime text-black' 
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              登录
-            </button>
-            <button
-              onClick={() => { setMode('register'); setError(null); }}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-                mode === 'register' 
-                  ? 'bg-cyber-lime text-black' 
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              注册
-            </button>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">用户名</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="输入用户名"
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
-              />
+      {/* 表单区域 - 可滚动 */}
+      <div className="flex-1 flex items-start justify-center px-4 pb-8 relative z-10">
+        <div className="w-full max-w-sm">
+          {/* 登录/注册卡片 */}
+          <div className="bg-[#12131a]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-[0_0_60px_rgba(0,0,0,0.5)]">
+            {/* 切换标签 */}
+            <div className="flex bg-black/30 rounded-2xl p-1.5 mb-6">
+              <button
+                onClick={() => { setMode('login'); setError(null); }}
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-300 ${
+                  mode === 'login' 
+                    ? 'bg-cyber-lime text-black shadow-lg shadow-cyber-lime/20' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                登录
+              </button>
+              <button
+                onClick={() => { setMode('register'); setError(null); }}
+                className={`flex-1 py-2.5 text-sm font-semibold rounded-xl transition-all duration-300 ${
+                  mode === 'register' 
+                    ? 'bg-cyber-lime text-black shadow-lg shadow-cyber-lime/20' 
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                注册
+              </button>
             </div>
 
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">密码</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === 'register' ? '设置密码（至少6位）' : '输入密码'}
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
-              />
-            </div>
-
-            {error && (
-              <div className="px-4 py-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm">
-                {error}
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">用户名</label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="输入用户名"
+                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
+                />
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 bg-cyber-lime text-black font-medium rounded-xl hover:bg-lime-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  处理中...
-                </>
-              ) : (
-                mode === 'login' ? '登录' : '注册'
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">密码</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={mode === 'register' ? '设置密码（至少6位）' : '输入密码'}
+                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
+                />
+              </div>
+
+              {error && (
+                <div className="px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm flex items-center gap-2">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 8v4m0 4h.01" />
+                  </svg>
+                  {error}
+                </div>
               )}
-            </button>
-          </form>
 
-          {mode === 'register' && (
-            <p className="mt-4 text-xs text-gray-500 text-center">
-              注册后需要在设置中配置B站Cookie才能同步视频
-            </p>
-          )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3.5 bg-gradient-to-r from-cyber-lime to-emerald-400 text-black font-semibold rounded-xl hover:shadow-lg hover:shadow-cyber-lime/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                    处理中...
+                  </>
+                ) : (
+                  mode === 'login' ? '登录' : '注册'
+                )}
+              </button>
+            </form>
+
+            {mode === 'register' && (
+              <p className="mt-5 text-xs text-gray-500 text-center leading-relaxed">
+                注册后需要在设置中配置B站Cookie才能同步视频
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>
