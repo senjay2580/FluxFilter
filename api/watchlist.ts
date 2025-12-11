@@ -1,10 +1,10 @@
 /**
  * 待看列表 API
  * 
- * GET    /api/watchlist      - 获取待看列表
- * POST   /api/watchlist      - 添加到待看列表
- * DELETE /api/watchlist?id=X - 从待看列表移除
- * PATCH  /api/watchlist      - 更新待看状态
+ * GET    /api/watchlist?user_id=X      - 获取待看列表
+ * POST   /api/watchlist                - 添加到待看列表 (body: user_id, bvid, note)
+ * DELETE /api/watchlist?id=X           - 从待看列表移除
+ * PATCH  /api/watchlist                - 更新待看状态
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -26,14 +26,24 @@ export default async function handler(request: Request) {
 
   const supabase = createClient(supabaseUrl, supabaseKey);
   const url = new URL(request.url);
+  const userId = url.searchParams.get('user_id');
 
   try {
     switch (request.method) {
       case 'GET': {
+        // user_id 是必须的
+        if (!userId) {
+          return new Response(JSON.stringify({ error: 'user_id is required' }), {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+
         // 获取待看列表
         const { data: watchlistData, error } = await supabase
           .from('watchlist')
           .select('*')
+          .eq('user_id', userId)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -71,10 +81,10 @@ export default async function handler(request: Request) {
       case 'POST': {
         // 添加到待看列表
         const body = await request.json();
-        const { bvid, note } = body;
+        const { user_id, bvid, note } = body;
 
-        if (!bvid) {
-          return new Response(JSON.stringify({ error: 'bvid is required' }), {
+        if (!user_id || !bvid) {
+          return new Response(JSON.stringify({ error: 'user_id and bvid are required' }), {
             status: 400,
             headers: { 'Content-Type': 'application/json' },
           });
@@ -82,7 +92,7 @@ export default async function handler(request: Request) {
 
         const { data, error } = await supabase
           .from('watchlist')
-          .insert({ bvid, note })
+          .insert({ user_id, bvid, note })
           .select()
           .single();
 

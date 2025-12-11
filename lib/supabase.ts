@@ -72,10 +72,11 @@ export async function getVideosByDate(date: Date) {
 }
 
 /** 获取视频统计（按日期分组） */
-export async function getVideoCountByDate() {
+export async function getVideoCountByDate(userId: string) {
   const { data, error } = await supabase
     .from('video')
-    .select('pubdate');
+    .select('pubdate')
+    .eq('user_id', userId);
   
   if (error) throw error;
   

@@ -58,115 +58,134 @@ export default async function handler(request: Request) {
   const hour = new Date().getHours();
   const syncType = hour < 12 ? 'cron_morning' : 'cron_evening';
 
-  // 记录同步开始
-  const { data: logData } = await supabase
-    .from('sync_log')
-    .insert({ sync_type: syncType, status: 'running' })
-    .select()
-    .single();
-
-  const logId = logData?.id;
-
   try {
-    // 1. 获取所有启用的UP主
-    const { data: uploaders, error: uploaderError } = await supabase
-      .from('uploader')
-      .select('mid, name')
-      .eq('is_active', true);
+    // 1. 获取所有用户
+    const { data: users, error: userError } = await supabase
+      .from('user')
+      .select('id');
 
-    if (uploaderError) throw uploaderError;
-    if (!uploaders || uploaders.length === 0) {
-      return new Response(JSON.stringify({ message: 'No active uploaders found' }), {
+    if (userError) throw userError;
+    if (!users || users.length === 0) {
+      return new Response(JSON.stringify({ message: 'No users found' }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
     let totalAdded = 0;
-    let totalUpdated = 0;
-    const errors: string[] = [];
+    const userResults: { userId: string; added: number; errors: string[] }[] = [];
 
-    // 2. 遍历每个UP主获取视频
-    for (const uploader of uploaders) {
+    // 2. 遍历每个用户
+    for (const user of users) {
+      const userId = user.id;
+      const userErrors: string[] = [];
+      let userAdded = 0;
+
+      // 记录同步开始（每个用户一条日志）
+      const { data: logData } = await supabase
+        .from('sync_log')
+        .insert({ user_id: userId, sync_type: syncType, status: 'running' })
+        .select()
+        .single();
+
+      const logId = logData?.id;
+
       try {
-        // 获取UP主最近的视频
-        const videos = await fetchUploaderVideos(uploader.mid);
-        
-        // 过滤出今天的视频
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const todayTimestamp = today.getTime() / 1000;
+        // 获取该用户的所有启用UP主
+        const { data: uploaders, error: uploaderError } = await supabase
+          .from('uploader')
+          .select('mid, name')
+          .eq('user_id', userId)
+          .eq('is_active', true);
 
-        const todayVideos = videos.filter(v => v.pubdate >= todayTimestamp);
+        if (uploaderError) throw uploaderError;
+        if (!uploaders || uploaders.length === 0) {
+          continue;
+        }
 
-        // 3. 使用 UPSERT 插入或更新视频
-        for (const video of todayVideos) {
-          const videoData = {
-            bvid: video.bvid,
-            aid: video.aid,
-            mid: uploader.mid,
-            title: video.title,
-            pic: video.pic.startsWith('//') ? `https:${video.pic}` : video.pic,
-            description: video.description || '',
-            duration: video.duration,
-            pubdate: new Date(video.pubdate * 1000).toISOString(),
-          };
+        // 遍历每个UP主获取视频
+        for (const uploader of uploaders) {
+          try {
+            const videos = await fetchUploaderVideos(uploader.mid);
+            
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayTimestamp = today.getTime() / 1000;
+            const todayVideos = videos.filter(v => v.pubdate >= todayTimestamp);
 
-          const { error: upsertError } = await supabase
-            .from('video')
-            .upsert(videoData, { onConflict: 'bvid' });
+            for (const video of todayVideos) {
+              const videoData = {
+                user_id: userId,
+                bvid: video.bvid,
+                aid: video.aid,
+                mid: uploader.mid,
+                title: video.title,
+                pic: video.pic.startsWith('//') ? `https:${video.pic}` : video.pic,
+                description: video.description || '',
+                duration: video.duration,
+                pubdate: new Date(video.pubdate * 1000).toISOString(),
+              };
 
-          if (upsertError) {
-            errors.push(`视频 ${video.bvid}: ${upsertError.message}`);
-          } else {
-            totalAdded++;
+              const { error: upsertError } = await supabase
+                .from('video')
+                .upsert(videoData, { onConflict: 'user_id,bvid' });
+
+              if (upsertError) {
+                userErrors.push(`视频 ${video.bvid}: ${upsertError.message}`);
+              } else {
+                userAdded++;
+              }
+            }
+
+            await sleep(500);
+          } catch (err) {
+            userErrors.push(`UP主 ${uploader.name}: ${err}`);
           }
         }
 
-        // 避免请求过快
-        await sleep(500);
-      } catch (err) {
-        errors.push(`UP主 ${uploader.name}[${uploader.mid}]: ${err}`);
-      }
-    }
+        // 更新该用户的同步日志
+        const status = userErrors.length === 0 ? 'success' : (userAdded > 0 ? 'partial' : 'failed');
+        if (logId) {
+          await supabase
+            .from('sync_log')
+            .update({
+              status,
+              videos_added: userAdded,
+              uploaders_synced: uploaders.length,
+              error_message: userErrors.length > 0 ? userErrors.join('\n') : null,
+              finished_at: new Date().toISOString(),
+            })
+            .eq('id', logId);
+        }
 
-    // 4. 更新同步日志
-    const status = errors.length === 0 ? 'success' : (totalAdded > 0 ? 'partial' : 'failed');
-    
-    if (logId) {
-      await supabase
-        .from('sync_log')
-        .update({
-          status,
-          videos_added: totalAdded,
-          videos_updated: totalUpdated,
-          error_message: errors.length > 0 ? errors.join('\n') : null,
-          finished_at: new Date().toISOString(),
-        })
-        .eq('id', logId);
+      } catch (err) {
+        if (logId) {
+          await supabase
+            .from('sync_log')
+            .update({
+              status: 'failed',
+              error_message: String(err),
+              finished_at: new Date().toISOString(),
+            })
+            .eq('id', logId);
+        }
+        userErrors.push(String(err));
+      }
+
+      totalAdded += userAdded;
+      userResults.push({ userId, added: userAdded, errors: userErrors });
     }
 
     return new Response(JSON.stringify({
       success: true,
       sync_type: syncType,
+      users_synced: users.length,
       videos_added: totalAdded,
-      errors: errors.length > 0 ? errors : undefined,
+      details: userResults,
     }), {
       headers: { 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    // 记录错误
-    if (logId) {
-      await supabase
-        .from('sync_log')
-        .update({
-          status: 'failed',
-          error_message: String(error),
-          finished_at: new Date().toISOString(),
-        })
-        .eq('id', logId);
-    }
-
     return new Response(JSON.stringify({ error: String(error) }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },

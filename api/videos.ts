@@ -3,6 +3,7 @@
  * 
  * GET /api/videos - 获取视频列表
  * Query Params:
+ *   - user_id: 用户ID（必须）
  *   - limit: 每页数量（默认20）
  *   - offset: 偏移量
  *   - date: 指定日期（YYYY-MM-DD）
@@ -28,9 +29,18 @@ export default async function handler(request: Request) {
   const supabase = createClient(supabaseUrl, supabaseKey);
   const url = new URL(request.url);
   
+  const userId = url.searchParams.get('user_id');
   const limit = parseInt(url.searchParams.get('limit') || '20');
   const offset = parseInt(url.searchParams.get('offset') || '0');
   const dateParam = url.searchParams.get('date');
+
+  // user_id 是必须的
+  if (!userId) {
+    return new Response(JSON.stringify({ error: 'user_id is required' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
 
   try {
     let query = supabase
@@ -39,6 +49,7 @@ export default async function handler(request: Request) {
         *,
         uploader:uploader!fk_video_uploader (name, face)
       `)
+      .eq('user_id', userId)
       .order('pubdate', { ascending: false })
       .range(offset, offset + limit - 1);
 
