@@ -59,12 +59,22 @@ export interface WatchlistItem {
   video?: Video;
 }
 
+export interface User {
+  id: string;
+  email: string | null;
+  bilibili_cookie: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SyncLog {
   id: number;
+  user_id: string;
   sync_type: 'cron_morning' | 'cron_evening' | 'manual';
-  status: 'success' | 'failed' | 'partial';
+  status: 'success' | 'failed' | 'partial' | 'running';
   videos_added: number;
   videos_updated: number;
+  uploaders_synced: number;
   error_message: string | null;
   started_at: string;
   finished_at: string | null;

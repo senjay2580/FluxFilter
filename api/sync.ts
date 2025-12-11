@@ -14,10 +14,18 @@ export const config = {
 
 // B站API配置
 const BILIBILI_API_BASE = 'https://api.bilibili.com';
-const headers = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Referer': 'https://www.bilibili.com',
-};
+
+// 获取请求头（包含用户 Cookie）
+function getHeaders(userCookie?: string): Record<string, string> {
+  // 优先使用用户自己的 Cookie，否则使用全局 Cookie
+  const cookie = userCookie || process.env.BILIBILI_COOKIE || '';
+  return {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    'Referer': 'https://www.bilibili.com',
+    'Origin': 'https://www.bilibili.com',
+    ...(cookie ? { 'Cookie': cookie } : {}),
+  };
+}
 
 interface BilibiliVideoItem {
   aid: number;
@@ -59,10 +67,10 @@ export default async function handler(request: Request) {
   const syncType = hour < 12 ? 'cron_morning' : 'cron_evening';
 
   try {
-    // 1. 获取所有用户
+    // 1. 获取所有用户（包含 B站 Cookie）
     const { data: users, error: userError } = await supabase
       .from('user')
-      .select('id');
+      .select('id, bilibili_cookie');
 
     if (userError) throw userError;
     if (!users || users.length === 0) {
@@ -77,6 +85,7 @@ export default async function handler(request: Request) {
     // 2. 遍历每个用户
     for (const user of users) {
       const userId = user.id;
+      const userCookie = user.bilibili_cookie || '';
       const userErrors: string[] = [];
       let userAdded = 0;
 
@@ -102,10 +111,10 @@ export default async function handler(request: Request) {
           continue;
         }
 
-        // 遍历每个UP主获取视频
+        // 遍历每个UP主获取视频（使用用户的 Cookie）
         for (const uploader of uploaders) {
           try {
-            const videos = await fetchUploaderVideos(uploader.mid);
+            const videos = await fetchUploaderVideos(uploader.mid, userCookie);
             
             const today = new Date();
             today.setHours(0, 0, 0, 0);
@@ -195,22 +204,82 @@ export default async function handler(request: Request) {
 
 /**
  * 获取UP主视频列表
+ * 使用用户的 Cookie 调用 B站 API
  */
-async function fetchUploaderVideos(mid: number): Promise<BilibiliVideoItem[]> {
-  const url = new URL(`${BILIBILI_API_BASE}/x/space/wbi/arc/search`);
+async function fetchUploaderVideos(mid: number, userCookie?: string): Promise<BilibiliVideoItem[]> {
+  const url = new URL(`${BILIBILI_API_BASE}/x/space/arc/search`);
   url.searchParams.set('mid', mid.toString());
   url.searchParams.set('pn', '1');
   url.searchParams.set('ps', '30');
   url.searchParams.set('order', 'pubdate');
+  url.searchParams.set('tid', '0');
+  url.searchParams.set('keyword', '');
 
-  const response = await fetch(url.toString(), { headers });
-  const data = await response.json();
+  try {
+    const response = await fetch(url.toString(), { headers: getHeaders(userCookie) });
+    const data = await response.json();
 
-  if (data.code !== 0) {
-    throw new Error(`B站API错误 [${data.code}]: ${data.message}`);
+    if (data.code === 0 && data.data?.list?.vlist) {
+      return data.data.list.vlist;
+    }
+
+    // 如果失败，尝试备用接口
+    console.log(`主接口失败 [${data.code}]，尝试备用接口...`);
+    return await fetchUploaderVideosFallback(mid, userCookie);
+  } catch (err) {
+    console.log(`请求失败，尝试备用接口: ${err}`);
+    return await fetchUploaderVideosFallback(mid, userCookie);
   }
+}
 
-  return data.data?.list?.vlist || [];
+/**
+ * 备用接口 - 使用用户动态接口
+ */
+async function fetchUploaderVideosFallback(mid: number, userCookie?: string): Promise<BilibiliVideoItem[]> {
+  // 尝试使用用户动态接口
+  const url = `${BILIBILI_API_BASE}/x/polymer/web-dynamic/v1/feed/space?host_mid=${mid}`;
+  
+  try {
+    const response = await fetch(url, { headers: getHeaders(userCookie) });
+    const data = await response.json();
+
+    if (data.code !== 0 || !data.data?.items) {
+      return [];
+    }
+
+    // 解析动态中的视频
+    const videos: BilibiliVideoItem[] = [];
+    for (const item of data.data.items) {
+      if (item.type === 'DYNAMIC_TYPE_AV' && item.modules?.module_dynamic?.major?.archive) {
+        const archive = item.modules.module_dynamic.major.archive;
+        videos.push({
+          aid: parseInt(archive.aid),
+          bvid: archive.bvid,
+          title: archive.title,
+          pic: archive.cover,
+          description: archive.desc || '',
+          duration: parseDuration(archive.duration_text || '0:00'),
+          pubdate: Math.floor(new Date(item.modules?.module_author?.pub_ts * 1000 || Date.now()).getTime() / 1000),
+        });
+      }
+    }
+    return videos;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 解析时长字符串 "1:23:45" -> 秒数
+ */
+function parseDuration(durationStr: string): number {
+  const parts = durationStr.split(':').map(Number);
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  } else if (parts.length === 2) {
+    return parts[0] * 60 + parts[1];
+  }
+  return 0;
 }
 
 function sleep(ms: number): Promise<void> {

@@ -21,12 +21,38 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+      - name: Debug - Check Secrets
+        run: |
+          echo "VERCEL_URL length: ${#VERCEL_URL}"
+          echo "CRON_SECRET length: ${#CRON_SECRET}"
+          echo "Target URL: $VERCEL_URL/api/sync"
+        env:
+          VERCEL_URL: ${{ secrets.VERCEL_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
       - name: Trigger Sync API
         run: |
-          curl -X POST "${{ secrets.VERCEL_URL }}/api/sync" \
+          echo "📡 正在调用同步 API..."
+          RESPONSE=$(curl -X POST "${{ secrets.VERCEL_URL }}/api/sync" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json" \
-            --fail --silent --show-error
+            -w "\n\nHTTP_STATUS:%{http_code}" \
+            --max-time 120 \
+            2>&1)
+          
+          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
+          BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
+          
+          echo "📋 响应状态码: $HTTP_STATUS"
+          echo "📄 响应内容:"
+          echo "$BODY"
+          
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "❌ API 调用失败"
+            exit 1
+          fi
+          
+          echo "✅ API 调用成功"
         env:
           VERCEL_URL: ${{ secrets.VERCEL_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
