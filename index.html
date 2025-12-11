@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <title>Fluxf</title>
+    <title>FluxFilter</title>
     
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#050510" />
-    <meta name="description" content="B站视频聚合与筛选工具" />
+    <meta name="description" content="智能追踪你关注的UP主，永不错过精彩内容" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Fluxf" />
+    <meta name="apple-mobile-web-app-title" content="FluxFilter" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180.png" />
     <link rel="icon" type="image/png" href="/manifest-icon-192.maskable.png" />
@@ -85,45 +85,82 @@
 </head>
   <body>
     <div id="root">
-      <!-- 初始加载 UI -->
-      <div style="
+      <!-- 首屏加载 UI -->
+      <div id="splash" style="
         position: fixed;
         inset: 0;
-        background: linear-gradient(135deg, #0a0a1a 0%, #050510 50%, #0d0d20 100%);
+        background: #050510;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        overflow: hidden;
       ">
-        <div style="text-align: center;">
-          <!-- Logo -->
-          <div style="
-            font-size: 48px;
-            font-weight: bold;
-            background: linear-gradient(135deg, #a3e635 0%, #22d3ee 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 24px;
-            font-family: system-ui, -apple-system, sans-serif;
-          ">Fluxf</div>
-          
-          <!-- 加载动画 -->
-          <div style="
-            width: 40px;
-            height: 40px;
-            margin: 0 auto;
-            border: 3px solid rgba(163, 230, 53, 0.2);
-            border-top-color: #a3e635;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-          "></div>
-          
-          <style>
-            @keyframes spin {
-              to { transform: rotate(360deg); }
-            }
-          </style>
+        <!-- 背景光晕 -->
+        <div style="
+          position: absolute;
+          top: 25%;
+          left: 50%;
+          transform: translateX(-50%);
+          width: 400px;
+          height: 400px;
+          background: radial-gradient(circle, rgba(163,230,53,0.15) 0%, transparent 70%);
+          filter: blur(60px);
+          animation: pulse 2s ease-in-out infinite;
+        "></div>
+        
+        <!-- Logo 图标 -->
+        <div style="
+          position: relative;
+          width: 80px;
+          height: 80px;
+          margin-bottom: 20px;
+        ">
+          <img src="/manifest-icon-192.maskable.png" alt="FluxFilter" style="
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 30px rgba(163,230,53,0.5));
+          " />
         </div>
+        
+        <!-- 应用名 -->
+        <div style="
+          font-size: 32px;
+          font-weight: bold;
+          background: linear-gradient(90deg, #ffffff 0%, #a3e635 50%, #22d3ee 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          margin-bottom: 8px;
+          font-family: system-ui, -apple-system, sans-serif;
+        ">FluxFilter</div>
+        
+        <!-- 标语 -->
+        <div style="
+          font-size: 12px;
+          color: #6b7280;
+          margin-bottom: 40px;
+        ">智能追踪你关注的UP主</div>
+        
+        <!-- 加载动画 -->
+        <div style="
+          width: 32px;
+          height: 32px;
+          border: 2px solid rgba(163, 230, 53, 0.2);
+          border-top-color: #a3e635;
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        "></div>
+        
+        <style>
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+          @keyframes pulse {
+            0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+            50% { opacity: 1; transform: translateX(-50%) scale(1.1); }
+          }
+        </style>
       </div>
     </div>
   <script type="module" src="/index.tsx"></script>

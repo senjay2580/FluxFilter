@@ -1,8 +1,8 @@
 {
-  "name": "Fluxf",
-  "short_name": "Fluxf",
-  "description": "B站视频聚合与筛选工具",
-  "theme_color": "#050510",
+  "name": "FluxFilter",
+  "short_name": "FluxFilter",
+  "description": "智能追踪你关注的UP主，永不错过精彩内容",
+  "theme_color": "#a3e635",
   "background_color": "#050510",
   "display": "standalone",
   "orientation": "portrait",

@@ -7,7 +7,8 @@ import DateFilterPicker from './components/DateFilterPicker';
 import SyncButton from './components/SyncButton';
 import AddUploaderModal from './components/AddUploaderModal';
 import TodoList from './components/TodoList';
-import Loader3D, { LoaderPulse } from './components/Loader3D';
+import Loader3D from './components/Loader3D';
+import SplashScreen from './components/SplashScreen';
 import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
 import HotCarousel from './components/HotCarousel';
@@ -324,9 +325,14 @@ const App = () => {
     showToast('刷新成功');
   }, [fetchVideos]);
 
-  // 认证检查中显示空白背景
+  // 认证检查中显示启动页
   if (isAuthenticated === null) {
-    return <div className="h-screen bg-[#0a0a0f]" />;
+    return (
+      <SplashScreen 
+        onComplete={() => {}} 
+        onSync={async () => {}} 
+      />
+    );
   }
 
   // 未登录显示登录页
