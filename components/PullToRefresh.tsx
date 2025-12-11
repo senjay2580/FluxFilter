@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
@@ -7,51 +7,90 @@ interface PullToRefreshProps {
 }
 
 const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scrollContainerRef }) => {
-  const [pulling, setPulling] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const startY = useRef(0);
+  const isPulling = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const threshold = 80; // 触发刷新的阈值
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
-    if (scrollTop === 0) {
-      startY.current = e.touches[0].clientY;
-      setPulling(true);
-    }
-  }, [scrollContainerRef]);
+  // 用 ref 存储最新的 pullDistance，避免闭包问题
+  const pullDistanceRef = useRef(0);
+  pullDistanceRef.current = pullDistance;
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!pulling || refreshing) return;
-    
-    const currentY = e.touches[0].clientY;
-    const diff = currentY - startY.current;
-    const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
-    
-    if (diff > 0 && scrollTop === 0) {
-      // 阻尼效果
-      const distance = Math.min(diff * 0.4, 120);
-      setPullDistance(distance);
-    }
-  }, [pulling, refreshing, scrollContainerRef]);
+  // 用 ref 存储 onRefresh，避免频繁重新注册
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
 
-  const handleTouchEnd = useCallback(async () => {
-    if (!pulling) return;
-    
-    if (pullDistance >= threshold && !refreshing) {
-      setRefreshing(true);
-      try {
-        await onRefresh();
-      } finally {
-        setRefreshing(false);
+  // 使用原生事件监听器（非 passive）以支持 preventDefault
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let isRefreshing = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (isRefreshing) return;
+      const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
+      if (scrollTop <= 5) {
+        startY.current = e.touches[0].clientY;
+        isPulling.current = true;
       }
-    }
-    
-    setPulling(false);
-    setPullDistance(0);
-  }, [pulling, pullDistance, refreshing, onRefresh]);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isPulling.current || isRefreshing) return;
+      
+      const currentY = e.touches[0].clientY;
+      const diff = currentY - startY.current;
+      const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
+      
+      if (diff > 0 && scrollTop <= 5) {
+        e.preventDefault();
+        const distance = Math.min(diff * 0.5, 120);
+        setPullDistance(distance);
+      } else if (diff < 0) {
+        isPulling.current = false;
+        setPullDistance(0);
+      }
+    };
+
+    const handleTouchEnd = async () => {
+      if (!isPulling.current) return;
+      
+      const currentPullDistance = pullDistanceRef.current;
+      console.log('📱 TouchEnd, pullDistance:', currentPullDistance, 'threshold:', threshold);
+      
+      if (currentPullDistance >= threshold && !isRefreshing) {
+        isRefreshing = true;
+        setRefreshing(true);
+        console.log('🔄 开始刷新...');
+        try {
+          await onRefreshRef.current();
+          console.log('✅ 刷新完成');
+        } catch (err) {
+          console.error('❌ 刷新失败:', err);
+        } finally {
+          isRefreshing = false;
+          setRefreshing(false);
+        }
+      }
+      
+      isPulling.current = false;
+      setPullDistance(0);
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [scrollContainerRef]); // 只依赖 scrollContainerRef
 
   const progress = Math.min(pullDistance / threshold, 1);
   const rotation = pullDistance * 3;
@@ -59,9 +98,6 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
   return (
     <div
       ref={containerRef}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       className="relative"
     >
       {/* 刷新指示器 */}

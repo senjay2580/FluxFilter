@@ -11,9 +11,11 @@ import Loader3D from './components/Loader3D';
 import SplashScreen from './components/SplashScreen';
 import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
+import SettingsPage from './components/SettingsPage';
 import HotCarousel from './components/HotCarousel';
 import SettingsModal from './components/SettingsModal';
 import AuthPage from './components/AuthPage';
+import VideoTimeline from './components/VideoTimeline';
 import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
@@ -26,17 +28,35 @@ const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   
-  const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const saved = localStorage.getItem('activeTab');
+    return (saved as Tab) || 'home';
+  });
   const [watchLaterIds, setWatchLaterIds] = useState<Set<string>>(new Set());
   const [watchlistLoading, setWatchlistLoading] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('today'); // 默认今天
   const [customDateFilter, setCustomDateFilter] = useState<DateFilter>({});
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isAddUploaderOpen, setIsAddUploaderOpen] = useState(false);
   const [isTodoOpen, setIsTodoOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsInitialView, setSettingsInitialView] = useState<'main' | 'todo' | 'reminder' | 'collector'>('main');
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // UP主筛选
+  const [selectedUploader, setSelectedUploader] = useState<{ mid: number; name: string } | null>(null);
+  const [isUploaderPickerOpen, setIsUploaderPickerOpen] = useState(false);
+  const [uploaderSearchTerm, setUploaderSearchTerm] = useState('');
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [isTimeFilterOpen, setIsTimeFilterOpen] = useState(false);
+  const timeFilterBtnRef = React.useRef<HTMLButtonElement>(null);
+  const [timeFilterPos, setTimeFilterPos] = useState({ top: 0, left: 0, width: 0 });
+
+  // 保存当前 tab 到 localStorage
+  useEffect(() => {
+    localStorage.setItem('activeTab', activeTab);
+  }, [activeTab]);
   
   // 检查登录状态
   useEffect(() => {
@@ -81,9 +101,53 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
+  // 快捷入口数量
+  const [collectedCount, setCollectedCount] = useState(0);
+  const [todoCount, setTodoCount] = useState(0);
+  const [reminderCount, setReminderCount] = useState(0);
+  
+  // 时间轴
+  const [showTimeline, setShowTimeline] = useState(false);
+  
+  // 加载快捷入口数量
+  useEffect(() => {
+    const loadCounts = async () => {
+      const userId = getStoredUserId();
+      if (!userId) return;
+      
+      // 收藏夹数量
+      const { count: cCount } = await supabase
+        .from('collected_video')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      setCollectedCount(cCount || 0);
+      
+      // TODO数量（从 localStorage 读取）
+      try {
+        const todos = JSON.parse(localStorage.getItem('todos') || '[]');
+        setTodoCount(todos.filter((t: any) => !t.completed).length);
+      } catch { setTodoCount(0); }
+      
+      // 提醒任务数量
+      try {
+        const tasks = JSON.parse(localStorage.getItem('interval-reminder-tasks') || '[]');
+        setReminderCount(tasks.filter((t: any) => t.isActive).length);
+      } catch { setReminderCount(0); }
+    };
+    
+    loadCounts();
+    // 每次切换到首页时刷新
+    if (activeTab === 'home') loadCounts();
+  }, [activeTab]);
+  
   // Infinite Scroll State
   const [visibleCount, setVisibleCount] = useState(10);
   const mainRef = React.useRef<HTMLDivElement>(null);
+
+  // 筛选条件变化时重置 visibleCount
+  useEffect(() => {
+    setVisibleCount(10);
+  }, [activeFilter, selectedUploader, searchTerm, activeTab]);
 
   // 滑动切换Tab
   const touchStartX = React.useRef<number>(0);
@@ -141,6 +205,7 @@ const App = () => {
       const userId = currentUser?.id;
       if (!userId) {
         setVideos([]);
+        setLoading(false);
         return;
       }
       
@@ -185,11 +250,22 @@ const App = () => {
     }
   }, [currentUser?.id]);
 
-  // 初始加载
+  // 用户登录后加载数据
   useEffect(() => {
-    fetchVideos();
-    fetchWatchlist();
-  }, [fetchVideos, fetchWatchlist]);
+    if (currentUser?.id) {
+      console.log('👤 用户已登录，加载数据...', currentUser.id);
+      fetchVideos();
+      fetchWatchlist();
+    }
+  }, [currentUser?.id]); // 只在用户ID变化时触发
+
+  // 切换到首页时检查是否需要重新加载
+  useEffect(() => {
+    if (activeTab === 'home' && videos.length === 0 && !loading && !error && currentUser?.id) {
+      console.log('🏠 回到首页，重新加载...');
+      fetchVideos();
+    }
+  }, [activeTab, videos.length, loading, error, currentUser?.id]);
 
   // 监听同步完成事件，刷新数据
   useEffect(() => {
@@ -256,6 +332,43 @@ const App = () => {
     }
   }, [watchLaterIds, watchlistLoading]);
 
+  // 获取所有UP主列表（去重，按视频数量排序）
+  const uploaders = useMemo(() => {
+    const uploaderMap = new Map<number, { mid: number; name: string; face: string | null; count: number; latestTime: string }>();
+    
+    videos.forEach(v => {
+      if (v.mid && v.uploader?.name) {
+        const existing = uploaderMap.get(v.mid);
+        if (existing) {
+          existing.count++;
+          if (v.created_at > existing.latestTime) {
+            existing.latestTime = v.created_at;
+          }
+        } else {
+          uploaderMap.set(v.mid, {
+            mid: v.mid,
+            name: v.uploader.name,
+            face: v.uploader.face || null,
+            count: 1,
+            latestTime: v.created_at,
+          });
+        }
+      }
+    });
+    
+    // 按最新插入时间排序
+    return Array.from(uploaderMap.values()).sort((a, b) => 
+      new Date(b.latestTime).getTime() - new Date(a.latestTime).getTime()
+    );
+  }, [videos]);
+
+  // 筛选后的UP主列表（支持搜索）
+  const filteredUploaders = useMemo(() => {
+    if (!uploaderSearchTerm) return uploaders;
+    const term = uploaderSearchTerm.toLowerCase();
+    return uploaders.filter(u => u.name.toLowerCase().includes(term));
+  }, [uploaders, uploaderSearchTerm]);
+
   // Filter Logic
   const filteredVideos = useMemo(() => {
     let result = [...videos];
@@ -265,7 +378,12 @@ const App = () => {
       result = result.filter(v => watchLaterIds.has(v.bvid));
     }
 
-    // 2. Search - 基于当前界面搜索（标题 + UP主名称）
+    // 2. UP主筛选
+    if (selectedUploader) {
+      result = result.filter(v => v.mid === selectedUploader.mid);
+    }
+
+    // 3. Search - 基于当前界面搜索（标题 + UP主名称）
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       result = result.filter(v =>
@@ -274,14 +392,13 @@ const App = () => {
       );
     }
 
-    // 3. Time Filter
+    // 4. Time Filter - 基于插入时间 (created_at)
     const now = new Date();
     result = result.filter(v => {
       if (activeFilter === 'all') return true;
-      if (!v.pubdate) return true;
 
-      const pubDate = new Date(v.pubdate);
-      const diffTime = Math.abs(now.getTime() - pubDate.getTime());
+      const insertDate = new Date(v.created_at);
+      const diffTime = Math.abs(now.getTime() - insertDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
       if (activeFilter === 'today') return diffDays <= 1;
@@ -290,6 +407,7 @@ const App = () => {
 
       if (activeFilter === 'custom') {
          if (!customDateFilter.year) return true;
+         const pubDate = new Date(v.pubdate || v.created_at);
          if (pubDate.getFullYear() !== customDateFilter.year) return false;
          if (customDateFilter.month !== undefined && pubDate.getMonth() !== customDateFilter.month) return false;
          if (customDateFilter.day !== undefined && pubDate.getDate() !== customDateFilter.day) return false;
@@ -299,8 +417,11 @@ const App = () => {
       return true;
     });
 
+    // 按插入时间排序（最新的在前）
+    result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
     return result;
-  }, [videos, activeTab, watchLaterIds, activeFilter, customDateFilter, searchTerm]);
+  }, [videos, activeTab, watchLaterIds, activeFilter, customDateFilter, searchTerm, selectedUploader]);
 
   // 热门视频排序 - 根据热度分数排序
   const hotVideos = useMemo(() => {
@@ -338,9 +459,16 @@ const App = () => {
 
   // 下拉刷新处理
   const handlePullRefresh = useCallback(async () => {
+    console.log('🔃 下拉刷新触发');
+    if (!currentUser?.id) {
+      console.log('⚠️ 未登录，跳过刷新');
+      showToast('请先登录');
+      return;
+    }
     await fetchVideos();
+    await fetchWatchlist();
     showToast('刷新成功');
-  }, [fetchVideos]);
+  }, [fetchVideos, fetchWatchlist, currentUser?.id]);
 
   // 认证检查中显示加载动画
   if (isAuthenticated === null) {
@@ -421,6 +549,18 @@ const App = () => {
               )}
             </div>
             <SyncButton compact />
+            {/* 时间轴按钮 */}
+            <button 
+              onClick={() => setShowTimeline(true)}
+              className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 hover:bg-cyber-lime/10 transition-colors"
+              title="时间轴"
+            >
+              <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="20" x2="12" y2="10"/>
+                <line x1="18" y1="20" x2="18" y2="4"/>
+                <line x1="6" y1="20" x2="6" y2="16"/>
+              </svg>
+            </button>
             <button 
               onClick={() => setIsCalendarOpen(true)}
               className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 transition-colors"
@@ -440,44 +580,110 @@ const App = () => {
         </div>
 
         {/* Filter Chips - 毛玻璃效果 */}
-        <div className="bg-black/30 backdrop-blur-xl border-b border-white/10 py-2 overflow-x-auto no-scrollbar">
-          <div className="flex px-4 gap-2">
-            {[
-              { id: 'all', label: 'All' },
-              { id: 'today', label: 'Today' },
-              { id: 'week', label: 'This Week' },
-              { id: 'month', label: 'This Month' },
-            ].map((chip) => (
-              <button
-                key={chip.id}
-                onClick={() => {
-                  setActiveFilter(chip.id as FilterType);
-                  mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${
-                  activeFilter === chip.id 
-                    ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]' 
-                    : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
-                }`}
-              >
-                {chip.label}
-              </button>
-            ))}
-            
-            {/* Custom Filter Chip */}
+        <div className="bg-black/30 backdrop-blur-xl border-b border-white/10 py-2 overflow-x-auto no-scrollbar touch-pan-x">
+          <div className="flex px-4 gap-2 w-max">
+            {/* All 按钮 */}
             <button
-              onClick={() => setIsFilterOpen(true)}
-              className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 ${
-                activeFilter === 'custom'
-                    ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]' 
-                    : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
+              onClick={() => {
+                setActiveFilter('all');
+                mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+              }}
+              className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${
+                activeFilter === 'all' 
+                  ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]' 
+                  : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
               }`}
             >
-              <SlidersIcon className="w-3 h-3" />
-              {activeFilter === 'custom' 
-                ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}月` : '年'}`
-                : '自定义'}
+              All
             </button>
+            
+            {/* 时间筛选按钮 */}
+            <button
+              ref={timeFilterBtnRef}
+              onClick={() => {
+                if (timeFilterBtnRef.current) {
+                  const rect = timeFilterBtnRef.current.getBoundingClientRect();
+                  setTimeFilterPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+                }
+                setIsTimeFilterOpen(true);
+              }}
+              className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 ${
+                ['today', 'week', 'month'].includes(activeFilter)
+                  ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]' 
+                  : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
+              }`}
+            >
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              {activeFilter === 'today' ? '今天' : activeFilter === 'week' ? '本周' : activeFilter === 'month' ? '本月' : '时间'}
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </button>
+            
+            {/* 高级筛选组合按钮 */}
+            <div className={`flex items-center rounded-full border overflow-hidden ${
+              activeFilter === 'custom' || selectedUploader
+                ? 'border-cyber-lime/50 bg-white/5'
+                : 'border-white/10 bg-white/5'
+            }`}>
+              {/* 自定义日期 */}
+              <button
+                onClick={() => setIsFilterOpen(true)}
+                className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  activeFilter === 'custom'
+                      ? 'bg-cyber-lime text-black' 
+                      : 'text-gray-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <SlidersIcon className="w-3 h-3" />
+                {activeFilter === 'custom' 
+                  ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}`
+                  : '日期'}
+              </button>
+              
+              {/* 分隔线 */}
+              <div className="w-px h-4 bg-white/20" />
+              
+              {/* UP主筛选 */}
+              <button
+                onClick={() => setIsUploaderPickerOpen(true)}
+                className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${
+                  selectedUploader
+                      ? 'bg-violet-500 text-white' 
+                      : 'text-gray-400 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+                {selectedUploader ? selectedUploader.name : '关注'}
+              </button>
+              
+              {/* 清除按钮 */}
+              {(selectedUploader || activeFilter === 'custom') && (
+                <>
+                  <div className="w-px h-4 bg-white/20" />
+                  <button
+                    onClick={() => {
+                      setSelectedUploader(null);
+                      if (activeFilter === 'custom') setActiveFilter('today');
+                    }}
+                    className="px-2 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                    title="清除筛选"
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -505,6 +711,13 @@ const App = () => {
         {activeTab === 'todo' && (
           <TodoList embedded timeFilter={activeFilter} />
         )}
+
+        {/* 设置页面 */}
+        <SettingsPage
+          isOpen={activeTab === 'settings'}
+          onClose={() => setActiveTab('home')}
+          initialView={settingsInitialView}
+        />
         
         {/* 视频内容 */}
         {(activeTab === 'home' || activeTab === 'watchLater') && (
@@ -528,6 +741,58 @@ const App = () => {
         {/* 热门轮播图 */}
         {activeTab === 'home' && !searchTerm && activeFilter === 'all' && videos.length > 0 && (
           <HotCarousel videos={hotVideos} />
+        )}
+
+        {/* 快捷入口 - 均匀分布居中 */}
+        {activeTab === 'home' && !searchTerm && (
+          <div className="flex justify-center gap-4 mb-4">
+            {/* 收藏夹 */}
+            <button
+              onClick={() => { setSettingsInitialView('collector'); setActiveTab('settings'); }}
+              className="relative w-11 h-11 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-xl flex items-center justify-center hover:from-cyan-500/30 hover:to-blue-500/30 transition-all active:scale-[0.95]"
+            >
+              <svg className="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+              </svg>
+              {collectedCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-cyan-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                  {collectedCount > 99 ? '99+' : collectedCount}
+                </span>
+              )}
+            </button>
+
+            {/* 提醒 */}
+            <button
+              onClick={() => { setSettingsInitialView('reminder'); setActiveTab('settings'); }}
+              className="relative w-11 h-11 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl flex items-center justify-center hover:from-amber-500/30 hover:to-orange-500/30 transition-all active:scale-[0.95]"
+            >
+              <svg className="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <polyline points="12 6 12 12 16 14"/>
+              </svg>
+              {reminderCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-amber-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                  {reminderCount > 99 ? '99+' : reminderCount}
+                </span>
+              )}
+            </button>
+
+            {/* TODO */}
+            <button
+              onClick={() => { setSettingsInitialView('todo'); setActiveTab('settings'); }}
+              className="relative w-11 h-11 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-xl flex items-center justify-center hover:from-blue-500/30 hover:to-purple-500/30 transition-all active:scale-[0.95]"
+            >
+              <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+              </svg>
+              {todoCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-blue-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                  {todoCount > 99 ? '99+' : todoCount}
+                </span>
+              )}
+            </button>
+          </div>
         )}
 
         <div className="space-y-3">
@@ -745,7 +1010,10 @@ const App = () => {
                             key={video.bvid} 
                             video={video}
                             onAddToWatchlist={toggleWatchLater}
+                            onRemoveFromWatchlist={toggleWatchLater}
                             isInWatchlist={watchLaterIds.has(video.bvid)}
+                            openMenuId={openMenuId}
+                            onMenuToggle={setOpenMenuId}
                         />
                     ))}
                 </div>
@@ -753,11 +1021,24 @@ const App = () => {
             
             {/* Loading / End indicator */}
             {!loading && filteredVideos.length > 0 && (
-                <div className="py-8 flex justify-center">
+                <div className="pt-8 pb-24 flex justify-center">
                     {visibleCount < filteredVideos.length ? (
                         <div className="w-6 h-6 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin"></div>
                     ) : (
-                        <p className="text-gray-600 text-xs font-mono">已加载全部</p>
+                        <div className="flex flex-col items-center gap-3">
+                          <p className="text-gray-500 text-sm">没有更多视频了，去看看 RSS 吧 ✨</p>
+                          <button
+                            onClick={() => setActiveTab('rss')}
+                            className="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-full text-blue-400 text-sm font-medium hover:from-blue-500/30 hover:to-cyan-500/30 transition-all flex items-center gap-2"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M4 11a9 9 0 0 1 9 9" />
+                              <path d="M4 4a16 16 0 0 1 16 16" />
+                              <circle cx="5" cy="19" r="1" fill="currentColor" />
+                            </svg>
+                            去看 RSS 订阅
+                          </button>
+                        </div>
                     )}
                 </div>
             )}
@@ -838,20 +1119,20 @@ const App = () => {
             <span className="text-[9px] font-medium">RSS</span>
           </button>
 
-          {/* TODO 待办事项 */}
+          {/* 设置 */}
           <button 
-            onClick={() => setActiveTab('todo')}
+            onClick={() => { setSettingsInitialView('main'); setActiveTab('settings'); }}
             className={`flex flex-col items-center gap-1 transition-all duration-300 ${
-              activeTab === 'todo' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500 hover:text-cyber-lime'
+              activeTab === 'settings' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500 hover:text-cyber-lime'
             }`}
           >
-            <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'todo' ? 'bg-cyber-lime/10' : ''}`}>
+            <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-cyber-lime/10' : ''}`}>
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 11l3 3L22 4" />
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             </div>
-            <span className="text-[9px] font-medium">TODO</span>
+            <span className="text-[9px] font-medium">设置</span>
           </button>
         </div>
       </nav>
@@ -924,6 +1205,163 @@ const App = () => {
         onClose={() => setIsSettingsOpen(false)}
         onLogout={handleLogout}
       />
+
+      {/* 时间轴 */}
+      {showTimeline && (
+        <VideoTimeline
+          videos={videos}
+          onClose={() => setShowTimeline(false)}
+        />
+      )}
+
+      {/* UP主选择器弹窗 */}
+      {isUploaderPickerOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+          onClick={() => { setIsUploaderPickerOpen(false); setUploaderSearchTerm(''); }}
+        >
+          <div 
+            className="w-full max-w-lg bg-[#0c0c0c] rounded-t-3xl border-t border-white/10 max-h-[70vh] flex flex-col animate-slide-up"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* 标题栏 */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+              <h3 className="text-white font-bold text-lg">选择 UP主</h3>
+              <button
+                onClick={() => { setIsUploaderPickerOpen(false); setUploaderSearchTerm(''); }}
+                className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-400 hover:bg-white/20"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            
+            {/* 搜索框 */}
+            <div className="px-4 py-3">
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="M21 21l-4.35-4.35"/>
+                </svg>
+                <input
+                  type="text"
+                  placeholder="搜索 UP主..."
+                  value={uploaderSearchTerm}
+                  onChange={e => setUploaderSearchTerm(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"
+                />
+              </div>
+            </div>
+            
+            {/* UP主列表 */}
+            <div className="flex-1 overflow-y-auto px-4 pb-4">
+              {filteredUploaders.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  {uploaderSearchTerm ? '未找到匹配的 UP主' : '暂无 UP主数据'}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredUploaders.map(uploader => (
+                    <button
+                      key={uploader.mid}
+                      onClick={() => {
+                        setSelectedUploader({ mid: uploader.mid, name: uploader.name });
+                        setIsUploaderPickerOpen(false);
+                        setUploaderSearchTerm('');
+                        mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${
+                        selectedUploader?.mid === uploader.mid
+                          ? 'bg-violet-500/20 border border-violet-500/30'
+                          : 'bg-white/5 border border-transparent hover:bg-white/10'
+                      }`}
+                    >
+                      {uploader.face ? (
+                        <img 
+                          src={uploader.face.replace('http:', 'https:')} 
+                          alt=""
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center text-white font-bold">
+                          {uploader.name[0]}
+                        </div>
+                      )}
+                      <div className="flex-1 text-left">
+                        <p className="text-white font-medium text-sm">{uploader.name}</p>
+                        <p className="text-gray-500 text-xs">{uploader.count} 个视频</p>
+                      </div>
+                      {selectedUploader?.mid === uploader.mid && (
+                        <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <style>{`
+            @keyframes slide-up {
+              from { transform: translateY(100%); }
+              to { transform: translateY(0); }
+            }
+            .animate-slide-up {
+              animation: slide-up 0.3s ease-out;
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* 时间筛选下拉框 - 使用 Portal 渲染到 body */}
+      {isTimeFilterOpen && (
+        <>
+          {/* 透明遮罩 */}
+          <div 
+            className="fixed inset-0 z-[9998]"
+            onClick={() => setIsTimeFilterOpen(false)}
+          />
+          {/* 下拉菜单 */}
+          <div 
+            className="fixed z-[9999] bg-[#1a1a1a] rounded-xl border border-white/20 overflow-hidden shadow-2xl"
+            style={{
+              top: `${timeFilterPos.top}px`,
+              left: `${timeFilterPos.left}px`,
+              minWidth: `${timeFilterPos.width}px`,
+            }}
+          >
+            {[
+              { id: 'today', label: '今天' },
+              { id: 'week', label: '本周' },
+              { id: 'month', label: '本月' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                onClick={() => {
+                  setActiveFilter(item.id as FilterType);
+                  setIsTimeFilterOpen(false);
+                  mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className={`w-full px-5 py-2.5 text-left text-xs transition-colors flex items-center gap-2 ${
+                  activeFilter === item.id 
+                    ? 'bg-cyber-lime/20 text-cyber-lime' 
+                    : 'text-gray-300 hover:bg-white/10'
+                }`}
+              >
+                <span>{item.label}</span>
+                {activeFilter === item.id && (
+                  <svg className="w-3 h-3 ml-auto text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                )}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
     </PullToRefresh>
   );

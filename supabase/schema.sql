@@ -260,3 +260,54 @@ COMMENT ON TABLE uploader IS 'UP主表：用户关注的B站UP主，按user_id�
 COMMENT ON TABLE video IS '视频表：UP主发布的视频，按user_id隔离';
 COMMENT ON TABLE watchlist IS '待看列表：用户收藏的待看视频';
 COMMENT ON TABLE sync_log IS '同步日志：记录同步任务执行情况';
+
+-- ============================================
+-- 5. 收藏视频表（独立存储，无外键约束）
+-- ============================================
+CREATE TABLE IF NOT EXISTS collected_video (
+    id BIGSERIAL PRIMARY KEY,
+    user_id UUID NOT NULL,               -- 所属用户ID
+    bvid VARCHAR(20) NOT NULL,           -- B站视频BV号
+    aid BIGINT,                          -- AV号
+    title VARCHAR(500) NOT NULL,         -- 视频标题
+    pic VARCHAR(500),                    -- 封面图URL
+    description TEXT,                    -- 视频简介
+    duration INTEGER DEFAULT 0,          -- 时长（秒）
+    view_count INTEGER DEFAULT 0,        -- 播放量
+    danmaku_count INTEGER DEFAULT 0,     -- 弹幕数
+    reply_count INTEGER DEFAULT 0,       -- 评论数
+    favorite_count INTEGER DEFAULT 0,    -- 收藏数
+    coin_count INTEGER DEFAULT 0,        -- 投币数
+    share_count INTEGER DEFAULT 0,       -- 分享数
+    like_count INTEGER DEFAULT 0,        -- 点赞数
+    pubdate TIMESTAMPTZ,                 -- 发布时间
+    -- UP主信息（直接存储，无外键）
+    uploader_mid BIGINT,                 -- UP主ID
+    uploader_name VARCHAR(100),          -- UP主昵称
+    uploader_face VARCHAR(500),          -- UP主头像
+    -- 时间戳
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- 外键关联用户
+    CONSTRAINT fk_collected_video_user FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE,
+    -- 同一用户下视频唯一
+    CONSTRAINT unique_collected_video UNIQUE (user_id, bvid)
+);
+
+-- 收藏视频表索引
+CREATE INDEX IF NOT EXISTS idx_collected_video_user_id ON collected_video(user_id);
+CREATE INDEX IF NOT EXISTS idx_collected_video_pubdate ON collected_video(user_id, pubdate DESC);
+CREATE INDEX IF NOT EXISTS idx_collected_video_bvid ON collected_video(bvid);
+
+-- RLS策略
+ALTER TABLE collected_video ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow all for collected_video" ON collected_video FOR ALL USING (true) WITH CHECK (true);
+
+-- 触发器
+DROP TRIGGER IF EXISTS update_collected_video_updated_at ON collected_video;
+CREATE TRIGGER update_collected_video_updated_at
+    BEFORE UPDATE ON collected_video
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+COMMENT ON TABLE collected_video IS '收藏视频表：用户手动导入的视频，独立存储无外键约束';

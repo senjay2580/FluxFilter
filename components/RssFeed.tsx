@@ -1,8 +1,36 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { FilterType } from '../types';
 
-// RSS 源配置 - 使用 rss2json API
-const RSS_SOURCES = [
+// RSS 源配置类型
+interface RssSource {
+  id: string;
+  name: string;
+  url: string;
+  category: string;
+  lastUpdated?: number; // 上次更新时间戳
+  isCustom?: boolean;   // 是否自定义添加
+}
+
+// 本地存储 key
+const RSS_STORAGE_KEY = 'custom-rss-sources';
+
+// 加载自定义 RSS 源
+const loadCustomSources = (): RssSource[] => {
+  try {
+    return JSON.parse(localStorage.getItem(RSS_STORAGE_KEY) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+// 保存自定义 RSS 源
+const saveCustomSources = (sources: RssSource[]) => {
+  localStorage.setItem(RSS_STORAGE_KEY, JSON.stringify(sources));
+};
+
+// 默认 RSS 源配置
+const DEFAULT_RSS_SOURCES: RssSource[] = [
   // AI & 科技
   { id: 'sspai', name: '少数派', url: 'https://sspai.com/feed', category: 'AI科技' },
   { id: '36kr', name: '36氪', url: 'https://36kr.com/feed', category: 'AI科技' },
@@ -25,6 +53,11 @@ const RSS_SOURCES = [
   { id: 'zhihu-daily', name: '知乎日报', url: 'https://rsshub.rssforever.com/zhihu/daily', category: '深度阅读' },
   { id: 'economist', name: '经济学人', url: 'https://www.economist.com/international/rss.xml', category: '深度阅读' },
 ];
+
+// 合并默认源和自定义源
+const getAllSources = (): RssSource[] => {
+  return [...DEFAULT_RSS_SOURCES, ...loadCustomSources()];
+};
 
 interface Article {
   id: string;
@@ -52,7 +85,7 @@ function formatTimeAgo(dateStr: string): string {
 }
 
 // 使用 rss2json API 获取数据
-async function fetchRssSource(source: typeof RSS_SOURCES[0]): Promise<Article[]> {
+async function fetchRssSource(source: RssSource): Promise<Article[]> {
   try {
     // 使用 rss2json.com 免费 API（每天1000次请求）
     const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
@@ -120,7 +153,140 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
   const [error, setError] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
+  // RSS 导入相关状态
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showManageModal, setShowManageModal] = useState(false);
+  const [importForm, setImportForm] = useState({ name: '', url: '', category: 'AI科技' });
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importWarning, setImportWarning] = useState<string | null>(null);
+  const [customSources, setCustomSources] = useState<RssSource[]>(loadCustomSources());
+  
   const categories = ['全部', 'AI科技', '技术开发', '商业科技', '深度阅读'];
+
+  // 验证 RSS 链接（使用与获取数据相同的 API，确保一致性）
+  const validateRssUrl = async (url: string): Promise<{ valid: boolean; warning?: string; lastUpdate?: Date; errorDetail?: string }> => {
+    try {
+      // 使用 rss2json API 验证
+      const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(url)}`;
+      const response = await fetch(apiUrl, { 
+        signal: AbortSignal.timeout(10000) // 10秒超时
+      });
+      
+      if (!response.ok) {
+        return { valid: false, errorDetail: `HTTP ${response.status}` };
+      }
+      
+      const data = await response.json();
+      
+      // API 返回错误
+      if (data.status === 'error') {
+        return { valid: false, errorDetail: data.message || '解析失败' };
+      }
+      
+      if (data.status !== 'ok' || !data.items) {
+        return { valid: false, errorDetail: '无法解析 RSS 内容' };
+      }
+      
+      // 没有文章但格式正确
+      if (data.items.length === 0) {
+        return { valid: true, warning: '该源暂无文章内容' };
+      }
+      
+      // 检查最近更新时间
+      const latestItem = data.items[0];
+      const lastUpdate = new Date(latestItem.pubDate);
+      
+      // 检查日期是否有效
+      if (isNaN(lastUpdate.getTime())) {
+        return { valid: true, warning: '无法获取更新时间' };
+      }
+      
+      const now = new Date();
+      const diffDays = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDays > 30) {
+        return { 
+          valid: true, 
+          warning: `该源已 ${diffDays} 天未更新，可能已停止维护`,
+          lastUpdate 
+        };
+      }
+      
+      return { valid: true, lastUpdate };
+    } catch (err: any) {
+      // 区分错误类型
+      if (err.name === 'TimeoutError' || err.name === 'AbortError') {
+        return { valid: false, errorDetail: '请求超时，请检查链接' };
+      }
+      return { valid: false, errorDetail: '网络错误或链接无效' };
+    }
+  };
+
+  // 导入 RSS 源
+  const handleImport = async () => {
+    if (!importForm.name.trim() || !importForm.url.trim()) {
+      setImportError('请填写完整信息');
+      return;
+    }
+    
+    // 检查是否已存在
+    const allSources = getAllSources();
+    if (allSources.some(s => s.url === importForm.url)) {
+      setImportError('该 RSS 源已存在');
+      return;
+    }
+    
+    setImportLoading(true);
+    setImportError(null);
+    setImportWarning(null);
+    
+    // 验证链接
+    const validation = await validateRssUrl(importForm.url);
+    
+    if (!validation.valid) {
+      setImportError(validation.errorDetail || '无法访问该 RSS 链接，请检查地址是否正确');
+      setImportLoading(false);
+      return;
+    }
+    
+    if (validation.warning) {
+      setImportWarning(validation.warning);
+    }
+    
+    // 创建新源
+    const newSource: RssSource = {
+      id: `custom-${Date.now()}`,
+      name: importForm.name.trim(),
+      url: importForm.url.trim(),
+      category: importForm.category,
+      isCustom: true,
+      lastUpdated: validation.lastUpdate?.getTime(),
+    };
+    
+    // 保存
+    const updatedSources = [...customSources, newSource];
+    saveCustomSources(updatedSources);
+    setCustomSources(updatedSources);
+    
+    setImportLoading(false);
+    
+    // 如果没有警告，直接关闭
+    if (!validation.warning) {
+      setShowImportModal(false);
+      setImportForm({ name: '', url: '', category: 'AI科技' });
+    }
+  };
+
+  // 删除自定义源
+  const handleDeleteCustomSource = (sourceId: string) => {
+    const updatedSources = customSources.filter(s => s.id !== sourceId);
+    saveCustomSources(updatedSources);
+    setCustomSources(updatedSources);
+    if (selectedSource === sourceId) {
+      setSelectedSource('全部');
+    }
+  };
   
   // 获取 RSS 数据
   const fetchRss = useCallback(async () => {
@@ -130,8 +296,8 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
     try {
       // 根据选择的源获取数据
       const sourcesToFetch = selectedSource === '全部' 
-        ? RSS_SOURCES 
-        : RSS_SOURCES.filter(s => s.id === selectedSource);
+        ? getAllSources() 
+        : getAllSources().filter(s => s.id === selectedSource);
       
       // 并行获取所有源
       const results = await Promise.all(
@@ -180,15 +346,42 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
     <div className="max-w-2xl mx-auto">
       {/* 顶部标题 */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-white mb-1 flex items-center gap-2">
-          <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M4 11a9 9 0 0 1 9 9" />
-            <path d="M4 4a16 16 0 0 1 16 16" />
-            <circle cx="5" cy="19" r="1" fill="currentColor" />
-          </svg>
-          RSS 订阅
-        </h1>
-        <p className="text-gray-500 text-sm">发现值得阅读的优质内容</p>
+        <div className="flex items-center justify-between">
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 11a9 9 0 0 1 9 9" />
+              <path d="M4 4a16 16 0 0 1 16 16" />
+              <circle cx="5" cy="19" r="1" fill="currentColor" />
+            </svg>
+            RSS 订阅
+          </h1>
+          <div className="flex items-center gap-2">
+            {/* 管理订阅源按钮 */}
+            <button
+              onClick={() => setShowManageModal(true)}
+              className="w-9 h-9 bg-white/10 border border-white/20 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-white/20 transition-all active:scale-[0.95]"
+              title="管理订阅源"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="6" x2="20" y2="6"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="18" x2="20" y2="18"/>
+              </svg>
+            </button>
+            {/* 添加 RSS 源按钮 */}
+            <button
+              onClick={() => { setShowImportModal(true); setImportError(null); setImportWarning(null); }}
+              className="w-9 h-9 bg-cyber-lime/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center text-cyber-lime hover:bg-cyber-lime/30 transition-all active:scale-[0.95]"
+              title="添加订阅源"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p className="text-gray-500 text-sm mt-1">发现值得阅读的优质内容</p>
       </div>
 
       {/* RSS 源选择 - 自定义下拉框 */}
@@ -202,9 +395,9 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
               <>📡 全部源</>
             ) : (
               <>
-                {RSS_SOURCES.find(s => s.id === selectedSource)?.name}
+                {getAllSources().find(s => s.id === selectedSource)?.name}
                 <span className="text-gray-400 text-xs ml-2">
-                  ({RSS_SOURCES.find(s => s.id === selectedSource)?.category})
+                  ({getAllSources().find(s => s.id === selectedSource)?.category})
                 </span>
               </>
             )}
@@ -247,7 +440,7 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
                   📡 全部源
                 </button>
 
-                {RSS_SOURCES.map((source) => (
+                {getAllSources().map((source) => (
                   <button
                     key={source.id}
                     onClick={() => {
@@ -404,9 +597,19 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
                     {article.publishedAt}
                   </span>
                   <div className="flex-1" />
-                  <span className="px-1.5 py-0.5 bg-gradient-to-r from-white/20 to-white/10 backdrop-blur-sm text-gray-300 text-[9px] rounded-full border border-white/20">
-                    {article.category}
-                  </span>
+                  {(() => {
+                    const categoryStyles: Record<string, string> = {
+                      'AI科技': 'from-cyan-500/30 to-cyan-600/20 border-cyan-400/30 text-cyan-300 shadow-[inset_0_1px_0_rgba(34,211,238,0.3),inset_0_-1px_2px_rgba(0,0,0,0.4)]',
+                      '技术开发': 'from-violet-500/30 to-violet-600/20 border-violet-400/30 text-violet-300 shadow-[inset_0_1px_0_rgba(139,92,246,0.3),inset_0_-1px_2px_rgba(0,0,0,0.4)]',
+                      '商业科技': 'from-amber-500/30 to-amber-600/20 border-amber-400/30 text-amber-300 shadow-[inset_0_1px_0_rgba(245,158,11,0.3),inset_0_-1px_2px_rgba(0,0,0,0.4)]',
+                      '深度阅读': 'from-emerald-500/30 to-emerald-600/20 border-emerald-400/30 text-emerald-300 shadow-[inset_0_1px_0_rgba(16,185,129,0.3),inset_0_-1px_2px_rgba(0,0,0,0.4)]',
+                    };
+                    return (
+                      <span className={`px-2 py-0.5 bg-gradient-to-b border rounded-full text-[9px] font-medium ${categoryStyles[article.category] || 'from-white/20 to-white/10 border-white/20 text-gray-300'}`}>
+                        {article.category}
+                      </span>
+                    );
+                  })()}
                 </div>
 
                 {/* 标题 */}
@@ -445,6 +648,279 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
             </article>
           ))}
         </div>
+      )}
+
+      {/* RSS 导入模态框 */}
+      {showImportModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4" onClick={() => !importLoading && setShowImportModal(false)}>
+          <div className="absolute inset-0 bg-black/70" />
+          <div 
+            className="relative w-full max-w-md bg-[#0c0c0c] rounded-3xl border border-white/10 p-6 animate-scale-in"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 11a9 9 0 0 1 9 9" />
+                <path d="M4 4a16 16 0 0 1 16 16" />
+                <circle cx="5" cy="19" r="1" fill="currentColor" />
+              </svg>
+              添加 RSS 源
+            </h2>
+            
+            <div className="space-y-4">
+              {/* 名称 */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">源名称</label>
+                <input
+                  type="text"
+                  value={importForm.name}
+                  onChange={e => setImportForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="例如：我的博客"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-cyber-lime/50 focus:outline-none transition-colors"
+                />
+              </div>
+              
+              {/* URL */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">RSS 链接</label>
+                <input
+                  type="url"
+                  value={importForm.url}
+                  onChange={e => setImportForm(prev => ({ ...prev, url: e.target.value }))}
+                  placeholder="https://example.com/feed.xml"
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-cyber-lime/50 focus:outline-none transition-colors"
+                />
+              </div>
+              
+              {/* 分类 */}
+              <div>
+                <label className="block text-sm text-gray-400 mb-1.5">分类</label>
+                <select
+                  value={importForm.category}
+                  onChange={e => setImportForm(prev => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white focus:border-cyber-lime/50 focus:outline-none transition-colors appearance-none cursor-pointer"
+                  style={{ backgroundImage: 'none' }}
+                >
+                  {categories.slice(1).map(cat => (
+                    <option key={cat} value={cat} className="bg-[#1a1a1a] text-white">{cat}</option>
+                  ))}
+                </select>
+              </div>
+              
+              {/* 错误提示 */}
+              {importError && (
+                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-400 text-sm flex items-center gap-2">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10"/>
+                    <line x1="15" y1="9" x2="9" y2="15"/>
+                    <line x1="9" y1="9" x2="15" y2="15"/>
+                  </svg>
+                  {importError}
+                </div>
+              )}
+              
+              {/* 警告提示 */}
+              {importWarning && (
+                <div className="p-3 bg-amber-500/20 border border-amber-500/30 rounded-xl text-amber-400 text-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <span className="font-medium">警告</span>
+                  </div>
+                  <p>{importWarning}</p>
+                  <p className="mt-2 text-xs text-amber-400/70">源已添加成功，但建议关注更新情况</p>
+                  <button
+                    onClick={() => { setShowImportModal(false); setImportForm({ name: '', url: '', category: 'AI科技' }); setImportWarning(null); }}
+                    className="mt-3 w-full py-2 bg-amber-500/30 hover:bg-amber-500/40 rounded-lg text-amber-300 font-medium transition-colors"
+                  >
+                    我知道了
+                  </button>
+                </div>
+              )}
+              
+              {/* 按钮 */}
+              {!importWarning && (
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setShowImportModal(false)}
+                    disabled={importLoading}
+                    className="flex-1 py-3 bg-white/10 hover:bg-white/15 rounded-xl text-white font-medium transition-colors disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleImport}
+                    disabled={importLoading || !importForm.name.trim() || !importForm.url.trim()}
+                    className="flex-1 py-3 bg-cyber-lime hover:bg-cyber-lime/90 rounded-xl text-black font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {importLoading ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                        验证中...
+                      </>
+                    ) : '添加'}
+                  </button>
+                </div>
+              )}
+            </div>
+            
+            {/* 自定义源列表 */}
+            {customSources.length > 0 && !importWarning && (
+              <div className="mt-6 pt-4 border-t border-white/10">
+                <h3 className="text-sm text-gray-400 mb-3">已添加的自定义源</h3>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  {customSources.map(source => (
+                    <div key={source.id} className="flex items-center justify-between p-2 bg-white/5 rounded-lg">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm truncate">{source.name}</p>
+                        <p className="text-gray-500 text-xs truncate">{source.category}</p>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteCustomSource(source.id)}
+                        className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                      >
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <style>{`
+            @keyframes scale-in {
+              from { transform: scale(0.95); opacity: 0; }
+              to { transform: scale(1); opacity: 1; }
+            }
+            .animate-scale-in {
+              animation: scale-in 0.2s ease-out;
+            }
+          `}</style>
+        </div>,
+        document.body
+      )}
+
+      {/* 管理订阅源模态框 */}
+      {showManageModal && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4" onClick={() => setShowManageModal(false)}>
+          <div className="absolute inset-0 bg-black/70" />
+          <div 
+            className="relative w-full max-w-md bg-[#0c0c0c] rounded-3xl border border-white/10 p-6 animate-scale-in max-h-[80vh] overflow-hidden flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="6" x2="20" y2="6"/>
+                <line x1="4" y1="12" x2="20" y2="12"/>
+                <line x1="4" y1="18" x2="20" y2="18"/>
+              </svg>
+              管理订阅源
+            </h2>
+            
+            <div className="flex-1 overflow-y-auto -mx-6 px-6">
+              {/* 默认源 */}
+              <div className="mb-4">
+                <h3 className="text-sm text-gray-400 mb-2 sticky top-0 bg-[#0c0c0c] py-1">默认订阅源 ({DEFAULT_RSS_SOURCES.length})</h3>
+                <div className="space-y-2">
+                  {DEFAULT_RSS_SOURCES.map(source => {
+                    const categoryStyles: Record<string, string> = {
+                      'AI科技': 'from-cyan-500/15 to-blue-500/10 border-cyan-500/20 shadow-[inset_0_1px_0_rgba(34,211,238,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                      '技术开发': 'from-violet-500/15 to-purple-500/10 border-violet-500/20 shadow-[inset_0_1px_0_rgba(139,92,246,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                      '商业科技': 'from-amber-500/15 to-orange-500/10 border-amber-500/20 shadow-[inset_0_1px_0_rgba(245,158,11,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                      '深度阅读': 'from-emerald-500/15 to-teal-500/10 border-emerald-500/20 shadow-[inset_0_1px_0_rgba(16,185,129,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                    };
+                    const categoryTextColors: Record<string, string> = {
+                      'AI科技': 'text-cyan-400',
+                      '技术开发': 'text-violet-400',
+                      '商业科技': 'text-amber-400',
+                      '深度阅读': 'text-emerald-400',
+                    };
+                    return (
+                      <div 
+                        key={source.id} 
+                        className={`flex items-center justify-between p-3 bg-gradient-to-br border rounded-xl ${categoryStyles[source.category] || 'from-white/5 to-white/5 border-white/10'}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium truncate">{source.name}</p>
+                          <p className={`text-xs truncate ${categoryTextColors[source.category] || 'text-gray-500'}`}>{source.category}</p>
+                        </div>
+                        <span className="px-2 py-0.5 bg-black/30 rounded text-gray-400 text-xs">内置</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              {/* 自定义源 */}
+              {customSources.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-sm text-gray-400 mb-2 sticky top-0 bg-[#0c0c0c] py-1">自定义订阅源 ({customSources.length})</h3>
+                  <div className="space-y-2">
+                    {customSources.map(source => {
+                      const categoryStyles: Record<string, string> = {
+                        'AI科技': 'from-cyan-500/15 to-blue-500/10 border-cyan-500/20 shadow-[inset_0_1px_0_rgba(34,211,238,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                        '技术开发': 'from-violet-500/15 to-purple-500/10 border-violet-500/20 shadow-[inset_0_1px_0_rgba(139,92,246,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                        '商业科技': 'from-amber-500/15 to-orange-500/10 border-amber-500/20 shadow-[inset_0_1px_0_rgba(245,158,11,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                        '深度阅读': 'from-emerald-500/15 to-teal-500/10 border-emerald-500/20 shadow-[inset_0_1px_0_rgba(16,185,129,0.15),inset_0_-1px_2px_rgba(0,0,0,0.3)]',
+                      };
+                      const categoryTextColors: Record<string, string> = {
+                        'AI科技': 'text-cyan-400',
+                        '技术开发': 'text-violet-400',
+                        '商业科技': 'text-amber-400',
+                        '深度阅读': 'text-emerald-400',
+                      };
+                      return (
+                        <div 
+                          key={source.id} 
+                          className={`flex items-center justify-between p-3 bg-gradient-to-br border rounded-xl ${categoryStyles[source.category] || 'from-white/5 to-white/5 border-white/10'}`}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium truncate">{source.name}</p>
+                            <p className={`text-xs truncate ${categoryTextColors[source.category] || 'text-gray-500'}`}>{source.category}</p>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteCustomSource(source.id)}
+                            className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex gap-3 pt-4 border-t border-white/10 mt-4">
+              <button
+                onClick={() => setShowManageModal(false)}
+                className="flex-1 py-3 bg-white/10 hover:bg-white/15 rounded-xl text-white font-medium transition-colors"
+              >
+                关闭
+              </button>
+              <button
+                onClick={() => { setShowManageModal(false); setShowImportModal(true); setImportError(null); }}
+                className="flex-1 py-3 bg-cyber-lime hover:bg-cyber-lime/90 rounded-xl text-black font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19"/>
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                添加新源
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -37,8 +37,13 @@ export interface Video {
 }
 
 export interface VideoWithUploader extends Video {
-  uploader_name: string;
-  uploader_face: string;
+  uploader_name?: string;
+  uploader_face?: string;
+  // Supabase join 返回的嵌套对象
+  uploader?: {
+    name: string;
+    face: string | null;
+  } | null;
 }
 
 export interface WatchlistItem {

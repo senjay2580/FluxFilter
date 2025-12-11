@@ -112,7 +112,7 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete, onSync }) => {
 
         {/* 应用名称 */}
         <h1 className="text-4xl font-bold mb-3 bg-gradient-to-r from-white via-cyber-lime to-cyan-400 bg-clip-text text-transparent">
-          FluxFilter
+          Fluxf
         </h1>
         
         {/* 标语 */}
