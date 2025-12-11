@@ -13,8 +13,6 @@ const PWAInstallPrompt: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [showIOSGuide, setShowIOSGuide] = useState(false);
 
   useEffect(() => {
     // 检测是否已安装为PWA
@@ -26,22 +24,18 @@ const PWAInstallPrompt: React.FC = () => {
       return;
     }
 
-    // 检测iOS设备
-    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-    setIsIOS(isIOSDevice);
-
-    // 监听 beforeinstallprompt 事件（非iOS设备）
+    // 监听 beforeinstallprompt 事件
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       console.log('🎯 beforeinstallprompt 事件已捕获');
       setDeferredPrompt(e as BeforeInstallPromptEvent);
       
-      // 延迟显示提示，避免用户刚打开就弹窗
+      // 延迟显示提示
       const lastDismissed = localStorage.getItem('pwa-prompt-dismissed');
       const dismissedTime = lastDismissed ? parseInt(lastDismissed) : 0;
       const now = Date.now();
       
-      // 如果用户30分钟内关闭过提示，不再显示
+      // 30分钟内关闭过则不再显示
       if (now - dismissedTime > 30 * 60 * 1000) {
         setTimeout(() => setShowPrompt(true), 3000);
       }
@@ -57,18 +51,6 @@ const PWAInstallPrompt: React.FC = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
-
-    // iOS设备显示手动安装引导
-    if (isIOSDevice) {
-      const iosGuideDismissed = localStorage.getItem('ios-guide-dismissed');
-      const dismissedTime = iosGuideDismissed ? parseInt(iosGuideDismissed) : 0;
-      const now = Date.now();
-      
-      // 24小时内不重复显示
-      if (now - dismissedTime > 24 * 60 * 60 * 1000) {
-        setTimeout(() => setShowIOSGuide(true), 5000);
-      }
-    }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -103,75 +85,10 @@ const PWAInstallPrompt: React.FC = () => {
     localStorage.setItem('pwa-prompt-dismissed', Date.now().toString());
   };
 
-  // 关闭iOS引导
-  const handleDismissIOSGuide = () => {
-    setShowIOSGuide(false);
-    localStorage.setItem('ios-guide-dismissed', Date.now().toString());
-  };
-
   // 已安装或无需显示
   if (isInstalled) return null;
 
-  // iOS 设备安装引导
-  if (isIOS && showIOSGuide) {
-    return (
-      <div className="fixed bottom-24 left-4 right-4 z-50 animate-slide-up">
-        <div className="bg-gradient-to-br from-[#1a1a2e] to-[#16162a] rounded-2xl p-5 border border-white/10 shadow-2xl shadow-black/50">
-          {/* 关闭按钮 */}
-          <button 
-            onClick={handleDismissIOSGuide}
-            className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-          >
-            <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-
-          <div className="flex items-start gap-4">
-            {/* 应用图标 */}
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-cyber-lime to-cyan-400 flex items-center justify-center shrink-0 shadow-lg shadow-cyber-lime/20">
-              <span className="text-black font-bold text-lg">F</span>
-            </div>
-
-            <div className="flex-1 min-w-0">
-              <h3 className="text-white font-bold text-base mb-1">添加到主屏幕</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                点击底部 
-                <span className="inline-flex items-center mx-1 px-1.5 py-0.5 bg-white/10 rounded">
-                  <svg className="w-4 h-4 text-blue-400" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2L12 14M12 2L8 6M12 2L16 6"/>
-                    <rect x="4" y="10" width="16" height="12" rx="2" fill="none" stroke="currentColor" strokeWidth="2"/>
-                  </svg>
-                </span>
-                分享按钮，然后选择「添加到主屏幕」
-              </p>
-            </div>
-          </div>
-
-          {/* 步骤指引 */}
-          <div className="mt-4 flex items-center gap-2 text-xs text-gray-500">
-            <span className="px-2 py-1 bg-white/5 rounded">1. 点击分享</span>
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-            <span className="px-2 py-1 bg-white/5 rounded">2. 添加到主屏幕</span>
-          </div>
-        </div>
-
-        <style>{`
-          @keyframes slide-up {
-            from { transform: translateY(100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-          }
-          .animate-slide-up {
-            animation: slide-up 0.4s ease-out;
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  // 非iOS设备的标准安装提示
+  // 标准安装提示
   if (!showPrompt || !deferredPrompt) return null;
 
   return (

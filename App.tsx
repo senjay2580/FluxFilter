@@ -35,6 +35,36 @@ const App = () => {
   const [visibleCount, setVisibleCount] = useState(10);
   const mainRef = React.useRef<HTMLDivElement>(null);
 
+  // 滑动切换Tab
+  const touchStartX = React.useRef<number>(0);
+  const touchEndX = React.useRef<number>(0);
+  const tabs: Tab[] = ['home', 'watchLater', 'rss', 'todo'];
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    touchEndX.current = e.touches[0].clientX;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    const diff = touchStartX.current - touchEndX.current;
+    const threshold = 80; // 滑动阈值
+
+    if (Math.abs(diff) < threshold) return;
+
+    const currentIndex = tabs.indexOf(activeTab);
+    
+    if (diff > 0 && currentIndex < tabs.length - 1) {
+      // 左滑 -> 下一个tab
+      setActiveTab(tabs[currentIndex + 1]);
+    } else if (diff < 0 && currentIndex > 0) {
+      // 右滑 -> 上一个tab
+      setActiveTab(tabs[currentIndex - 1]);
+    }
+  }, [activeTab, tabs]);
+
   // 从 Supabase 获取视频数据
   const fetchVideos = useCallback(async () => {
     // 未配置 Supabase 时直接返回空
@@ -329,15 +359,26 @@ const App = () => {
       </header>
 
       {/* Main Content Feed */}
-      <main ref={mainRef} className="flex-1 overflow-y-auto px-3 py-4 max-w-4xl mx-auto w-full">
+      <main 
+        ref={mainRef} 
+        className="flex-1 overflow-y-auto px-3 py-4 max-w-4xl mx-auto w-full"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         
         {/* RSS 阅读界面 */}
         {activeTab === 'rss' && (
           <RssFeed scrollContainerRef={mainRef} />
         )}
+
+        {/* TODO 待办事项界面 */}
+        {activeTab === 'todo' && (
+          <TodoList embedded />
+        )}
         
         {/* 视频内容 */}
-        {activeTab !== 'rss' && (
+        {(activeTab === 'home' || activeTab === 'watchLater') && (
         <>
         {/* 搜索结果提示 */}
         {searchTerm && (
@@ -734,10 +775,12 @@ const App = () => {
 
           {/* TODO 待办事项 */}
           <button 
-            onClick={() => setIsTodoOpen(true)}
-            className="flex flex-col items-center gap-1 transition-all duration-300 text-gray-500 hover:text-cyber-lime"
+            onClick={() => setActiveTab('todo')}
+            className={`flex flex-col items-center gap-1 transition-all duration-300 ${
+              activeTab === 'todo' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500 hover:text-cyber-lime'
+            }`}
           >
-            <div className="p-1.5 rounded-xl">
+            <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'todo' ? 'bg-cyber-lime/10' : ''}`}>
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M9 11l3 3L22 4" />
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />

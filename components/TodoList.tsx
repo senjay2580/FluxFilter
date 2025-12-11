@@ -9,8 +9,9 @@ interface Todo {
 }
 
 interface TodoListProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen?: boolean;
+  onClose?: () => void;
+  embedded?: boolean; // 内嵌Tab模式
 }
 
 // 纸屑动画组件
@@ -63,7 +64,7 @@ const Confetti: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   );
 };
 
-const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose }) => {
+const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false }) => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -148,36 +149,30 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose }) => {
 
   const priorityLabels = { low: '低', medium: '中', high: '高' };
 
-  if (!isOpen) return null;
+  // 弹窗模式且未打开时不渲染
+  if (!embedded && !isOpen) return null;
 
-  return (
-    <>
-      {showConfetti && <Confetti onComplete={() => setShowConfetti(false)} />}
-      
-      <div 
-        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
-        onClick={onClose}
-      >
-        <div 
-          className="w-full max-w-md mx-0 sm:mx-4 bg-cyber-card border-t sm:border border-white/10 sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* 头部 */}
-          <div className="px-5 py-4 bg-gradient-to-r from-cyber-lime/20 to-cyan-500/20 border-b border-white/10">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M9 11l3 3L22 4" />
-                  <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                </svg>
-                待办事项
-              </h2>
-              <button onClick={onClose} className="text-gray-400 hover:text-white">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+  // 内嵌模式的内容
+  const content = (
+    <div className={embedded ? 'flex flex-col h-full' : 'w-full max-w-md mx-0 sm:mx-4 bg-cyber-card border-t sm:border border-white/10 sm:rounded-2xl shadow-2xl overflow-hidden max-h-[85vh] flex flex-col'}>
+      {/* 头部 */}
+      <div className="px-5 py-4 bg-gradient-to-r from-cyber-lime/20 to-cyan-500/20 border-b border-white/10 rounded-t-2xl">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 11l3 3L22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+            待办事项
+          </h2>
+          {!embedded && onClose && (
+            <button onClick={onClose} className="text-gray-400 hover:text-white">
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
 
             {/* 进度条 */}
             <div className="mt-3">
@@ -310,20 +305,43 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose }) => {
             )}
           </div>
 
-          {/* 底部操作 */}
-          {completedCount > 0 && (
-            <div className="px-4 py-3 border-t border-white/5 flex justify-between items-center">
-              <span className="text-xs text-gray-500">
-                {completedCount} 个任务已完成
-              </span>
-              <button
-                onClick={clearCompleted}
-                className="text-xs text-red-400 hover:text-red-300 transition-colors"
-              >
-                清除已完成
-              </button>
-            </div>
-          )}
+      {/* 底部操作 */}
+      {completedCount > 0 && (
+        <div className="px-4 py-3 border-t border-white/5 flex justify-between items-center">
+          <span className="text-xs text-gray-500">
+            {completedCount} 个任务已完成
+          </span>
+          <button
+            onClick={clearCompleted}
+            className="text-xs text-red-400 hover:text-red-300 transition-colors"
+          >
+            清除已完成
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  // 内嵌模式直接返回内容
+  if (embedded) {
+    return (
+      <>
+        {showConfetti && <Confetti onComplete={() => setShowConfetti(false)} />}
+        {content}
+      </>
+    );
+  }
+
+  // 弹窗模式
+  return (
+    <>
+      {showConfetti && <Confetti onComplete={() => setShowConfetti(false)} />}
+      <div 
+        className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
+        onClick={onClose}
+      >
+        <div onClick={e => e.stopPropagation()}>
+          {content}
         </div>
       </div>
     </>
