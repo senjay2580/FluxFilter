@@ -10,10 +10,28 @@ interface Uploader {
   name: string;
   face: string | null;
   is_active: boolean;
+  last_sync_count: number | null;
+  last_sync_at: string | null;
 }
 
 interface SyncButtonProps {
   compact?: boolean;
+}
+
+// 格式化时间为相对时间
+function formatTimeAgo(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return '刚刚';
+  if (diffMins < 60) return `${diffMins}分钟前`;
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffDays < 30) return `${diffDays}天前`;
+  return date.toLocaleDateString();
 }
 
 const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
@@ -286,7 +304,18 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                     )}
                   </div>
                   <img src={uploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'} alt={uploader.name} className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
-                  <span className="text-white font-medium truncate">{uploader.name}</span>
+                  <div className="flex-1 min-w-0 text-left">
+                    <span className="text-white font-medium truncate block">{uploader.name}</span>
+                    {uploader.last_sync_at ? (
+                      <span className="text-[10px] text-gray-500">
+                        <span className="text-cyber-lime">{uploader.last_sync_count || 0} 个视频</span>
+                        <span className="mx-1">·</span>
+                        {formatTimeAgo(uploader.last_sync_at)}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-gray-500">暂无同步记录</span>
+                    )}
+                  </div>
                 </button>
               ))
             )}
