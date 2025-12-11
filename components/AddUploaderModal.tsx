@@ -108,18 +108,19 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
   if (!isOpen) return null;
 
   return (
-    <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md"
       onClick={handleClose}
+      style={{ WebkitFontSmoothing: 'antialiased', textRendering: 'optimizeLegibility' }}
     >
-      <div 
-        className="w-full max-w-sm mx-4 bg-cyber-card border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+      <div
+        className="w-full max-w-sm mx-4 bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/20 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* 头部 */}
-        <div className="px-5 py-4 bg-gradient-to-r from-cyber-lime/20 to-cyan-500/20 border-b border-white/10">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <div className="px-5 py-4 bg-gradient-to-r from-cyber-lime/10 to-cyan-500/10 border-b border-white/10">
+          <h2 className="text-lg font-bold text-white flex items-center gap-2" style={{ WebkitFontSmoothing: 'antialiased' }}>
+            <svg className="w-5 h-5 text-cyber-lime drop-shadow-[0_0_8px_rgba(190,242,100,0.5)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <line x1="19" y1="8" x2="19" y2="14" />
@@ -127,16 +128,13 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
             </svg>
             添加UP主
           </h2>
-          <p className="text-xs text-gray-400 mt-1">输入MID自动获取UP主信息</p>
         </div>
 
         {/* 表单 */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
           {/* MID 输入 */}
           <div>
-            <label className="block text-xs text-gray-400 mb-1.5">
-              MID <span className="text-gray-600">(空间链接中的数字)</span>
-            </label>
+            <label className="block text-xs font-semibold text-gray-300 mb-1.5" style={{ WebkitFontSmoothing: 'antialiased' }}>MID</label>
             <div className="flex gap-2">
               <input
                 type="text"
@@ -157,18 +155,20 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
                   setUploaderInfo(null);
                   setError(null);
                 }}
-                placeholder="如: 946974 或 UID:946974"
-                className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
+                placeholder="粘贴空间链接或输入数字"
+                className="flex-1 px-4 py-2.5 bg-white/[0.05] border border-white/20 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 focus:bg-white/[0.08] focus:ring-2 focus:ring-cyber-lime/20 transition-all"
+                style={{ WebkitFontSmoothing: 'antialiased' }}
               />
               <button
                 type="button"
                 onClick={fetchUploaderInfo}
                 disabled={fetching || !mid.trim()}
-                className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                   fetching || !mid.trim()
-                    ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'
+                    ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/10'
+                    : 'bg-gradient-to-r from-cyan-500/80 to-blue-500/80 text-white hover:from-cyan-400 hover:to-blue-400 border border-cyan-400/30 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] hover:scale-105 active:scale-95'
                 }`}
+                style={{ WebkitFontSmoothing: 'antialiased' }}
               >
                 {fetching ? (
                   <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -178,29 +178,26 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
                 ) : '获取'}
               </button>
             </div>
-            <p className="mt-1.5 text-[10px] text-gray-500">
-              💡 支持直接粘贴 UID:367877 格式或空间链接
-            </p>
           </div>
 
           {/* UP主信息预览 */}
           {uploaderInfo && (
-            <div className="p-4 bg-white/5 border border-cyber-lime/30 rounded-xl">
+            <div className="p-4 bg-gradient-to-br from-cyber-lime/10 to-cyan-500/10 border border-cyber-lime/30 rounded-xl shadow-[0_0_20px_rgba(190,242,100,0.1)]">
               <div className="flex items-center gap-3">
                 <img 
                   src={uploaderInfo.face} 
                   alt={uploaderInfo.name}
-                  className="w-14 h-14 rounded-full border-2 border-cyber-lime/50"
+                  className="w-14 h-14 rounded-full border-2 border-cyber-lime/50 shadow-[0_0_15px_rgba(190,242,100,0.3)]"
                   referrerPolicy="no-referrer"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-bold truncate">{uploaderInfo.name}</p>
-                  <p className="text-xs text-gray-400">MID: {uploaderInfo.mid}</p>
+                  <p className="text-white font-bold truncate" style={{ WebkitFontSmoothing: 'antialiased' }}>{uploaderInfo.name}</p>
+                  <p className="text-xs text-gray-400" style={{ WebkitFontSmoothing: 'antialiased' }}>MID: {uploaderInfo.mid}</p>
                   {uploaderInfo.sign && (
-                    <p className="text-[10px] text-gray-500 line-clamp-2 mt-1">{uploaderInfo.sign}</p>
+                    <p className="text-[10px] text-gray-500 line-clamp-2 mt-1" style={{ WebkitFontSmoothing: 'antialiased' }}>{uploaderInfo.sign}</p>
                   )}
                 </div>
-                <svg className="w-5 h-5 text-cyber-lime shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <svg className="w-5 h-5 text-cyber-lime shrink-0 drop-shadow-[0_0_8px_rgba(190,242,100,0.5)]" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
                 </svg>
               </div>
@@ -209,7 +206,7 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
 
           {/* 错误提示 */}
           {error && (
-            <div className="px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-lg text-xs text-red-400">
+            <div className="px-3 py-2 bg-red-500/20 border border-red-500/30 rounded-lg text-xs text-red-400" style={{ WebkitFontSmoothing: 'antialiased' }}>
               {error}
             </div>
           )}
@@ -219,18 +216,20 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 py-2.5 bg-white/5 border border-white/10 rounded-xl text-sm text-gray-400 hover:bg-white/10 transition-colors"
+              className="flex-1 py-3 bg-white/5 border border-white/20 rounded-xl text-sm font-semibold text-gray-300 hover:bg-white/10 hover:border-white/30 hover:text-white active:scale-95 transition-all duration-200"
+              style={{ WebkitFontSmoothing: 'antialiased' }}
             >
               取消
             </button>
             <button
               type="submit"
               disabled={loading || !uploaderInfo}
-              className={`flex-1 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${
                 loading || !uploaderInfo
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'bg-cyber-lime text-black hover:bg-lime-400'
+                  ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30'
+                  : 'bg-gradient-to-r from-cyber-lime to-lime-400 text-black hover:from-lime-400 hover:to-cyber-lime shadow-[0_0_25px_rgba(190,242,100,0.4)] hover:shadow-[0_0_35px_rgba(190,242,100,0.6)] hover:scale-105 active:scale-95 border border-cyber-lime/50'
               }`}
+              style={{ WebkitFontSmoothing: 'antialiased' }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

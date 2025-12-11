@@ -229,13 +229,10 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
               onClick={() => setIsDropdownOpen(false)}
             />
 
-            {/* 选项列表 - 毛玻璃效果但文字清晰 */}
-            <div className="absolute top-full left-0 right-0 mt-2 rounded-xl overflow-hidden z-50 max-h-80 overflow-y-auto animate-slide-down shadow-[0_8px_32px_rgba(0,0,0,0.8)]">
-              {/* 毛玻璃背景层 */}
-              <div className="absolute inset-0 backdrop-blur-2xl bg-white/[0.08] border border-white/20 rounded-xl" />
-
-              {/* 内容层 - 不受模糊影响 */}
-              <div className="relative z-10">
+            {/* 选项列表 - 统一的毛玻璃效果 */}
+            <div className="absolute top-full left-0 right-0 mt-2 rounded-xl overflow-hidden z-50 max-h-80 overflow-y-auto animate-slide-down shadow-[0_8px_32px_rgba(0,0,0,0.8)] backdrop-blur-xl bg-white/[0.08] border border-white/20">
+              {/* 内容层 */}
+              <div className="relative">
                 <button
                   onClick={() => {
                     setSelectedSource('全部');

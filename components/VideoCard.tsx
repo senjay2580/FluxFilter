@@ -31,6 +31,21 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
     ? (video as any).uploader?.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'
     : video.avatar;
 
+  // 获取统计数据（仅数据库视频有）
+  const stats = isDbVideo(video) ? {
+    views: video.view_count,
+    danmaku: video.danmaku_count,
+    replies: video.reply_count,
+    likes: video.like_count,
+  } : null;
+
+  // 格式化数字（万、亿）
+  const formatNumber = (num: number): string => {
+    if (num >= 100000000) return `${(num / 100000000).toFixed(1)}亿`;
+    if (num >= 10000) return `${(num / 10000).toFixed(1)}万`;
+    return num.toString();
+  };
+
   // 格式化发布时间
   const pubdate = isDbVideo(video) && video.pubdate
     ? (() => {
@@ -126,10 +141,52 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
             </div>
         </div>
 
-        {/* Duration Badge - 立体感 */}
-        <div className="absolute bottom-2 right-2 px-2 py-1 bg-black/70 backdrop-blur-md rounded-lg text-[10px] font-mono text-white
-                        border border-white/10 shadow-lg">
+        {/* Duration Badge - 移到右上角 */}
+        <div className="absolute top-2 right-2 px-2.5 py-1 bg-black/60 backdrop-blur-md rounded-lg text-[11px] font-bold text-white
+                        border border-white/20 shadow-lg"
+             style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8)' }}>
           {duration}
+        </div>
+
+        {/* 底部数据展示条 - 在封面上，无模糊背景 */}
+        <div className="absolute bottom-0 left-0 right-0 px-3 py-2">
+          <div className="flex items-center justify-between">
+            {/* 左侧：发布时间 */}
+            {pubdate && (
+              <div className="flex items-center gap-1 text-[11px] font-semibold text-white" 
+                   style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
+                <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span>{pubdate}</span>
+              </div>
+            )}
+
+            {/* 右侧：播放量和弹幕 */}
+            {stats && (
+              <div className="flex items-center gap-3">
+                {/* 播放量 */}
+                <div className="flex items-center gap-1 text-[11px] font-semibold text-white"
+                     style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
+                  <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                  <span>{formatNumber(stats.views)}</span>
+                </div>
+
+                {/* 弹幕数 */}
+                <div className="flex items-center gap-1 text-[11px] font-semibold text-white"
+                     style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
+                  <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                  <span>{formatNumber(stats.danmaku)}</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 已收藏星标 - 磨玻璃效果 */}
@@ -179,9 +236,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
         <div className="flex gap-2.5 items-start">
           {/* 头像 */}
           <div className="relative shrink-0">
-            <img 
-              src={avatar} 
-              alt={author} 
+            <img
+              src={avatar}
+              alt={author}
               className="relative w-9 h-9 rounded-full border-2 border-white/20 group-hover:border-cyber-lime/50 transition-all duration-300 object-cover ring-2 ring-black/20 bg-gray-700"
               referrerPolicy="no-referrer"
               onError={(e) => {
@@ -189,33 +246,25 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
               }}
             />
           </div>
-          
+
           <div className="flex-1 min-w-0">
             {/* 标题 */}
-            <h3 className="text-white/95 font-medium leading-tight line-clamp-2 text-[13px] group-hover:text-white transition-colors drop-shadow-sm">
+            <h3 className="text-white font-semibold leading-tight line-clamp-2 text-[13.5px] group-hover:text-white transition-colors" 
+                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4)' }}>
               {title}
             </h3>
-            
-            {/* UP主和发布时间 */}
+
+            {/* UP主 */}
             <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[11px] text-cyber-lime/90 font-medium truncate max-w-[50%] drop-shadow-sm">
+              <span className="text-[11.5px] text-cyber-lime font-semibold truncate" 
+                    style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)' }}>
                 {author}
               </span>
-              {pubdate && (
-                <>
-                  <span className="text-white/30">·</span>
-                  <span className="text-[10px] text-white/50 flex items-center gap-0.5">
-                    <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                    {pubdate}
-                  </span>
-                </>
-              )}
             </div>
           </div>
         </div>
+
+
       </div>
       
       {/* 悬停边框发光 */}
