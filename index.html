@@ -51,16 +51,10 @@
         color: #ffffff;
         -webkit-tap-highlight-color: transparent;
       }
-      /* GPU 加速优化 - 仅对需要的元素启用 */
-      img, video, .transform-gpu, [class*="animate-"] {
+      /* GPU 加速优化 */
+      * {
         -webkit-transform: translateZ(0);
         transform: translateZ(0);
-        will-change: transform;
-      }
-      /* 滚动容器优化 */
-      main, .overflow-y-auto, .overflow-x-auto {
-        -webkit-overflow-scrolling: touch;
-        scroll-behavior: smooth;
       }
       /* Hide scrollbar for Chrome, Safari and Opera */
       .no-scrollbar::-webkit-scrollbar {
