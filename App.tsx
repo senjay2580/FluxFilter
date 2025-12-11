@@ -405,7 +405,7 @@ const App = () => {
               className="w-8 h-8 rounded-full bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center text-black font-bold text-xs hover:scale-110 transition-transform"
               title="设置"
             >
-              F
+              {currentUser?.username?.[0]?.toUpperCase() || 'U'}
             </button>
           </div>
         </div>
