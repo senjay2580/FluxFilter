@@ -1204,6 +1204,8 @@ const App = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onLogout={handleLogout}
+        watchLaterIds={watchLaterIds}
+        onToggleWatchLater={toggleWatchLater}
       />
 
       {/* 时间轴 */}
@@ -1211,6 +1213,8 @@ const App = () => {
         <VideoTimeline
           videos={videos}
           onClose={() => setShowTimeline(false)}
+          watchLaterIds={watchLaterIds}
+          onToggleWatchLater={toggleWatchLater}
         />
       )}
 
