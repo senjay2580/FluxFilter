@@ -51,6 +51,11 @@
         color: #ffffff;
         -webkit-tap-highlight-color: transparent;
       }
+      /* GPU 加速优化 */
+      * {
+        -webkit-transform: translateZ(0);
+        transform: translateZ(0);
+      }
       /* Hide scrollbar for Chrome, Safari and Opera */
       .no-scrollbar::-webkit-scrollbar {
         display: none;
