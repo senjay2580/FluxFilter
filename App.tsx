@@ -548,10 +548,7 @@ const App = () => {
 
       {/* 高优先级待办提醒弹窗 */}
       <HighPriorityTodoReminder 
-        onNavigateToTodo={() => {
-          setSettingsInitialView('todo');
-          setIsSettingsOpen(true);
-        }}
+        onNavigateToTodo={() => setActiveTab('todo')}
       />
 
       {/* 网络错误提示 */}

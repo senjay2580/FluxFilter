@@ -93,6 +93,8 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
   const [showConfetti, setShowConfetti] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high'>('medium');
 
   useEffect(() => {
     const saved = localStorage.getItem('fluxf-todos');
@@ -132,6 +134,34 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
 
   const clearCompleted = () => {
     setTodos(prev => prev.filter(todo => !todo.completed));
+  };
+
+  // 开始编辑
+  const startEdit = (todo: Todo) => {
+    setEditingId(todo.id);
+    setEditText(todo.text);
+    setEditPriority(todo.priority);
+  };
+
+  // 保存编辑
+  const saveEdit = () => {
+    if (!editingId || !editText.trim()) {
+      setEditingId(null);
+      return;
+    }
+    setTodos(prev => prev.map(todo => 
+      todo.id === editingId 
+        ? { ...todo, text: editText.trim(), priority: editPriority }
+        : todo
+    ));
+    setEditingId(null);
+    setEditText('');
+  };
+
+  // 取消编辑
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditText('');
   };
 
   // 先按时间筛选，再按状态筛选
@@ -319,12 +349,13 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
                 <div className="flex items-center gap-3 p-4 pl-5">
                   {/* 复选框 */}
                   <button
-                    onClick={() => toggleTodo(todo.id)}
+                    onClick={() => editingId !== todo.id && toggleTodo(todo.id)}
+                    disabled={editingId === todo.id}
                     className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
                       todo.completed
                         ? 'bg-gradient-to-br from-cyber-lime to-emerald-400 border-transparent'
                         : 'border-gray-600 hover:border-cyber-lime hover:bg-cyber-lime/10'
-                    }`}
+                    } ${editingId === todo.id ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {todo.completed && (
                       <svg className="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -333,32 +364,97 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
                     )}
                   </button>
 
-                  {/* 内容 */}
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-sm leading-relaxed transition-all ${
-                      todo.completed ? 'line-through text-gray-500' : 'text-white'
-                    }`}>
-                      {todo.text}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityConfig[todo.priority].bg} ${priorityConfig[todo.priority].text}`}>
-                        {priorityConfig[todo.priority].label}
-                      </span>
-                      <span className="text-[10px] text-gray-600">
-                        {new Date(todo.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
-                      </span>
+                  {/* 内容 - 编辑模式 */}
+                  {editingId === todo.id ? (
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <input
+                        type="text"
+                        value={editText}
+                        onChange={(e) => setEditText(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') saveEdit();
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                        autoFocus
+                        className="w-full px-3 py-2 bg-white/10 border border-cyber-lime/50 rounded-xl text-white text-sm focus:outline-none focus:border-cyber-lime"
+                        placeholder="输入任务内容..."
+                      />
+                      <div className="flex items-center gap-2">
+                        {/* 编辑优先级 */}
+                        <div className="flex gap-1">
+                          {(['low', 'medium', 'high'] as const).map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => setEditPriority(p)}
+                              className={`px-2 py-1 rounded-lg text-[10px] font-medium transition-all ${
+                                editPriority === p 
+                                  ? `${priorityConfig[p].bg} ${priorityConfig[p].text} ring-1 ring-current` 
+                                  : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                              }`}
+                            >
+                              {priorityConfig[p].label}
+                            </button>
+                          ))}
+                        </div>
+                        {/* 保存/取消按钮 */}
+                        <div className="flex-1" />
+                        <button
+                          onClick={cancelEdit}
+                          className="px-3 py-1 text-xs text-gray-400 hover:text-white transition-colors"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={saveEdit}
+                          className="px-3 py-1 bg-cyber-lime/20 text-cyber-lime text-xs font-medium rounded-lg hover:bg-cyber-lime/30 transition-colors"
+                        >
+                          保存
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    /* 内容 - 显示模式 */
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm leading-relaxed transition-all ${
+                        todo.completed ? 'line-through text-gray-500' : 'text-white'
+                      }`}>
+                        {todo.text}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${priorityConfig[todo.priority].bg} ${priorityConfig[todo.priority].text}`}>
+                          {priorityConfig[todo.priority].label}
+                        </span>
+                        <span className="text-[10px] text-gray-600">
+                          {new Date(todo.createdAt).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 编辑按钮 */}
+                  {editingId !== todo.id && !todo.completed && (
+                    <button
+                      onClick={() => startEdit(todo)}
+                      className="w-8 h-8 rounded-xl bg-white/0 hover:bg-cyber-lime/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <svg className="w-4 h-4 text-gray-500 hover:text-cyber-lime transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                    </button>
+                  )}
 
                   {/* 删除按钮 */}
-                  <button
-                    onClick={() => deleteTodo(todo.id)}
-                    className="w-8 h-8 rounded-xl bg-white/0 hover:bg-red-500/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-                  >
-                    <svg className="w-4 h-4 text-gray-500 hover:text-red-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
-                    </svg>
-                  </button>
+                  {editingId !== todo.id && (
+                    <button
+                      onClick={() => deleteTodo(todo.id)}
+                      className="w-8 h-8 rounded-xl bg-white/0 hover:bg-red-500/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                    >
+                      <svg className="w-4 h-4 text-gray-500 hover:text-red-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
