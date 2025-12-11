@@ -1,7 +1,7 @@
 import React from 'react';
 import { Video } from '../types';
 import { PlayIcon, ClockIcon } from './Icons';
-import { handleVideoClick, formatDuration, formatViewCount } from '../lib/bilibili';
+import { handleVideoClick, formatDuration } from '../lib/bilibili';
 import type { VideoWithUploader } from '../lib/database.types';
 
 // 支持两种数据格式：旧的 Video 类型和新的 VideoWithUploader 类型
@@ -21,18 +21,29 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
   const bvid = isDbVideo(video) ? video.bvid : video.id;
   const thumbnail = isDbVideo(video) ? video.pic : video.thumbnail;
   const title = video.title;
-  const duration = isDbVideo(video) 
-    ? formatDuration(video.duration) 
+  const duration = isDbVideo(video)
+    ? formatDuration(video.duration)
     : video.duration;
-  const author = isDbVideo(video) 
+  const author = isDbVideo(video)
     ? (video as any).uploader?.name || '未知UP主'
     : video.author;
   const avatar = isDbVideo(video)
     ? (video as any).uploader?.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'
     : video.avatar;
-  const views = isDbVideo(video)
-    ? formatViewCount(video.view_count)
-    : video.views;
+
+  // 格式化发布时间
+  const pubdate = isDbVideo(video) && video.pubdate
+    ? (() => {
+        const date = new Date(video.pubdate);
+        const now = new Date();
+        const diffHours = Math.floor((now.getTime() - date.getTime()) / 3600000);
+
+        if (diffHours < 1) return '刚刚';
+        if (diffHours < 24) return `${diffHours}小时前`;
+        if (diffHours < 168) return `${Math.floor(diffHours / 24)}天前`;
+        return `${date.getMonth() + 1}月${date.getDate()}日`;
+      })()
+    : null;
 
   // 长按状态
   const [longPressTriggered, setLongPressTriggered] = React.useState(false);
@@ -185,17 +196,23 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, isInWatc
               {title}
             </h3>
             
-            {/* UP主和播放量 */}
+            {/* UP主和发布时间 */}
             <div className="flex items-center gap-2 mt-1.5">
-              <span className="text-[11px] text-cyber-lime/90 font-medium truncate max-w-[55%] drop-shadow-sm">
+              <span className="text-[11px] text-cyber-lime/90 font-medium truncate max-w-[50%] drop-shadow-sm">
                 {author}
               </span>
-              <span className="flex items-center gap-1 text-[10px] text-white/50">
-                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
-                </svg>
-                {views}
-              </span>
+              {pubdate && (
+                <>
+                  <span className="text-white/30">·</span>
+                  <span className="text-[10px] text-white/50 flex items-center gap-0.5">
+                    <svg className="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    {pubdate}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

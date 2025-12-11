@@ -268,7 +268,7 @@ const App = () => {
     // 2. Search - 基于当前界面搜索（标题 + UP主名称）
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
-      result = result.filter(v => 
+      result = result.filter(v =>
         v.title.toLowerCase().includes(term) ||
         (v.uploader?.name || '').toLowerCase().includes(term)
       );
@@ -279,15 +279,15 @@ const App = () => {
     result = result.filter(v => {
       if (activeFilter === 'all') return true;
       if (!v.pubdate) return true;
-      
+
       const pubDate = new Date(v.pubdate);
       const diffTime = Math.abs(now.getTime() - pubDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
       if (activeFilter === 'today') return diffDays <= 1;
       if (activeFilter === 'week') return diffDays <= 7;
       if (activeFilter === 'month') return diffDays <= 30;
-      
+
       if (activeFilter === 'custom') {
          if (!customDateFilter.year) return true;
          if (pubDate.getFullYear() !== customDateFilter.year) return false;
@@ -295,12 +295,24 @@ const App = () => {
          if (customDateFilter.day !== undefined && pubDate.getDate() !== customDateFilter.day) return false;
          return true;
       }
-      
+
       return true;
     });
 
     return result;
   }, [videos, activeTab, watchLaterIds, activeFilter, customDateFilter, searchTerm]);
+
+  // 热门视频排序 - 根据热度分数排序
+  const hotVideos = useMemo(() => {
+    return [...videos]
+      .sort((a, b) => {
+        // 热度计算：播放量50% + 点赞数30% + 收藏数20%
+        const scoreA = (a.view_count || 0) * 0.5 + (a.like_count || 0) * 0.3 + (a.favorite_count || 0) * 0.2;
+        const scoreB = (b.view_count || 0) * 0.5 + (b.like_count || 0) * 0.3 + (b.favorite_count || 0) * 0.2;
+        return scoreB - scoreA;
+      })
+      .slice(0, 5);
+  }, [videos]);
 
   // Infinite Scroll Handler - 节流优化
   useEffect(() => {
@@ -391,7 +403,7 @@ const App = () => {
               <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input 
                 type="text" 
-                placeholder={activeTab === 'watchLater' ? '搜索待看列表...' : '搜索视频或UP主...'}
+                placeholder={activeTab === 'watchLater' ? '搜索待看列表...' : '搜索视频或UP...'}
                 className="w-full bg-white/5 border border-white/10 rounded-full pl-10 pr-10 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -486,12 +498,12 @@ const App = () => {
         
         {/* RSS 阅读界面 */}
         {activeTab === 'rss' && (
-          <RssFeed scrollContainerRef={mainRef} />
+          <RssFeed scrollContainerRef={mainRef} timeFilter={activeFilter} />
         )}
 
         {/* TODO 待办事项界面 */}
         {activeTab === 'todo' && (
-          <TodoList embedded />
+          <TodoList embedded timeFilter={activeFilter} />
         )}
         
         {/* 视频内容 */}
@@ -515,7 +527,7 @@ const App = () => {
         
         {/* 热门轮播图 */}
         {activeTab === 'home' && !searchTerm && activeFilter === 'all' && videos.length > 0 && (
-          <HotCarousel videos={videos.slice(0, 5)} />
+          <HotCarousel videos={hotVideos} />
         )}
 
         <div className="space-y-3">

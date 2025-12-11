@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { FilterType } from '../types';
 
 interface Todo {
   id: string;
@@ -13,6 +14,7 @@ interface TodoListProps {
   isOpen?: boolean;
   onClose?: () => void;
   embedded?: boolean;
+  timeFilter?: FilterType;
 }
 
 // 纸屑动画组件
@@ -62,7 +64,29 @@ const Confetti: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   );
 };
 
-const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false }) => {
+// 时间筛选辅助函数
+function filterTodosByTime(todos: Todo[], filter: FilterType): Todo[] {
+  if (filter === 'all') return todos;
+  
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  
+  return todos.filter(todo => {
+    const diff = now - todo.createdAt;
+    switch (filter) {
+      case 'today':
+        return diff < dayMs;
+      case 'week':
+        return diff < 7 * dayMs;
+      case 'month':
+        return diff < 30 * dayMs;
+      default:
+        return true;
+    }
+  });
+}
+
+const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, timeFilter = 'all' as FilterType }) => {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [newTodo, setNewTodo] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
@@ -110,7 +134,9 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false }
     setTodos(prev => prev.filter(todo => !todo.completed));
   };
 
-  const filteredTodos = todos.filter(todo => {
+  // 先按时间筛选，再按状态筛选
+  const timeFilteredTodos = filterTodosByTime(todos, timeFilter);
+  const filteredTodos = timeFilteredTodos.filter(todo => {
     if (filter === 'active') return !todo.completed;
     if (filter === 'completed') return todo.completed;
     return true;
