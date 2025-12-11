@@ -219,33 +219,33 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
         </div>
 
         {/* Tab切换 */}
-        <div className="flex border-b border-white/10 shrink-0">
+        <div className="flex gap-2 p-2 shrink-0">
           <button
             onClick={() => setActiveTab('account')}
-            className={`flex-1 py-3 text-sm font-medium transition-all ${
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
               activeTab === 'account' 
-                ? 'text-cyber-lime border-b-2 border-cyber-lime' 
-                : 'text-gray-500 hover:text-gray-300'
+                ? 'bg-cyber-lime/20 text-cyber-lime' 
+                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
             }`}
           >
             账户
           </button>
           <button
             onClick={() => setActiveTab('uploaders')}
-            className={`flex-1 py-3 text-sm font-medium transition-all ${
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
               activeTab === 'uploaders' 
-                ? 'text-cyber-lime border-b-2 border-cyber-lime' 
-                : 'text-gray-500 hover:text-gray-300'
+                ? 'bg-cyber-lime/20 text-cyber-lime' 
+                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
             }`}
           >
             关注
           </button>
           <button
             onClick={() => setActiveTab('videos')}
-            className={`flex-1 py-3 text-sm font-medium transition-all ${
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
               activeTab === 'videos' 
-                ? 'text-cyber-lime border-b-2 border-cyber-lime' 
-                : 'text-gray-500 hover:text-gray-300'
+                ? 'bg-cyber-lime/20 text-cyber-lime' 
+                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
             }`}
           >
             数据
@@ -264,13 +264,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
               {/* Cookie配置 */}
               <div className="p-4 bg-white/5 rounded-xl">
                 <div className="flex items-center gap-2 mb-3">
-                  <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg className="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                   <p className="text-white font-medium">B站 Cookie</p>
+                  <span className="text-xs text-gray-500 bg-white/10 px-2 py-0.5 rounded">可选</span>
                 </div>
                 <p className="text-xs text-gray-500 mb-3">
-                  用于访问B站API，获取UP主视频数据。请在浏览器登录B站后获取Cookie。
+                  不配置也能正常使用。配置后可降低被B站限流的风险。
                 </p>
                 <textarea
                   value={cookie}
@@ -292,17 +293,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 </button>
               </div>
 
-              {/* 获取Cookie说明 */}
-              <div className="p-4 bg-white/5 rounded-xl">
-                <p className="text-white font-medium mb-2">如何获取Cookie？</p>
-                <ol className="text-xs text-gray-500 space-y-1 list-decimal list-inside">
+              {/* 获取Cookie说明 - 折叠 */}
+              <details className="p-4 bg-white/5 rounded-xl">
+                <summary className="text-sm text-gray-400 cursor-pointer hover:text-white transition-colors">
+                  如何获取 Cookie？（点击展开）
+                </summary>
+                <ol className="text-xs text-gray-500 space-y-1 list-decimal list-inside mt-3">
                   <li>在浏览器中登录 bilibili.com</li>
                   <li>按 F12 打开开发者工具</li>
                   <li>切换到 Network (网络) 标签</li>
                   <li>刷新页面，点击任意请求</li>
                   <li>在 Headers 中找到 Cookie 并复制</li>
                 </ol>
-              </div>
+              </details>
 
               {/* 退出登录 */}
               <button

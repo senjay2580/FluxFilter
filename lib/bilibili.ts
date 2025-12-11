@@ -42,19 +42,14 @@ let cachedCookie: string | null = null;
 
 /**
  * 获取B站Cookie（从数据库用户表读取）
+ * Cookie 是可选的，没有 Cookie 也能正常使用基本功能
  */
 async function getBilibiliCookie(): Promise<string> {
-  if (cachedCookie) return cachedCookie;
+  if (cachedCookie !== null) return cachedCookie;
   
   const cookie = await getUserBilibiliCookie();
-  if (cookie) {
-    cachedCookie = cookie;
-    return cookie;
-  }
-  
-  // 未配置Cookie时返回空字符串
-  console.warn('未配置B站Cookie，部分功能可能受限');
-  return '';
+  cachedCookie = cookie || '';
+  return cachedCookie;
 }
 
 /**
@@ -64,15 +59,21 @@ export function clearCookieCache(): void {
   cachedCookie = null;
 }
 
-// 请求头配置（异步获取Cookie）
+// 请求头配置（Cookie 可选）
 const getHeaders = async () => {
   const cookie = await getBilibiliCookie();
-  return {
+  const headers: Record<string, string> = {
     'Accept': 'application/json, text/plain, */*',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://www.bilibili.com',
-    'Cookie': cookie,
   };
+  
+  // 只在有 Cookie 时才添加
+  if (cookie) {
+    headers['Cookie'] = cookie;
+  }
+  
+  return headers;
 };
 
 /**
