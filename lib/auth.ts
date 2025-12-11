@@ -7,16 +7,12 @@ import { supabase } from './supabase';
 
 export interface User {
   id: string;
-  email: string | null;
-  nickname: string | null;
-  avatar_url: string | null;
+  username: string | null;
+  password?: string;
   bilibili_cookie: string | null;
-  bilibili_mid: number | null;
-  bilibili_name: string | null;
-  bilibili_face: string | null;
-  sync_interval: number;
-  auto_sync: boolean;
   created_at: string;
+  updated_at: string;
+  last_login_at: string | null;
 }
 
 // 当前用户缓存
@@ -82,24 +78,22 @@ export async function getUserBilibiliCookie(): Promise<string | null> {
 /**
  * 用户注册
  */
-export async function register(nickname: string, email?: string): Promise<{ user: User | null; error: string | null }> {
+export async function register(username: string, password: string): Promise<{ user: User | null; error: string | null }> {
   try {
-    // 检查邮箱是否已存在
-    if (email) {
-      const { data: existing } = await supabase
-        .from('user')
-        .select('id')
-        .eq('email', email)
-        .single();
-      
-      if (existing) {
-        return { user: null, error: '该邮箱已被注册' };
-      }
+    // 检查用户名是否已存在
+    const { data: existing } = await supabase
+      .from('user')
+      .select('id')
+      .eq('username', username)
+      .single();
+    
+    if (existing) {
+      return { user: null, error: '用户名已被注册' };
     }
     
     const { data, error } = await supabase
       .from('user')
-      .insert({ nickname, email })
+      .insert({ username, password })
       .select()
       .single();
     
@@ -115,24 +109,19 @@ export async function register(nickname: string, email?: string): Promise<{ user
 }
 
 /**
- * 用户登录（通过邮箱或用户ID）
+ * 用户登录（用户名+密码）
  */
-export async function login(identifier: string): Promise<{ user: User | null; error: string | null }> {
+export async function login(username: string, password: string): Promise<{ user: User | null; error: string | null }> {
   try {
-    // 尝试通过邮箱查找
-    let query = supabase.from('user').select('*');
-    
-    if (identifier.includes('@')) {
-      query = query.eq('email', identifier);
-    } else {
-      // 尝试通过ID或昵称查找
-      query = query.or(`id.eq.${identifier},nickname.eq.${identifier}`);
-    }
-    
-    const { data, error } = await query.single();
+    const { data, error } = await supabase
+      .from('user')
+      .select('*')
+      .eq('username', username)
+      .eq('password', password)
+      .single();
     
     if (error || !data) {
-      return { user: null, error: '用户不存在' };
+      return { user: null, error: '用户名或密码错误' };
     }
     
     setStoredUserId(data.id);

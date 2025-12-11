@@ -7,8 +7,8 @@ interface AuthPageProps {
 
 const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [nickname, setNickname] = useState('');
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,23 +18,28 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
     setLoading(true);
 
     try {
+      if (!username.trim()) {
+        setError('请输入用户名');
+        return;
+      }
+      if (!password.trim()) {
+        setError('请输入密码');
+        return;
+      }
+      
       if (mode === 'register') {
-        if (!nickname.trim()) {
-          setError('请输入昵称');
+        if (password.length < 6) {
+          setError('密码长度至少6位');
           return;
         }
-        const result = await register(nickname.trim(), email.trim() || undefined);
+        const result = await register(username.trim(), password);
         if (result.error) {
           setError(result.error);
         } else {
           onLoginSuccess();
         }
       } else {
-        if (!email.trim()) {
-          setError('请输入邮箱或用户ID');
-          return;
-        }
-        const result = await login(email.trim());
+        const result = await login(username.trim(), password);
         if (result.error) {
           setError(result.error);
         } else {
@@ -65,8 +70,8 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
               <path d="M16 21h5v-5" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-white">FluxFilter</h1>
-          <p className="text-gray-500 mt-1">B站UP主视频追踪器</p>
+          <h1 className="text-2xl font-bold text-white">FluxF</h1>
+          <p className="text-gray-500 mt-1">B站视频追踪器</p>
         </div>
 
         {/* 登录/注册卡片 */}
@@ -96,28 +101,24 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            {mode === 'register' && (
-              <div>
-                <label className="block text-sm text-gray-400 mb-2">昵称 *</label>
-                <input
-                  type="text"
-                  value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  placeholder="输入你的昵称"
-                  className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
-                />
-              </div>
-            )}
-
             <div>
-              <label className="block text-sm text-gray-400 mb-2">
-                {mode === 'login' ? '邮箱 / 用户ID' : '邮箱（可选）'}
-              </label>
+              <label className="block text-sm text-gray-400 mb-2">用户名</label>
               <input
                 type="text"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder={mode === 'login' ? '输入邮箱或用户ID' : '输入邮箱（可选）'}
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="输入用户名"
+                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">密码</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={mode === 'register' ? '设置密码（至少6位）' : '输入密码'}
                 className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
               />
             </div>
@@ -139,7 +140,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
                   处理中...
                 </>
               ) : (
-                mode === 'login' ? '登录' : '创建账号'
+                mode === 'login' ? '登录' : '注册'
               )}
             </button>
           </form>
@@ -149,13 +150,6 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
               注册后需要在设置中配置B站Cookie才能同步视频
             </p>
           )}
-        </div>
-
-        {/* 底部说明 */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-gray-600">
-            无需密码，使用邮箱或用户ID即可登录
-          </p>
         </div>
       </div>
     </div>

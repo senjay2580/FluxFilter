@@ -145,11 +145,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center text-black font-bold text-lg">
-                {user?.nickname?.[0]?.toUpperCase() || 'U'}
+                {user?.username?.[0]?.toUpperCase() || 'U'}
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white">{user?.nickname || '用户'}</h2>
-                <p className="text-xs text-gray-400">{user?.email || '未设置邮箱'}</p>
+                <h2 className="text-lg font-bold text-white">{user?.username || '用户'}</h2>
+                <p className="text-xs text-gray-400">ID: {user?.id?.slice(0, 8) || '-'}</p>
               </div>
             </div>
             <button 
