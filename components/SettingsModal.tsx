@@ -20,6 +20,10 @@ interface VideoItem {
   pic: string | null;
   duration: number;
   pubdate: string;
+  uploader: {
+    name: string;
+    face: string | null;
+  } | null;
 }
 
 interface SettingsModalProps {
@@ -67,15 +71,23 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       
       setUploaders(uploaderData || []);
 
-      // 获取视频列表（按用户过滤）
+      // 获取视频列表（含UP主信息）
       const { data: videoData, count } = await supabase
         .from('video')
-        .select('id, bvid, title, pic, duration, pubdate', { count: 'exact' })
+        .select(`
+          id, bvid, title, pic, duration, pubdate,
+          uploader:uploader!fk_video_uploader (name, face)
+        `, { count: 'exact' })
         .eq('user_id', currentUser.id)
         .order('pubdate', { ascending: false })
         .limit(100);
       
-      setVideos(videoData || []);
+      // 处理 uploader 数据（Supabase 返回数组，取第一个）
+      const processedVideos = (videoData || []).map((v: any) => ({
+        ...v,
+        uploader: Array.isArray(v.uploader) ? v.uploader[0] || null : v.uploader
+      }));
+      setVideos(processedVideos as VideoItem[]);
       setVideoCount(count || 0);
     } catch (err) {
       console.error('获取数据失败:', err);
@@ -406,10 +418,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                         )}
                       </div>
 
-                      {/* 标题和时长 */}
+                      {/* 标题、UP主和时长 */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white truncate">{video.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {video.uploader && (
+                            <>
+                              <span className="text-xs text-cyber-lime">{video.uploader.name}</span>
+                              <span className="text-xs text-gray-600">•</span>
+                            </>
+                          )}
                           <span className="text-xs text-gray-500">
                             {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}
                           </span>
