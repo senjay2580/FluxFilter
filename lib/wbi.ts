@@ -27,8 +27,8 @@ function getMixinKey(orig: string): string {
     .slice(0, 32);
 }
 
-// API 基础路径（开发模式使用代理）
-const API_BASE = import.meta.env.DEV ? '/bili-api' : 'https://api.bilibili.com';
+// API 基础路径（开发模式使用 Vite 代理，生产模式使用 Vercel API 代理）
+const API_BASE = import.meta.env.DEV ? '/bili-api' : '/api/bilibili?path=';
 
 /**
  * 从 B站获取 WBI keys
@@ -39,11 +39,16 @@ async function getWbiKeys(): Promise<{ imgKey: string; subKey: string }> {
     return { imgKey: cachedWbiKeys.imgKey, subKey: cachedWbiKeys.subKey };
   }
 
-  const response = await fetch(`${API_BASE}/x/web-interface/nav`, {
-    headers: {
+  // 构建 URL（开发模式和生产模式格式不同）
+  const apiUrl = import.meta.env.DEV 
+    ? `${API_BASE}/x/web-interface/nav`
+    : `${API_BASE}/x/web-interface/nav`;
+    
+  const response = await fetch(apiUrl, {
+    headers: import.meta.env.DEV ? {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       'Referer': 'https://www.bilibili.com',
-    }
+    } : {}
   });
 
   const data = await response.json();
