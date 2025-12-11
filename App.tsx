@@ -546,10 +546,10 @@ const App = () => {
       {/* PWA 安装提示 */}
       <PWAInstallPrompt />
 
-      {/* 高优先级待办提醒弹窗 - 暂时禁用排查问题 */}
-      {/* <HighPriorityTodoReminder 
+      {/* 高优先级待办提醒弹窗 */}
+      <HighPriorityTodoReminder 
         onNavigateToTodo={() => setActiveTab('todo')}
-      /> */}
+      />
 
       {/* 网络错误提示 */}
       {networkError && (
@@ -814,11 +814,8 @@ const App = () => {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* 页面切换动画容器 */}
-        <div 
-          key={activeTab}
-          className="animate-page-fade-in"
-        >
+        {/* 页面内容容器 */}
+        <div>
         
         {/* RSS 阅读界面 */}
         {activeTab === 'rss' && (
