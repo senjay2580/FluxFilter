@@ -1,28 +1,65 @@
 -- ============================================
 -- FluxFilter - Supabase 数据库初始化脚本
+-- 支持多用户隔离，每个用户独立管理B站Cookie和数据
 -- 在 Supabase Dashboard -> SQL Editor 中执行
 -- ============================================
 
--- 1. UP主配置表（存储要追踪的B站UP主）
+-- 0. 用户表（核心：存储用户信息和B站Cookie）
+CREATE TABLE IF NOT EXISTS "user" (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE,           -- 邮箱（可选，用于登录）
+    nickname VARCHAR(100),               -- 昵称
+    avatar_url VARCHAR(500),             -- 头像URL
+    
+    -- B站认证信息（用户自行填写）
+    bilibili_cookie TEXT,                -- B站Cookie（重要：用户自己填写）
+    bilibili_mid BIGINT,                 -- B站UID
+    bilibili_name VARCHAR(100),          -- B站昵称
+    bilibili_face VARCHAR(500),          -- B站头像
+    
+    -- 用户设置
+    sync_interval INT DEFAULT 30,        -- 自动同步间隔（分钟）
+    auto_sync BOOLEAN DEFAULT false,     -- 是否开启自动同步
+    theme VARCHAR(20) DEFAULT 'dark',    -- 主题设置
+    
+    -- 时间戳
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    last_login_at TIMESTAMPTZ
+);
+
+-- 用户表索引
+CREATE INDEX IF NOT EXISTS idx_user_email ON "user"(email);
+CREATE INDEX IF NOT EXISTS idx_user_bilibili_mid ON "user"(bilibili_mid);
+
+-- 1. UP主配置表（存储要追踪的B站UP主，按用户隔离）
 CREATE TABLE IF NOT EXISTS uploader (
     id BIGSERIAL PRIMARY KEY,
-    mid BIGINT NOT NULL UNIQUE,          -- B站用户ID
+    user_id UUID NOT NULL,               -- 所属用户ID（必须）
+    mid BIGINT NOT NULL,                 -- B站用户ID
     name VARCHAR(100) NOT NULL,          -- UP主昵称
     face VARCHAR(500),                   -- 头像URL
     sign TEXT,                           -- 个性签名
     is_active BOOLEAN DEFAULT true,      -- 是否启用追踪
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    
+    -- 外键关联用户
+    CONSTRAINT fk_uploader_user FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE,
+    -- 同一用户下UP主唯一
+    CONSTRAINT unique_user_uploader UNIQUE (user_id, mid)
 );
 
--- 创建mid索引
+-- UP主表索引
+CREATE INDEX IF NOT EXISTS idx_uploader_user_id ON uploader(user_id);
 CREATE INDEX IF NOT EXISTS idx_uploader_mid ON uploader(mid);
-CREATE INDEX IF NOT EXISTS idx_uploader_active ON uploader(is_active);
+CREATE INDEX IF NOT EXISTS idx_uploader_active ON uploader(user_id, is_active);
 
--- 2. 视频表（存储UP主发布的视频，bvid唯一防止重复）
+-- 2. 视频表（存储UP主发布的视频，按用户隔离）
 CREATE TABLE IF NOT EXISTS video (
     id BIGSERIAL PRIMARY KEY,
-    bvid VARCHAR(20) NOT NULL UNIQUE,    -- B站视频BV号（唯一标识）
+    user_id UUID NOT NULL,               -- 所属用户ID（必须）
+    bvid VARCHAR(20) NOT NULL,           -- B站视频BV号
     aid BIGINT,                          -- AV号
     mid BIGINT NOT NULL,                 -- UP主ID
     title VARCHAR(500) NOT NULL,         -- 视频标题
@@ -40,19 +77,22 @@ CREATE TABLE IF NOT EXISTS video (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     
-    -- 外键关联UP主
-    CONSTRAINT fk_video_uploader FOREIGN KEY (mid) REFERENCES uploader(mid) ON DELETE CASCADE
+    -- 外键关联用户
+    CONSTRAINT fk_video_user FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE,
+    -- 同一用户下视频唯一
+    CONSTRAINT unique_user_video UNIQUE (user_id, bvid)
 );
 
 -- 视频表索引
-CREATE INDEX IF NOT EXISTS idx_video_mid ON video(mid);
-CREATE INDEX IF NOT EXISTS idx_video_pubdate ON video(pubdate DESC);
+CREATE INDEX IF NOT EXISTS idx_video_user_id ON video(user_id);
+CREATE INDEX IF NOT EXISTS idx_video_mid ON video(user_id, mid);
+CREATE INDEX IF NOT EXISTS idx_video_pubdate ON video(user_id, pubdate DESC);
 CREATE INDEX IF NOT EXISTS idx_video_bvid ON video(bvid);
 
 -- 3. 待看列表表（用户收藏的待看视频）
 CREATE TABLE IF NOT EXISTS watchlist (
     id BIGSERIAL PRIMARY KEY,
-    user_id UUID,                        -- 可选：支持用户系统后使用
+    user_id UUID NOT NULL,               -- 所属用户ID（必须）
     bvid VARCHAR(20) NOT NULL,           -- 视频BV号
     note TEXT,                           -- 用户备注
     is_watched BOOLEAN DEFAULT false,    -- 是否已看
@@ -60,27 +100,36 @@ CREATE TABLE IF NOT EXISTS watchlist (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     
-    -- 外键关联视频
-    CONSTRAINT fk_watchlist_video FOREIGN KEY (bvid) REFERENCES video(bvid) ON DELETE CASCADE,
+    -- 外键关联用户
+    CONSTRAINT fk_watchlist_user FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE,
     -- 同一用户不能重复添加同一视频
-    CONSTRAINT unique_user_video UNIQUE (user_id, bvid)
+    CONSTRAINT unique_watchlist_user_video UNIQUE (user_id, bvid)
 );
 
 -- 待看列表索引
-CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist(user_id);
-CREATE INDEX IF NOT EXISTS idx_watchlist_watched ON watchlist(is_watched);
+CREATE INDEX IF NOT EXISTS idx_watchlist_user_id ON watchlist(user_id);
+CREATE INDEX IF NOT EXISTS idx_watchlist_watched ON watchlist(user_id, is_watched);
 
--- 4. 同步日志表（记录定时任务执行情况）
+-- 4. 同步日志表（记录定时任务执行情况，按用户隔离）
 CREATE TABLE IF NOT EXISTS sync_log (
     id BIGSERIAL PRIMARY KEY,
-    sync_type VARCHAR(50) NOT NULL,      -- 同步类型: 'cron_morning', 'cron_evening', 'manual'
-    status VARCHAR(20) NOT NULL,         -- 状态: 'success', 'failed', 'partial'
+    user_id UUID NOT NULL,               -- 所属用户ID（必须）
+    sync_type VARCHAR(50) NOT NULL,      -- 同步类型: 'auto', 'manual'
+    status VARCHAR(20) NOT NULL,         -- 状态: 'success', 'failed', 'partial', 'cancelled'
     videos_added INTEGER DEFAULT 0,      -- 新增视频数
     videos_updated INTEGER DEFAULT 0,    -- 更新视频数
+    uploaders_synced INTEGER DEFAULT 0,  -- 同步的UP主数量
     error_message TEXT,                  -- 错误信息
     started_at TIMESTAMPTZ DEFAULT NOW(),
-    finished_at TIMESTAMPTZ
+    finished_at TIMESTAMPTZ,
+    
+    -- 外键关联用户
+    CONSTRAINT fk_sync_log_user FOREIGN KEY (user_id) REFERENCES "user"(id) ON DELETE CASCADE
 );
+
+-- 同步日志索引
+CREATE INDEX IF NOT EXISTS idx_sync_log_user_id ON sync_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_sync_log_started_at ON sync_log(user_id, started_at DESC);
 
 -- ============================================
 -- 触发器：自动更新 updated_at 字段
@@ -93,7 +142,12 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- 应用触发器
+-- 应用触发器到所有表
+DROP TRIGGER IF EXISTS update_user_updated_at ON "user";
+CREATE TRIGGER update_user_updated_at
+    BEFORE UPDATE ON "user"
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
 DROP TRIGGER IF EXISTS update_uploader_updated_at ON uploader;
 CREATE TRIGGER update_uploader_updated_at
     BEFORE UPDATE ON uploader
@@ -110,19 +164,16 @@ CREATE TRIGGER update_watchlist_updated_at
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================
--- Row Level Security (RLS) - 可选
+-- Row Level Security (RLS) - 数据隔离
 -- ============================================
--- 启用 RLS（如果需要用户隔离）
--- ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "user" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE uploader ENABLE ROW LEVEL SECURITY;
+ALTER TABLE video ENABLE ROW LEVEL SECURITY;
+ALTER TABLE watchlist ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sync_log ENABLE ROW LEVEL SECURITY;
 
--- ============================================
--- 示例数据：添加一些默认UP主
--- ============================================
-INSERT INTO uploader (mid, name, face, sign) VALUES
-    (946974, '影视飓风', 'https://i0.hdslb.com/bfs/face/xxx.jpg', '科技视频创作者'),
-    (25876945, '何同学', 'https://i0.hdslb.com/bfs/face/xxx.jpg', '数码科技UP主'),
-    (517327498, '老番茄', 'https://i0.hdslb.com/bfs/face/xxx.jpg', '游戏搞笑UP主')
-ON CONFLICT (mid) DO NOTHING;
+-- RLS策略：用户只能访问自己的数据
+-- 注意：需要在应用层设置 auth.uid() 或通过 JWT 传递 user_id
 
 -- ============================================
 -- 视图：获取视频详情（含UP主信息）
@@ -133,13 +184,29 @@ SELECT
     u.name as uploader_name,
     u.face as uploader_face
 FROM video v
-LEFT JOIN uploader u ON v.mid = u.mid
+LEFT JOIN uploader u ON v.user_id = u.user_id AND v.mid = u.mid
 ORDER BY v.pubdate DESC;
 
 -- ============================================
--- 函数：UPSERT 视频（插入或更新，防止重复）
+-- 视图：用户数据统计
+-- ============================================
+CREATE OR REPLACE VIEW user_stats AS
+SELECT 
+    u.id AS user_id,
+    u.nickname,
+    u.email,
+    u.bilibili_name,
+    (SELECT COUNT(*) FROM uploader WHERE user_id = u.id AND is_active = true) AS uploader_count,
+    (SELECT COUNT(*) FROM video WHERE user_id = u.id) AS video_count,
+    (SELECT COUNT(*) FROM watchlist WHERE user_id = u.id AND is_watched = false) AS unwatched_count,
+    (SELECT MAX(finished_at) FROM sync_log WHERE user_id = u.id AND status = 'success') AS last_sync_at
+FROM "user" u;
+
+-- ============================================
+-- 函数：UPSERT 视频（插入或更新，按用户隔离）
 -- ============================================
 CREATE OR REPLACE FUNCTION upsert_video(
+    p_user_id UUID,
     p_bvid VARCHAR,
     p_aid BIGINT,
     p_mid BIGINT,
@@ -158,15 +225,15 @@ CREATE OR REPLACE FUNCTION upsert_video(
 ) RETURNS VOID AS $$
 BEGIN
     INSERT INTO video (
-        bvid, aid, mid, title, pic, description, duration,
+        user_id, bvid, aid, mid, title, pic, description, duration,
         view_count, danmaku_count, reply_count, favorite_count,
         coin_count, share_count, like_count, pubdate
     ) VALUES (
-        p_bvid, p_aid, p_mid, p_title, p_pic, p_description, p_duration,
+        p_user_id, p_bvid, p_aid, p_mid, p_title, p_pic, p_description, p_duration,
         p_view_count, p_danmaku_count, p_reply_count, p_favorite_count,
         p_coin_count, p_share_count, p_like_count, p_pubdate
     )
-    ON CONFLICT (bvid) DO UPDATE SET
+    ON CONFLICT (user_id, bvid) DO UPDATE SET
         title = EXCLUDED.title,
         pic = EXCLUDED.pic,
         description = EXCLUDED.description,
@@ -180,3 +247,33 @@ BEGIN
         updated_at = NOW();
 END;
 $$ LANGUAGE plpgsql;
+
+-- ============================================
+-- 函数：创建新用户
+-- ============================================
+CREATE OR REPLACE FUNCTION create_user(
+    p_email VARCHAR DEFAULT NULL,
+    p_nickname VARCHAR DEFAULT NULL
+) RETURNS UUID AS $$
+DECLARE
+    new_user_id UUID;
+BEGIN
+    INSERT INTO "user" (email, nickname)
+    VALUES (p_email, COALESCE(p_nickname, '用户' || SUBSTR(gen_random_uuid()::text, 1, 8)))
+    RETURNING id INTO new_user_id;
+    
+    RETURN new_user_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- 表注释
+-- ============================================
+COMMENT ON TABLE "user" IS '用户表：存储用户信息和B站Cookie，实现多用户隔离';
+COMMENT ON COLUMN "user".bilibili_cookie IS 'B站Cookie，用户自行填写，用于API请求认证';
+COMMENT ON COLUMN "user".sync_interval IS '自动同步间隔，单位：分钟';
+
+COMMENT ON TABLE uploader IS 'UP主表：用户关注的B站UP主，按user_id隔离';
+COMMENT ON TABLE video IS '视频表：UP主发布的视频，按user_id隔离';
+COMMENT ON TABLE watchlist IS '待看列表：用户收藏的待看视频';
+COMMENT ON TABLE sync_log IS '同步日志：记录同步任务执行情况';
