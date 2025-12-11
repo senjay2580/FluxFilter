@@ -150,12 +150,12 @@ const App = () => {
   }, [activeTab]);
   
   // Infinite Scroll State
-  const [visibleCount, setVisibleCount] = useState(10);
+  const [visibleCount, setVisibleCount] = useState(6);
   const mainRef = React.useRef<HTMLDivElement>(null);
 
   // 筛选条件变化时重置 visibleCount
   useEffect(() => {
-    setVisibleCount(10);
+    setVisibleCount(6);
   }, [activeFilter, selectedUploader, searchTerm, activeTab]);
 
   // 滑动切换Tab
