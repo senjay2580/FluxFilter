@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { getUploaderInfo } from '../lib/bilibili';
+import { getStoredUserId } from '../lib/auth';
 
 interface AddUploaderModalProps {
   isOpen: boolean;
@@ -57,9 +58,16 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
     setError(null);
 
     try {
+      const userId = getStoredUserId();
+      if (!userId) {
+        setError('请先登录');
+        return;
+      }
+
       const { error: insertError } = await supabase
         .from('uploader')
         .insert({
+          user_id: userId,
           mid: uploaderInfo.mid,
           name: uploaderInfo.name,
           face: uploaderInfo.face,
@@ -81,8 +89,9 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
       setUploaderInfo(null);
       onSuccess();
       onClose();
-    } catch (err) {
-      setError('添加失败: ' + String(err));
+    } catch (err: any) {
+      console.error('添加UP主失败:', err);
+      setError('添加失败: ' + (err?.message || '请稍后重试'));
     } finally {
       setLoading(false);
     }
