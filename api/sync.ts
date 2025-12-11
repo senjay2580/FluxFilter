@@ -15,14 +15,15 @@ export const config = {
 // B站API配置
 const BILIBILI_API_BASE = 'https://api.bilibili.com';
 
-// 获取请求头（包含用户 Cookie）
+// 获取请求头（包含用户 Cookie，模拟浏览器请求）
 function getHeaders(userCookie?: string): Record<string, string> {
-  // 优先使用用户自己的 Cookie，否则使用全局 Cookie
   const cookie = userCookie || process.env.BILIBILI_COOKIE || '';
   return {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-    'Referer': 'https://www.bilibili.com',
-    'Origin': 'https://www.bilibili.com',
+    'Referer': 'https://space.bilibili.com',
+    'Origin': 'https://space.bilibili.com',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'zh-CN,zh;q=0.9',
     ...(cookie ? { 'Cookie': cookie } : {}),
   };
 }
@@ -145,7 +146,7 @@ export default async function handler(request: Request) {
               }
             }
 
-            await sleep(500);
+            await sleep(100); // 减少延迟避免超时
           } catch (err) {
             userErrors.push(`UP主 ${uploader.name}: ${err}`);
           }

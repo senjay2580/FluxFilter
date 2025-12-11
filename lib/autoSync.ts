@@ -75,13 +75,15 @@ export async function triggerSync(
 
 /**
  * 触发同步 - 指定UP主列表
+ * @param shouldCancel - 返回 true 时中断同步
  */
 export async function triggerSyncWithUploaders(
   uploaders: Uploader[],
-  onProgress?: (msg: string) => void
-): Promise<{ success: boolean; message: string; videosAdded?: number }> {
+  onProgress?: (msg: string) => void,
+  shouldCancel?: () => boolean
+): Promise<{ success: boolean; message: string; videosAdded?: number; cancelled?: boolean }> {
   try {
-    return await syncWithUploaders(uploaders, onProgress);
+    return await syncWithUploaders(uploaders, onProgress, shouldCancel);
   } catch (error: any) {
     console.error('同步失败:', error);
     const errMsg = error?.message || String(error);
@@ -102,8 +104,9 @@ export async function triggerSyncWithUploaders(
  */
 async function syncWithUploaders(
   uploaders: Uploader[],
-  onProgress?: (msg: string) => void
-): Promise<{ success: boolean; message: string; videosAdded?: number }> {
+  onProgress?: (msg: string) => void,
+  shouldCancel?: () => boolean
+): Promise<{ success: boolean; message: string; videosAdded?: number; cancelled?: boolean }> {
   if (!isSupabaseConfigured) {
     return { success: false, message: '⚠️ 请先配置 Supabase 环境变量' };
   }
@@ -114,14 +117,53 @@ async function syncWithUploaders(
 
   let totalAdded = 0;
   const results: string[] = [];
+  let completedCount = 0;
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayTimestamp = Math.floor(todayStart.getTime() / 1000);
 
-  for (let i = 0; i < uploaders.length; i++) {
-    const up = uploaders[i];
-    onProgress?.(`🔄 [${i + 1}/${uploaders.length}] ${up.name}...`);
+  // ============================================
+  // 智能调度：仅在必要时启用公平调度
+  // ============================================
+  const taskCount = uploaders.length;
+  
+  // 极速配置：最大并发（所有请求同时发出）
+  const CONCURRENCY = Math.min(taskCount, 20); // 最多 20 并发
+  
+  // 公平调度阈值
+  const needFairSchedule = taskCount >= 20;
+  
+  // ============================================
+  // 阶段1：并发获取所有 UP 主的视频（纯网络请求）
+  // ============================================
+  type VideoData = {
+    user_id: string;
+    bvid: string;
+    aid: number;
+    mid: number;
+    title: string;
+    pic: string;
+    description: string;
+    duration: number;
+    view_count: number;
+    danmaku_count: number;
+    reply_count: number;
+    favorite_count: number;
+    coin_count: number;
+    share_count: number;
+    like_count: number;
+    pubdate: string;
+  };
+  
+  const allVideos: VideoData[] = [];
+  let rateLimitHits = 0;
+  
+  // 单个 UP 主获取任务（仅获取，不写入）
+  const fetchOne = async (up: Uploader): Promise<{ name: string; videos: VideoData[]; rateLimited?: boolean }> => {
+    if (shouldCancel?.()) {
+      return { name: up.name, videos: [] };
+    }
     
     try {
       const { videos } = await getUploaderVideos(up.mid, 1, SYNC_CONFIG.videosPerUploader);
@@ -131,17 +173,13 @@ async function syncWithUploaders(
         : videos;
 
       if (todayVideos.length === 0) {
-        results.push(`${up.name}: 0`);
-        if (i < uploaders.length - 1) {
-          await sleep(SYNC_CONFIG.delayBetweenUploaders);
-        }
-        continue;
+        return { name: up.name, videos: [] };
       }
 
       const videoDataList = todayVideos.map(video => {
         const data = transformVideoToDbFormat(video, up.mid);
         return {
-          user_id: up.user_id,  // 添加用户ID
+          user_id: up.user_id,
           bvid: data.bvid,
           aid: data.aid,
           mid: data.mid,
@@ -160,52 +198,110 @@ async function syncWithUploaders(
         };
       });
 
-      const { error: insertError } = await supabase
-        .from('video')
-        .upsert(videoDataList, { onConflict: 'user_id,bvid' });
-
-      if (!insertError) {
-        totalAdded += todayVideos.length;
-        results.push(`${up.name}: ${todayVideos.length}`);
-        
-        // 更新 UP 主的同步记录
-        await supabase
-          .from('uploader')
-          .update({ 
-            last_sync_count: todayVideos.length,
-            last_sync_at: new Date().toISOString()
-          })
-          .eq('id', up.id);
-      } else {
-        results.push(`${up.name}: 写入失败`);
+      return { name: up.name, videos: videoDataList };
+    } catch (err: any) {
+      const errMsg = err?.message || '';
+      if (errMsg.includes('-799') || errMsg.includes('频繁') || errMsg.includes('-352') || errMsg.includes('风控')) {
+        return { name: up.name, videos: [], rateLimited: true };
       }
-
-      if (i < uploaders.length - 1) {
-        await sleep(SYNC_CONFIG.delayBetweenUploaders);
-      }
-
-    } catch (error: any) {
-      const errMsg = error?.message || '';
-      
-      if (errMsg.includes('-799') || errMsg.includes('频繁')) {
-        results.push(`${up.name}: 限流`);
-        await sleep(10000);
-        continue;
-      }
-      
-      if (errMsg.includes('-352') || errMsg.includes('风控')) {
-        throw error;
-      }
-      
-      results.push(`${up.name}: 失败`);
+      return { name: up.name, videos: [] };
     }
+  };
+
+  // ============================================
+  // 阶段1：有限并发获取（避免触发B站风控）
+  // ============================================
+  const MAX_CONCURRENT = 8; // 最大并发数，平衡速度和风控
+  
+  onProgress?.(`🚀 获取 ${taskCount} 个UP主视频...`);
+  
+  const fetchResults: { name: string; videos: VideoData[]; rateLimited?: boolean }[] = [];
+  const queue = [...uploaders];
+  let activeCount = 0;
+  
+  // 有限并发执行
+  await new Promise<void>((resolve) => {
+    const runNext = async () => {
+      while (queue.length > 0 && activeCount < MAX_CONCURRENT) {
+        const up = queue.shift()!;
+        activeCount++;
+        
+        (async () => {
+          const result = await fetchOne(up);
+          fetchResults.push(result);
+          completedCount++;
+          activeCount--;
+          
+          // 更新进度
+          const percent = Math.round((completedCount / taskCount) * 100);
+          onProgress?.(`🔄 [${completedCount}/${taskCount}] ${percent}%`);
+          
+          if (result.rateLimited) rateLimitHits++;
+          
+          // 继续下一个
+          if (queue.length > 0) {
+            runNext();
+          } else if (activeCount === 0) {
+            resolve();
+          }
+        })();
+      }
+      
+      if (queue.length === 0 && activeCount === 0) {
+        resolve();
+      }
+    };
+    
+    runNext();
+  });
+  
+  if (shouldCancel?.()) {
+    return { success: false, message: '已取消同步', videosAdded: 0, cancelled: true };
+  }
+  
+  // 收集所有视频
+  for (const result of fetchResults) {
+    allVideos.push(...result.videos);
+  }
+  
+  // ============================================
+  // 阶段2：分批写入数据库（每批最多 200 条）
+  // ============================================
+  if (allVideos.length > 0) {
+    const BATCH_SIZE = 200;
+    const batches = [];
+    
+    for (let i = 0; i < allVideos.length; i += BATCH_SIZE) {
+      batches.push(allVideos.slice(i, i + BATCH_SIZE));
+    }
+    
+    onProgress?.(`💾 写入 ${allVideos.length} 个视频 (${batches.length} 批)...`);
+    
+    // 并发写入所有批次
+    const writePromises = batches.map(batch => 
+      supabase.from('video').upsert(batch, { onConflict: 'user_id,bvid' })
+    );
+    
+    const writeResults = await Promise.all(writePromises);
+    const successCount = writeResults.filter(r => !r.error).length;
+    
+    if (successCount === batches.length) {
+      totalAdded = allVideos.length;
+    } else {
+      // 部分成功
+      totalAdded = successCount * BATCH_SIZE;
+    }
+  }
+
+  if (shouldCancel?.()) {
+    return { success: false, message: '已取消同步', videosAdded: totalAdded, cancelled: true };
   }
 
   markSynced();
 
   return {
     success: true,
-    message: `✅ 同步完成！${results.join('，')}`,
+    message: `✅ 同步完成！新增 ${totalAdded} 个视频`,
     videosAdded: totalAdded,
   };
 }

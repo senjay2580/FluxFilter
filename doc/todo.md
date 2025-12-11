@@ -104,8 +104,80 @@
 - [ ] 重构 App.tsx 使用 hooks/useVideos.ts
 - [ ] 重构待看列表逻辑使用 hooks/useWatchlist.ts
 - [ ] RSS 功能添加自有 API 作为备用
-- [ ] 删除 api/sync.ts（确认无用后）
+- [x] ~~删除 api/sync.ts（确认无用后）~~ 已改为定时同步 API
 
 ---
 
-*更新时间：2024-12-11*
+## 🚨 已知问题 - 视频同步相关
+
+### 1. GitHub Actions 定时任务
+
+**问题描述**：
+- GitHub Actions 调用 Vercel `/api/sync` 时超时（504 错误）
+- Vercel Edge Function 超时限制：Hobby 10秒，Pro 60秒
+- UP 主数量多时（27个），串行同步时间过长
+
+**当前状态**：⏸️ 已暂停（注释掉 schedule）
+
+**临时方案**：
+- 已创建独立 Node.js 服务 `scripts/sync-service.js`
+- 可部署到 VPS/Railway/Render 等支持长时间运行的平台
+
+---
+
+### 2. Vercel IP 限流风险
+
+**问题描述**：
+- 所有用户的 B站 API 请求都通过 Vercel 转发
+- 所有请求来自同一 IP（Vercel 出口）
+- B站可能对该 IP 进行限流或封禁
+
+**风险评估**：
+
+| 场景 | 风险等级 |
+|-----|---------|
+| 少量用户手动同步 | ✅ 低风险 |
+| 多用户同时同步 | ⚠️ 中风险 |
+| 定时任务批量同步所有用户 | ❌ 高风险 |
+
+**已采取措施**：
+- 并发数降至 3
+- 添加随机延迟（0-2秒）错开请求
+- 每个请求间隔 50ms
+
+---
+
+### 3. B站 API 风控
+
+**问题描述**：
+- `/x/space/arc/search` 接口返回 `-352: 风控校验失败`
+- `/x/space/wbi/arc/search` 需要 WBI 签名
+
+**解决方案**：
+- [x] 改用 `/x/polymer/web-dynamic/v1/feed/space` 动态接口
+- [x] 支持用户自定义 Cookie（存储在 user 表 `bilibili_cookie` 字段）
+- [x] 添加模拟浏览器请求头
+
+---
+
+### 4. 同步架构方案对比
+
+| 方案 | 优点 | 缺点 | 状态 |
+|-----|------|------|------|
+| **前端手动同步** | 简单、IP 分散 | 需要用户主动操作 | ✅ 已实现 |
+| **GitHub Actions** | 免费 | Vercel 超时限制 | ⏸️ 已暂停 |
+| **独立 Node.js 服务** | 无超时限制 | 需要服务器 | 📦 已创建脚本 |
+| **Supabase Edge Functions** | 与数据库同平台 | 需要额外开发 | 🔜 待研究 |
+
+---
+
+### 5. 待解决
+
+- [ ] 研究 Supabase Edge Functions + pg_cron 方案
+- [ ] 考虑用户级别的同步队列，避免同时请求
+- [ ] 监控 B站 API 限流情况，动态调整请求频率
+- [ ] 前端添加"上次同步时间"和"同步状态"提示
+
+---
+
+*更新时间：2024-12-12*

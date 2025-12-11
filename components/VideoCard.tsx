@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Video } from '../types';
 import { ClockIcon } from './Icons';
@@ -21,74 +21,71 @@ function isDbVideo(video: Video | VideoWithUploader): video is VideoWithUploader
   return 'bvid' in video && 'pic' in video;
 }
 
+// 格式化数字（万、亿）- 移到组件外避免重复创建
+const formatNumber = (num: number): string => {
+  if (num >= 100000000) return `${(num / 100000000).toFixed(1)}亿`;
+  if (num >= 10000) return `${(num / 10000).toFixed(1)}万`;
+  return num.toString();
+};
+
+// 格式化发布时间 - 移到组件外
+const formatPubdate = (pubdate: string | number): string => {
+  const date = new Date(pubdate);
+  const now = new Date();
+  const diffHours = Math.floor((now.getTime() - date.getTime()) / 3600000);
+
+  if (diffHours < 1) return '刚刚';
+  if (diffHours < 24) return `${diffHours}小时前`;
+  if (diffHours < 168) return `${Math.floor(diffHours / 24)}天前`;
+  return `${date.getMonth() + 1}月${date.getDate()}日`;
+};
+
 const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   
-  // 统一数据格式
-  const bvid = isDbVideo(video) ? video.bvid : video.id;
-  const thumbnail = isDbVideo(video) ? video.pic : video.thumbnail;
-  const title = video.title;
-  const duration = isDbVideo(video)
-    ? formatDuration(video.duration)
-    : video.duration;
-  const author = isDbVideo(video)
-    ? (video as any).uploader?.name || '未知UP主'
-    : video.author;
-  const avatar = isDbVideo(video)
-    ? (video as any).uploader?.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'
-    : video.avatar;
+  // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
+  const videoData = useMemo(() => {
+    const isDb = isDbVideo(video);
+    return {
+      bvid: isDb ? video.bvid : video.id,
+      thumbnail: isDb ? video.pic : video.thumbnail,
+      title: video.title,
+      duration: isDb ? formatDuration(video.duration) : video.duration,
+      author: isDb ? (video as any).uploader?.name || '未知UP主' : video.author,
+      avatar: isDb ? (video as any).uploader?.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg' : video.avatar,
+      stats: isDb ? {
+        views: video.view_count,
+        danmaku: video.danmaku_count,
+        replies: video.reply_count,
+        likes: video.like_count,
+      } : null,
+      pubdate: isDb && video.pubdate ? formatPubdate(video.pubdate) : null,
+    };
+  }, [video]);
 
-  // 获取统计数据（仅数据库视频有）
-  const stats = isDbVideo(video) ? {
-    views: video.view_count,
-    danmaku: video.danmaku_count,
-    replies: video.reply_count,
-    likes: video.like_count,
-  } : null;
-
-  // 格式化数字（万、亿）
-  const formatNumber = (num: number): string => {
-    if (num >= 100000000) return `${(num / 100000000).toFixed(1)}亿`;
-    if (num >= 10000) return `${(num / 10000).toFixed(1)}万`;
-    return num.toString();
-  };
-
-  // 格式化发布时间
-  const pubdate = isDbVideo(video) && video.pubdate
-    ? (() => {
-        const date = new Date(video.pubdate);
-        const now = new Date();
-        const diffHours = Math.floor((now.getTime() - date.getTime()) / 3600000);
-
-        if (diffHours < 1) return '刚刚';
-        if (diffHours < 24) return `${diffHours}小时前`;
-        if (diffHours < 168) return `${Math.floor(diffHours / 24)}天前`;
-        return `${date.getMonth() + 1}月${date.getDate()}日`;
-      })()
-    : null;
+  const { bvid, thumbnail, title, duration, author, avatar, stats, pubdate } = videoData;
 
   // 抽屉状态 - 使用全局控制
   const drawerOpen = openMenuId === bvid;
 
-  const handleClick = () => {
+  // 使用 useCallback 缓存事件处理函数
+  const handleClick = useCallback(() => {
     handleVideoClick(bvid);
-  };
+  }, [bvid]);
 
-  const handleMoreClick = (e: React.MouseEvent) => {
+  const handleMoreClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    // 切换抽屉状态
     onMenuToggle?.(drawerOpen ? null : bvid);
-    // 触发震动反馈
     if (navigator.vibrate) navigator.vibrate(10);
-  };
+  }, [bvid, drawerOpen, onMenuToggle]);
 
-  const handleAddToWatchlist = (e?: React.MouseEvent) => {
+  const handleAddToWatchlistClick = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
     onAddToWatchlist?.(bvid);
     onMenuToggle?.(null);
-  };
+  }, [bvid, onAddToWatchlist, onMenuToggle]);
 
-  const handleShare = (e: React.MouseEvent) => {
+  const handleShare = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const url = `https://www.bilibili.com/video/${bvid}`;
     if (navigator.share) {
@@ -98,14 +95,13 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
       alert('链接已复制到剪贴板');
     }
     onMenuToggle?.(null);
-  };
+  }, [bvid, title, onMenuToggle]);
 
-  // 移除待看
-  const handleRemoveFromWatchlist = (e?: React.MouseEvent) => {
+  const handleRemoveFromWatchlistClick = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
     onRemoveFromWatchlist?.(bvid);
     onMenuToggle?.(null);
-  };
+  }, [bvid, onRemoveFromWatchlist, onMenuToggle]);
 
   // 抽屉打开时禁止背景滚动（保持滚动条宽度避免闪动）
   React.useEffect(() => {
@@ -298,7 +294,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               {/* 加入待看 */}
               {!isInWatchlist && (
                 <button
-                  onClick={handleAddToWatchlist}
+                  onClick={handleAddToWatchlistClick}
                   className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
                 >
                   <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
@@ -314,7 +310,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               {/* 从待看移除 */}
               {isInWatchlist && onRemoveFromWatchlist && (
                 <button
-                  onClick={handleRemoveFromWatchlist}
+                  onClick={handleRemoveFromWatchlistClick}
                   className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
                 >
                   <div className="w-9 h-9 rounded-full bg-red-500/15 flex items-center justify-center">
@@ -508,4 +504,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
   );
 };
 
-export default VideoCard;
+// 使用 memo 避免不必要的重渲染
+export default memo(VideoCard, (prevProps, nextProps) => {
+  // 只有这些属性变化时才重新渲染
+  const prevVideo = prevProps.video;
+  const nextVideo = nextProps.video;
+  const prevBvid = 'bvid' in prevVideo ? prevVideo.bvid : prevVideo.id;
+  const nextBvid = 'bvid' in nextVideo ? nextVideo.bvid : nextVideo.id;
+  
+  return (
+    prevBvid === nextBvid &&
+    prevProps.isInWatchlist === nextProps.isInWatchlist &&
+    prevProps.openMenuId === nextProps.openMenuId
+  );
+});

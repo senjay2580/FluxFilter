@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { getStoredUserId } from '../lib/auth';
+import { getStorageCache, setStorageCache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 import type { VideoWithUploader } from '../lib/database.types';
 
 interface UseVideosOptions {
@@ -106,9 +107,26 @@ export function useVideoCountByDate() {
   useEffect(() => {
     async function fetch() {
       try {
+        const userId = getStoredUserId();
+        if (!userId) {
+          setCountMap({});
+          setLoading(false);
+          return;
+        }
+        
+        // 先检查缓存
+        const cacheKey = CACHE_KEYS.VIDEO_COUNT_BY_DATE(userId);
+        const cached = getStorageCache<Record<string, number>>(cacheKey);
+        if (cached) {
+          setCountMap(cached);
+          setLoading(false);
+          return;
+        }
+        
         const { data, error } = await supabase
           .from('video')
-          .select('pubdate');
+          .select('pubdate')
+          .eq('user_id', userId);
 
         if (error) throw error;
 
@@ -120,6 +138,8 @@ export function useVideoCountByDate() {
           }
         });
 
+        // 写入缓存（30分钟）
+        setStorageCache(cacheKey, map, CACHE_TTL.VIDEO_COUNT);
         setCountMap(map);
       } catch (err) {
         console.error('获取视频统计失败:', err);

@@ -6,14 +6,14 @@
 name: Sync Bilibili Videos
 
 on:
-  # 定时任务（UTC时区）
-  schedule:
-    # 北京时间 6:30 = UTC 22:30 (前一天)
-    - cron: '30 22 * * *'
-    # 北京时间 17:00 = UTC 9:00
-    - cron: '0 9 * * *'
+  # 定时任务暂时关闭
+  # schedule:
+  #   # 北京时间 6:30 = UTC 22:30 (前一天)
+  #   - cron: '30 22 * * *'
+  #   # 北京时间 17:00 = UTC 9:00
+  #   - cron: '0 9 * * *'
   
-  # 支持手动触发
+  # 仅支持手动触发
   workflow_dispatch:
 
 jobs:

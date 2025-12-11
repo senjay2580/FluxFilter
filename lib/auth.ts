@@ -18,8 +18,9 @@ export interface User {
 // 当前用户缓存
 let currentUser: User | null = null;
 
-// 用户ID存储键
+// 用户信息存储键
 const USER_ID_KEY = 'fluxfilter_user_id';
+const USERNAME_KEY = 'fluxfilter_username';
 
 /**
  * 获取存储的用户ID
@@ -36,10 +37,25 @@ export function setStoredUserId(userId: string): void {
 }
 
 /**
- * 清除存储的用户ID
+ * 获取存储的用户名
+ */
+export function getStoredUsername(): string | null {
+  return localStorage.getItem(USERNAME_KEY);
+}
+
+/**
+ * 存储用户名
+ */
+export function setStoredUsername(username: string): void {
+  localStorage.setItem(USERNAME_KEY, username);
+}
+
+/**
+ * 清除存储的用户信息
  */
 export function clearStoredUserId(): void {
   localStorage.removeItem(USER_ID_KEY);
+  localStorage.removeItem(USERNAME_KEY);
   currentUser = null;
 }
 
@@ -102,6 +118,7 @@ export async function register(username: string, password: string): Promise<{ us
     }
     
     setStoredUserId(data.id);
+    setStoredUsername(data.username || username);
     currentUser = data;
     
     return { user: data, error: null };
@@ -128,6 +145,7 @@ export async function login(username: string, password: string): Promise<{ user:
     }
     
     setStoredUserId(data.id);
+    setStoredUsername(data.username || username);
     currentUser = data;
     
     // 更新最后登录时间

@@ -1,8 +1,17 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { formatLastSyncTime, triggerSyncWithUploaders } from '../lib/autoSync';
 import { supabase } from '../lib/supabase';
-import { getStoredUserId } from '../lib/auth';
+import { getStoredUserId, getStoredUsername } from '../lib/auth';
+import { 
+  waitForSyncLock, 
+  releaseSyncLock, 
+  getQueueStatus, 
+  checkSyncThrottle, 
+  recordSyncComplete,
+  getSyncRateLimitStatus 
+} from '../lib/syncQueue';
+import { cachedFetch, invalidateCache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 
 interface Uploader {
   id: number;
@@ -49,7 +58,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   
   const cancelRef = useRef(false);
 
-  const fetchUploaders = useCallback(async () => {
+  const fetchUploaders = useCallback(async (forceRefresh = false) => {
     setLoadingUploaders(true);
     try {
       const userId = getStoredUserId();
@@ -58,14 +67,25 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         return;
       }
       
-      const { data } = await supabase
-        .from('uploader')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('is_active', true)
-        .order('name');
+      // 使用缓存获取UP主列表
+      const list = await cachedFetch<Uploader[]>(
+        CACHE_KEYS.UPLOADERS(userId),
+        async () => {
+          const { data } = await supabase
+            .from('uploader')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('is_active', true)
+            .order('name');
+          return data || [];
+        },
+        {
+          memoryTTL: CACHE_TTL.UPLOADERS,
+          storageTTL: CACHE_TTL.UPLOADERS,
+          forceRefresh,
+        }
+      );
       
-      const list = data || [];
       setUploaders(list);
       setSelectedMids(new Set(list.map(u => u.mid)));
     } catch (err) {
@@ -114,40 +134,111 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const handleStartSync = async () => {
     if (selectedMids.size === 0) return;
     
+    // 0. 节流检查 - 防止频繁同步（白名单用户跳过）
+    const WHITELIST_USERS = ['senjay']; // 白名单用户，跳过限流
+    const username = getStoredUsername();
+    const isWhitelisted = username && WHITELIST_USERS.includes(username.toLowerCase());
+    
+    if (!isWhitelisted) {
+      const throttleCheck = checkSyncThrottle();
+      if (!throttleCheck.canSync) {
+        setMessage(`⏳ ${throttleCheck.reason}`);
+        setSyncStatus('error');
+        setTimeout(() => setSyncStatus('idle'), 3000);
+        return;
+      }
+    }
+    
     cancelRef.current = false;
     setSyncing(true);
     setSyncStatus('syncing');
-    setMessage('准备同步...');
+    setMessage('🚀 准备同步...');
     setProgress(0);
 
+    let lockId: string | undefined;
+    const startTime = Date.now(); // 记录开始时间
+
     try {
+      // 1. 等待获取同步锁（小任务直接跳过队列）
       const selectedUploaders = uploaders.filter(u => selectedMids.has(u.mid));
+      const taskCount = selectedUploaders.length;
       
-      const result = await triggerSyncWithUploaders(selectedUploaders, (progressMsg) => {
-        if (cancelRef.current) return;
-        
-        setMessage(progressMsg);
-        
-        const match = progressMsg.match(/\[(\d+)\/(\d+)\]\s*(.+)/);
-        if (match) {
-          const current = parseInt(match[1]);
-          const total = parseInt(match[2]);
-          setProgress(Math.round((current / total) * 100));
-          setCurrentUploader(match[3]?.replace('...', '') || '');
-        }
-      });
-      
+      const lockResult = await waitForSyncLock(
+        (position) => {
+          if (cancelRef.current) return;
+          setMessage(`⏳ 排队中... 前面还有 ${position} 人`);
+        },
+        (jitterSeconds) => {
+          if (cancelRef.current) return;
+          setMessage(`🛡️ 检测到高并发，随机等待 ${jitterSeconds} 秒避免风暴...`);
+        },
+        taskCount  // 传递任务量，小任务会跳过队列
+      );
+
       if (cancelRef.current) {
+        setSyncStatus('idle');
+        setMessage('已取消同步');
+        return;
+      }
+
+      if (lockResult.timedOut) {
+        setSyncStatus('error');
+        setMessage('⏰ 等待超时，请稍后重试');
+        setSyncing(false);
+        return;
+      }
+
+      lockId = lockResult.lockId;
+      setMessage('🚀 开始同步...');
+
+      // 2. 执行同步（selectedUploaders 已在上面定义）
+      const result = await triggerSyncWithUploaders(
+        selectedUploaders, 
+        (progressMsg) => {
+          if (cancelRef.current) return;
+          
+          setMessage(progressMsg);
+          
+          const match = progressMsg.match(/\[(\d+)\/(\d+)\]\s*(.+)/);
+          if (match) {
+            const current = parseInt(match[1]);
+            const total = parseInt(match[2]);
+            setProgress(Math.round((current / total) * 100));
+            setCurrentUploader(match[3]?.replace('...', '') || '');
+          }
+        },
+        () => cancelRef.current  // 传入取消检查函数
+      );
+      
+      if (result.cancelled || cancelRef.current) {
         setSyncStatus('idle');
         setMessage('已取消同步');
       } else {
         setProgress(100);
-        setMessage(result.message);
+        
+        // 计算耗时
+        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+        const successMsg = result.success 
+          ? `✅ 同步完成！新增 ${result.videosAdded || 0} 个视频，耗时 ${duration}秒`
+          : result.message;
+        
+        setMessage(successMsg);
         setSyncStatus(result.success ? 'success' : 'error');
         setLastSync(formatLastSyncTime());
         
         if (result.success && result.videosAdded && result.videosAdded > 0) {
           window.dispatchEvent(new CustomEvent('sync-complete'));
+          
+          // 同步成功后使视频统计缓存失效
+          const userId = getStoredUserId();
+          if (userId) {
+            invalidateCache(CACHE_KEYS.VIDEO_COUNT_BY_DATE(userId));
+          }
+        }
+        
+        // 记录同步完成（用于节流计数）
+        if (result.success) {
+          recordSyncComplete();
         }
       }
     } catch (error) {
@@ -156,6 +247,8 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         setSyncStatus('error');
       }
     } finally {
+      // 释放同步锁
+      await releaseSyncLock(lockId);
       setSyncing(false);
       cancelRef.current = false;
     }

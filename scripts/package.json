@@ -1,0 +1,14 @@
+{
+  "name": "bilibili-sync-service",
+  "version": "1.0.0",
+  "description": "B站视频同步定时任务服务",
+  "main": "sync-service.js",
+  "scripts": {
+    "start": "node sync-service.js",
+    "sync": "node -e \"require('./sync-service.js')\""
+  },
+  "dependencies": {
+    "node-cron": "^3.0.3",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
