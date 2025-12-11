@@ -56,10 +56,19 @@
         will-change: transform;
         transform: translateZ(0);
       }
-      /* 长列表性能优化 */
-      .video-card-container {
-        content-visibility: auto;
-        contain-intrinsic-size: 0 280px;
+      /* 长列表性能优化 - 仅桌面端启用 content-visibility */
+      @media (min-width: 769px) {
+        .video-card-container {
+          content-visibility: auto;
+          contain-intrinsic-size: 0 280px;
+        }
+      }
+      /* 移动端基础渲染优化 */
+      @media (max-width: 768px) {
+        .video-card-container {
+          transform: translateZ(0);
+          -webkit-transform: translateZ(0);
+        }
       }
       /* Hide scrollbar for Chrome, Safari and Opera */
       .no-scrollbar::-webkit-scrollbar {
