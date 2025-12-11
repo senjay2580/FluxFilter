@@ -77,6 +77,11 @@ CREATE INDEX IF NOT EXISTS idx_video_mid ON video(user_id, mid);
 CREATE INDEX IF NOT EXISTS idx_video_pubdate ON video(user_id, pubdate DESC);
 CREATE INDEX IF NOT EXISTS idx_video_bvid ON video(bvid);
 
+-- 外键：video → uploader（同一用户下，通过mid关联）
+ALTER TABLE video 
+ADD CONSTRAINT fk_video_uploader 
+FOREIGN KEY (user_id, mid) REFERENCES uploader(user_id, mid) ON DELETE CASCADE;
+
 -- 3. 待看列表表（用户收藏的待看视频）
 CREATE TABLE IF NOT EXISTS watchlist (
     id BIGSERIAL PRIMARY KEY,

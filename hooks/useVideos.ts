@@ -33,7 +33,10 @@ export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
 
       let query = supabase
         .from('video')
-        .select('*')
+        .select(`
+          *,
+          uploader:uploader!fk_video_uploader (name, face)
+        `)
         .order('pubdate', { ascending: false })
         .range(isLoadMore ? offset : 0, (isLoadMore ? offset : 0) + limit - 1);
 
@@ -44,22 +47,9 @@ export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
         query = query.lte('pubdate', options.endDate.toISOString());
       }
 
-      const { data: videoData, error: fetchError } = await query;
+      const { data, error: fetchError } = await query;
 
       if (fetchError) throw fetchError;
-
-      // 获取UP主信息
-      const mids = [...new Set(videoData?.map(v => v.mid) || [])];
-      const { data: uploaderData } = await supabase
-        .from('uploader')
-        .select('mid, name, face')
-        .in('mid', mids);
-      
-      const uploaderMap = new Map(uploaderData?.map(u => [u.mid, u]) || []);
-      const data = videoData?.map(v => ({
-        ...v,
-        uploader: uploaderMap.get(v.mid) || null
-      })) as VideoWithUploader[];
 
       if (isLoadMore) {
         setVideos(prev => [...prev, ...(data || [])]);
