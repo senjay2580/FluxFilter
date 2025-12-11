@@ -9,6 +9,7 @@ interface VideoTimelineProps {
   onVideoClick?: (bvid: string) => void;
   watchLaterIds?: Set<string>;
   onToggleWatchLater?: (bvid: string) => void;
+  onDelete?: (bvid: string) => void;
 }
 
 // 解析 pubdate（可能是 ISO 字符串或 Unix 时间戳）
@@ -173,9 +174,10 @@ const DateHeader = memo(({ date, count }: { date: string; count: number }) => (
 
 DateHeader.displayName = 'DateHeader';
 
-const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoClick, watchLaterIds, onToggleWatchLater }) => {
+const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoClick, watchLaterIds, onToggleWatchLater, onDelete }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [openMenuBvid, setOpenMenuBvid] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dateRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -517,6 +519,25 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
                     <p className="text-xs text-gray-500 mt-0.5">跳转到哔哩哔哩观看</p>
                   </div>
                 </button>
+
+                {/* 删除视频 */}
+                {onDelete && (
+                  <button
+                    onClick={() => setShowDeleteConfirm(true)}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-red-500/15 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] text-red-400 font-medium">删除视频</span>
+                      <p className="text-xs text-gray-500 mt-0.5">从数据库中永久移除</p>
+                    </div>
+                  </button>
+                )}
               </div>
 
               {/* 取消按钮 */}
@@ -534,6 +555,66 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
         document.body
       )}
 
+      {/* 删除确认对话框 */}
+      {showDeleteConfirm && menuVideo && onDelete && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-6" onClick={(e) => e.stopPropagation()}>
+          {/* 遮罩 */}
+          <div 
+            className="absolute inset-0 bg-black/80"
+            onClick={() => setShowDeleteConfirm(false)}
+            style={{ animation: 'fadeIn 0.2s ease-out' }}
+          />
+          
+          {/* 对话框 */}
+          <div 
+            className="relative bg-[#1a1a1f] rounded-2xl p-6 max-w-sm w-full border border-white/10 shadow-2xl"
+            style={{ animation: 'scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}
+          >
+            {/* 警告图标 */}
+            <div className="flex justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+            </div>
+            
+            {/* 标题 */}
+            <h3 className="text-white text-lg font-bold text-center mb-2">确定删除？</h3>
+            
+            {/* 描述 */}
+            <p className="text-gray-400 text-sm text-center mb-6 leading-relaxed">
+              此操作将永久删除视频<br/>
+              <span className="text-white font-medium">"{menuVideo.title.length > 20 ? menuVideo.title.slice(0, 20) + '...' : menuVideo.title}"</span><br/>
+              删除后无法恢复
+            </p>
+            
+            {/* 按钮 */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 py-3 bg-white/10 hover:bg-white/15 rounded-xl text-white font-medium transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  onDelete(menuVideo.bvid);
+                  setShowDeleteConfirm(false);
+                  setOpenMenuBvid(null);
+                }}
+                className="flex-1 py-3 bg-red-500 hover:bg-red-600 rounded-xl text-white font-medium transition-colors"
+              >
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       <style>{`
         @keyframes fadeIn {
           from { opacity: 0; }
@@ -542,6 +623,10 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
         @keyframes slideUp {
           from { transform: translateY(100%); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes scaleIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
         }
         .pb-safe {
           padding-bottom: env(safe-area-inset-bottom, 16px);

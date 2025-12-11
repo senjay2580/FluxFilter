@@ -24,9 +24,11 @@ import { clearCookieCache } from './lib/bilibili';
 import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 
 const App = () => {
-  // 认证状态
+  // 认证状态 - null=检查中, true=已登录, false=游客模式
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authExpired, setAuthExpired] = useState(false); // 认证过期标记
+  const [networkError, setNetworkError] = useState<string | null>(null); // 网络错误
   
   const [activeTab, setActiveTab] = useState<Tab>(() => {
     const saved = localStorage.getItem('activeTab');
@@ -58,7 +60,7 @@ const App = () => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
   
-  // 检查登录状态
+  // 检查登录状态 - 支持游客模式
   useEffect(() => {
     const checkAuth = async () => {
       // 最小延迟让加载动画显示
@@ -66,15 +68,21 @@ const App = () => {
       
       const userId = getStoredUserId();
       if (userId) {
-        const user = await getCurrentUser();
-        await minDelay;
-        if (user) {
-          setCurrentUser(user);
-          setIsAuthenticated(true);
-          return;
+        try {
+          const user = await getCurrentUser();
+          await minDelay;
+          if (user) {
+            setCurrentUser(user);
+            setIsAuthenticated(true);
+            return;
+          }
+        } catch (err) {
+          console.error('认证检查失败:', err);
+          // 网络错误时仍允许进入游客模式
         }
       }
       await minDelay;
+      // 游客模式 - 允许访问但无数据功能
       setIsAuthenticated(false);
     };
     checkAuth();
@@ -189,10 +197,33 @@ const App = () => {
     }
   }, [activeTab, tabs]);
 
+  // 处理 API 错误 - 检测认证过期和网络问题
+  const handleApiError = useCallback((err: any, context: string) => {
+    console.error(`${context}:`, err);
+    
+    // 检测认证过期 (401/403)
+    if (err?.code === 'PGRST301' || err?.message?.includes('JWT') || err?.status === 401 || err?.status === 403) {
+      setAuthExpired(true);
+      setNetworkError('登录已过期，请重新登录');
+      return '登录已过期';
+    }
+    
+    // 检测网络错误
+    if (err?.message?.includes('network') || err?.message?.includes('fetch') || !navigator.onLine) {
+      setNetworkError('网络连接失败，请检查网络后重试');
+      return '网络连接失败';
+    }
+    
+    // 其他错误
+    const message = err instanceof Error ? err.message : '操作失败';
+    setNetworkError(message);
+    return message;
+  }, []);
+
   // 从 Supabase 获取视频数据
   const fetchVideos = useCallback(async () => {
-    // 未配置 Supabase 时直接返回空
-    if (!isSupabaseConfigured) {
+    // 未配置 Supabase 或游客模式时直接返回空
+    if (!isSupabaseConfigured || !currentUser?.id) {
       setLoading(false);
       setVideos([]);
       return;
@@ -201,13 +232,7 @@ const App = () => {
     try {
       setLoading(true);
       setError(null);
-      
-      const userId = currentUser?.id;
-      if (!userId) {
-        setVideos([]);
-        setLoading(false);
-        return;
-      }
+      setNetworkError(null);
       
       const { data, error: fetchError } = await supabase
         .from('video')
@@ -215,18 +240,18 @@ const App = () => {
           *,
           uploader:uploader!fk_video_uploader (name, face)
         `)
-        .eq('user_id', userId)
+        .eq('user_id', currentUser.id)
         .order('pubdate', { ascending: false });
 
       if (fetchError) throw fetchError;
       setVideos((data as VideoWithUploader[]) || []);
     } catch (err) {
-      console.error('获取视频失败:', err);
-      setError(err instanceof Error ? err.message : '加载失败');
+      const message = handleApiError(err, '获取视频失败');
+      setError(message);
     } finally {
       setLoading(false);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, handleApiError]);
 
   // 从 Supabase 获取待看列表
   const fetchWatchlist = useCallback(async () => {
@@ -331,6 +356,35 @@ const App = () => {
       }
     }
   }, [watchLaterIds, watchlistLoading]);
+
+  // 删除视频
+  const handleDeleteVideo = useCallback(async (bvid: string) => {
+    if (!currentUser?.id || !isSupabaseConfigured) {
+      showToast('请先登录');
+      return;
+    }
+
+    try {
+      // 先从 UI 中移除
+      setVideos(prev => prev.filter(v => v.bvid !== bvid));
+      
+      // 从数据库删除
+      const { error } = await supabase
+        .from('video')
+        .delete()
+        .eq('bvid', bvid)
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+      
+      showToast('视频已删除');
+    } catch (err) {
+      console.error('删除视频失败:', err);
+      // 删除失败，重新加载数据
+      fetchVideos();
+      showToast('删除失败，请重试');
+    }
+  }, [currentUser?.id, fetchVideos]);
 
   // 获取所有UP主列表（去重，按视频数量排序）
   const uploaders = useMemo(() => {
@@ -479,9 +533,9 @@ const App = () => {
     );
   }
 
-  // 未登录显示登录页
-  if (!isAuthenticated) {
-    return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+  // 认证过期时显示登录页
+  if (authExpired) {
+    return <AuthPage onLoginSuccess={() => { setAuthExpired(false); handleLoginSuccess(); }} />;
   }
 
   return (
@@ -490,6 +544,64 @@ const App = () => {
       
       {/* PWA 安装提示 */}
       <PWAInstallPrompt />
+
+      {/* 网络错误提示 */}
+      {networkError && (
+        <div className="fixed top-4 left-4 right-4 z-[9999] animate-slide-down">
+          <div className="bg-red-500/90 backdrop-blur-xl rounded-2xl p-4 shadow-2xl border border-red-400/30">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-medium">{networkError}</p>
+                <p className="text-white/70 text-sm mt-0.5">
+                  {!navigator.onLine ? '请检查您的网络连接' : '请稍后重试或联系支持'}
+                </p>
+              </div>
+              <button 
+                onClick={() => setNetworkError(null)}
+                className="p-1 hover:bg-white/20 rounded-lg transition-colors"
+              >
+                <svg className="w-5 h-5 text-white/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 游客模式提示 - 未登录时显示 */}
+      {!isAuthenticated && !authExpired && (
+        <div className="fixed bottom-20 left-4 right-4 z-50">
+          <div className="bg-gradient-to-r from-cyber-lime/20 to-cyan-500/20 backdrop-blur-xl rounded-2xl p-4 border border-cyber-lime/30">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-cyber-lime/20 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-medium text-sm">游客模式</p>
+                <p className="text-gray-400 text-xs">登录后可同步视频数据</p>
+              </div>
+              <button 
+                onClick={() => setAuthExpired(true)}
+                className="px-4 py-2 bg-cyber-lime text-black text-sm font-medium rounded-xl hover:bg-cyber-lime/90 transition-colors"
+              >
+                登录
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Spotify风格渐变背景 */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
@@ -642,7 +754,7 @@ const App = () => {
               >
                 <SlidersIcon className="w-3 h-3" />
                 {activeFilter === 'custom' 
-                  ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}`
+                  ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}${customDateFilter.day !== undefined ? `/${customDateFilter.day}` : ''}`
                   : '日期'}
               </button>
               
@@ -1014,6 +1126,7 @@ const App = () => {
                             isInWatchlist={watchLaterIds.has(video.bvid)}
                             openMenuId={openMenuId}
                             onMenuToggle={setOpenMenuId}
+                            onDelete={handleDeleteVideo}
                         />
                     ))}
                 </div>
@@ -1215,6 +1328,7 @@ const App = () => {
           onClose={() => setShowTimeline(false)}
           watchLaterIds={watchLaterIds}
           onToggleWatchLater={toggleWatchLater}
+          onDelete={handleDeleteVideo}
         />
       )}
 
