@@ -74,7 +74,7 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
       <div className="flex-1 flex items-start justify-center px-4 pb-8 relative z-10">
         <div className="w-full max-w-sm">
           {/* 登录/注册卡片 */}
-          <div className="bg-[#12131a]/80 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-[0_0_60px_rgba(0,0,0,0.5)]">
+          <div className="bg-[#12131a] border border-white/10 rounded-3xl p-6 shadow-[0_0_60px_rgba(0,0,0,0.5)]">
             {/* 切换标签 */}
             <div className="flex bg-black/30 rounded-2xl p-1.5 mb-6">
               <button
@@ -101,24 +101,24 @@ const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess }) => {
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">用户名</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">用户名</label>
                 <input
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="输入用户名"
-                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
+                  className="w-full px-4 py-3.5 bg-[#1a1b23] border border-white/15 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">密码</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">密码</label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={mode === 'register' ? '设置密码（至少6位）' : '输入密码'}
-                  className="w-full px-4 py-3.5 bg-black/30 border border-white/10 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
+                  className="w-full px-4 py-3.5 bg-[#1a1b23] border border-white/15 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 focus:bg-black/40 transition-all"
                 />
               </div>
 
