@@ -10,6 +10,7 @@ import TodoList from './components/TodoList';
 import Loader3D, { LoaderPulse } from './components/Loader3D';
 import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
+import HotCarousel from './components/HotCarousel';
 import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
@@ -166,7 +167,7 @@ const App = () => {
       return newSet;
     });
     
-    showToast(isInList ? '已从待看列表移除' : '已加入待看列表 ✓');
+    showToast(isInList ? '已从待看列表移除' : '已加入待看列表');
     
     // 同步到 Supabase
     if (isSupabaseConfigured) {
@@ -267,7 +268,7 @@ const App = () => {
   // 下拉刷新处理
   const handlePullRefresh = useCallback(async () => {
     await fetchVideos();
-    showToast('刷新成功 ✓');
+    showToast('刷新成功');
   }, [fetchVideos]);
 
   return (
@@ -277,72 +278,40 @@ const App = () => {
       {/* PWA 安装提示 */}
       <PWAInstallPrompt />
       
-      {/* 星空渐变背景 */}
+      {/* Spotify风格渐变背景 */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {/* 深空渐变 */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#0a0a1a] via-[#050510] to-[#0d0d20]" />
+        {/* 基础深色 */}
+        <div className="absolute inset-0 bg-[#0a0a0f]" />
         
-        {/* 星云效果 - 轻量动画 */}
-        <div className="absolute top-0 left-0 w-full h-full">
-          <div className="absolute top-[10%] left-[10%] w-96 h-96 bg-purple-900/20 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '8s' }} />
-          <div className="absolute top-[40%] right-[5%] w-80 h-80 bg-cyber-lime/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '2s', animationDuration: '10s' }} />
-          <div className="absolute bottom-[20%] left-[20%] w-72 h-72 bg-cyan-500/10 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '4s', animationDuration: '12s' }} />
-        </div>
-        
-        {/* 星星层 */}
+        {/* 动态渐变光斑 */}
         <div className="absolute inset-0">
-          {[...Array(15)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full bg-white"
-              style={{
-                width: `${1 + Math.random()}px`,
-                height: `${1 + Math.random()}px`,
-                left: `${Math.random() * 100}%`,
-                top: `${Math.random() * 100}%`,
-                opacity: 0.3 + Math.random() * 0.5,
-                animation: `twinkle ${2 + Math.random() * 3}s ease-in-out infinite`,
-                animationDelay: `${Math.random() * 5}s`,
-              }}
-            />
-          ))}
+          {/* 主色调光斑 - 根据Tab变化 */}
+          <div 
+            className={`absolute -top-1/4 -left-1/4 w-[80%] h-[60%] rounded-full blur-[120px] transition-all duration-1000 ${
+              activeTab === 'home' ? 'bg-emerald-600/30' :
+              activeTab === 'watchLater' ? 'bg-amber-500/25' :
+              activeTab === 'rss' ? 'bg-blue-500/25' :
+              'bg-purple-500/25'
+            }`} 
+          />
+          {/* 次要光斑 */}
+          <div className="absolute top-1/3 -right-1/4 w-[60%] h-[50%] bg-cyan-500/15 rounded-full blur-[100px]" />
+          <div className="absolute -bottom-1/4 left-1/4 w-[50%] h-[40%] bg-fuchsia-500/10 rounded-full blur-[80px]" />
         </div>
         
-        {/* 流星 */}
-        
+        {/* 噪点纹理 */}
+        <div className="absolute inset-0 opacity-[0.015]" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
+        }} />
         
         {/* 顶部渐变遮罩 */}
-        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-[#0a0a1a] to-transparent" />
-        
-        {/* CSS 动画 */}
-        <style>{`
-          @keyframes twinkle {
-            0%, 100% { opacity: 0.3; }
-            50% { opacity: 1; }
-          }
-          @keyframes shooting-star {
-            0% { 
-              transform: translateX(0) translateY(0);
-              opacity: 0;
-            }
-            10% { 
-              opacity: 1;
-            }
-            90% { 
-              opacity: 0.8;
-            }
-            100% { 
-              transform: translateX(100vw) translateY(50vh);
-              opacity: 0;
-            }
-          }
-        `}</style>
+        <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-black/40 to-transparent" />
       </div>
       
       {/* Header & Sticky Filter */}
       <header className="sticky top-0 z-40 w-full transition-all duration-300">
-        {/* Top Bar */}
-        <div className="bg-cyber-dark/80 backdrop-blur-md px-4 py-3 border-b border-white/5">
+        {/* Top Bar - 毛玻璃效果 */}
+        <div className="bg-black/40 backdrop-blur-xl px-4 py-3 border-b border-white/10">
           <div className="flex items-center gap-3">
             <img src={LogoSvg} alt="FluxF" className="w-9 h-9 shrink-0" />
             <div className="relative flex-1">
@@ -377,8 +346,8 @@ const App = () => {
           </div>
         </div>
 
-        {/* Filter Chips */}
-        <div className="bg-cyber-dark/95 backdrop-blur-lg border-b border-white/5 py-2 overflow-x-auto no-scrollbar">
+        {/* Filter Chips - 毛玻璃效果 */}
+        <div className="bg-black/30 backdrop-blur-xl border-b border-white/10 py-2 overflow-x-auto no-scrollbar">
           <div className="flex px-4 gap-2">
             {[
               { id: 'all', label: 'All' },
@@ -428,6 +397,11 @@ const App = () => {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
+        {/* 页面切换动画容器 */}
+        <div 
+          key={activeTab}
+          className="animate-page-fade-in"
+        >
         
         {/* RSS 阅读界面 */}
         {activeTab === 'rss' && (
@@ -458,106 +432,22 @@ const App = () => {
           </div>
         )}
         
+        {/* 热门轮播图 */}
         {activeTab === 'home' && !searchTerm && activeFilter === 'all' && videos.length > 0 && (
-             <div className="mb-8 relative">
-                {/* 装饰性插图 */}
-                <div className="absolute -top-4 -right-2 w-24 h-24 opacity-20 pointer-events-none">
-                  <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <defs>
-                      <linearGradient id="decorGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#a3e635"/>
-                        <stop offset="100%" stopColor="#22d3ee"/>
-                      </linearGradient>
-                    </defs>
-                    <circle cx="50" cy="50" r="40" fill="none" stroke="url(#decorGrad)" strokeWidth="1" strokeDasharray="4 4"/>
-                    <circle cx="50" cy="50" r="25" fill="none" stroke="url(#decorGrad)" strokeWidth="0.5"/>
-                    <circle cx="50" cy="50" r="8" fill="url(#decorGrad)" opacity="0.5"/>
-                  </svg>
-                </div>
-                
-                <h2 className="text-xl font-display text-white mb-4 flex items-center gap-3">
-                    <span className="w-1.5 h-7 bg-gradient-to-b from-cyber-lime to-cyan-400 rounded-full shadow-[0_0_12px_#a3e635]"></span>
-                    <span className="bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">热门推荐</span>
-                    <span className="ml-auto text-xs text-gray-500 font-normal flex items-center gap-1">
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-                      </svg>
-                      精选
-                    </span>
-                </h2>
-                <div className="flex gap-4 overflow-x-auto no-scrollbar pb-4 snap-x">
-                    {videos.slice(0, 3).map((v, index) => (
-                        <div key={v.bvid} 
-                             className="snap-center shrink-0 w-56 aspect-[3/4] rounded-2xl overflow-hidden relative group cursor-pointer
-                                        bg-gray-800
-                                        shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:shadow-[0_12px_40px_rgba(163,230,53,0.2)]
-                                        border border-white/10 hover:border-cyber-lime/30 transition-all duration-300
-                                        hover:-translate-y-2 hover:scale-[1.02]"
-                             onClick={() => window.open(`https://www.bilibili.com/video/${v.bvid}`, '_blank')}>
-                            <img 
-                              src={v.pic || ''} 
-                              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" 
-                              referrerPolicy="no-referrer"
-                              onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0'; }}
-                            />
-                            
-                            {/* 多层渐变 */}
-                            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent"></div>
-                            <div className="absolute inset-0 bg-gradient-to-br from-cyber-lime/10 via-transparent to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                            
-                            {/* Hot 图标 */}
-                            <div className="absolute top-3 left-3 px-2 py-1 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center gap-1 shadow-lg">
-                              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="m12 12.9l-2.03 2c-.46.46-.82 1.03-.93 1.67C8.74 18.41 10.18 20 12 20s3.26-1.59 2.96-3.42c-.11-.64-.46-1.22-.93-1.67z"/>
-                                <path d="M15.56 6.55C14.38 8.02 12 7.19 12 5.3V3.77c0-.8-.89-1.28-1.55-.84C8.12 4.49 4 7.97 4 13c0 2.92 1.56 5.47 3.89 6.86a4.86 4.86 0 0 1-.81-3.68c.19-1.04.75-1.98 1.51-2.72l2.71-2.67c.39-.38 1.01-.38 1.4 0l2.73 2.69c.74.73 1.3 1.65 1.48 2.68c.25 1.36-.07 2.64-.77 3.66c1.89-1.15 3.29-3.06 3.71-5.3c.61-3.27-.81-6.37-3.22-8.1c-.33-.25-.8-.2-1.07.13"/>
-                              </svg>
-                              <span className="text-white text-[10px] font-bold">HOT</span>
-                            </div>
-                            
-                            {/* 内容 */}
-                            <div className="absolute bottom-0 left-0 right-0 p-4">
-                                <p className="text-white font-bold text-sm line-clamp-2 drop-shadow-lg">{v.title}</p>
-                                <div className="flex items-center gap-2 mt-2">
-                                  <span className="text-cyber-lime/80 text-xs truncate">{v.uploader?.name}</span>
-                                </div>
-                            </div>
-                            
-                            {/* 播放按钮 */}
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300">
-                              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-cyber-lime to-lime-400 flex items-center justify-center shadow-[0_0_30px_rgba(163,230,53,0.6)] border-2 border-white/20">
-                                <svg className="w-6 h-6 text-black ml-1" viewBox="0 0 24 24" fill="currentColor">
-                                  <path d="M8 5v14l11-7z"/>
-                                </svg>
-                              </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-             </div>
+          <HotCarousel videos={videos.slice(0, 5)} />
         )}
 
-        <div className="space-y-6 relative">
-            {/* 区域装饰 */}
-            <div className="absolute -left-6 top-0 w-32 h-32 opacity-10 pointer-events-none">
-              <svg viewBox="0 0 100 100" className="w-full h-full">
-                <path d="M10,50 Q25,25 50,10 T90,50 Q75,75 50,90 T10,50" fill="none" stroke="#a3e635" strokeWidth="0.5" strokeDasharray="2 2"/>
-                <circle cx="50" cy="50" r="3" fill="#a3e635"/>
-              </svg>
-            </div>
-            
-            <h2 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-cyber-lime rounded-full shadow-[0_0_8px_#a3e635] animate-pulse" />
-                  <span>{activeTab === 'watchLater' ? '待看列表' : '最新视频'}</span>
-                </div>
-                {!loading && (
-                  <span className="px-2 py-0.5 bg-cyber-lime/10 text-cyber-lime text-xs rounded-full border border-cyber-lime/20">
-                    {filteredVideos.length}
-                  </span>
-                )}
+        <div className="space-y-3">
+            {/* 区块标题 */}
+            <h2 className="text-sm font-medium text-gray-400 flex items-center gap-2 mb-3">
+              <div className="w-1.5 h-1.5 bg-cyber-lime rounded-full" />
+              <span>{activeTab === 'watchLater' ? '待看列表' : '最新视频'}</span>
+              {!loading && (
+                <span className="text-cyber-lime text-xs">{filteredVideos.length}</span>
+              )}
             </h2>
-            
-            {/* 加载状态 - 3D 动画 */}
+
+            {/* 加载状态 */}
             {loading && <Loader3D text="正在加载视频..." />}
 
             {/* 错误提示 */}
@@ -728,7 +618,7 @@ const App = () => {
                   {activeTab === 'watchLater' ? (
                     <button 
                       onClick={() => setActiveTab('home')}
-                      className="px-6 py-2.5 bg-gradient-to-r from-cyber-lime to-lime-400 text-black font-medium rounded-full 
+                      className="px-6 py-2.5 bg-gradient-to-r from-cyber-lime to-lime-400  font-medium rounded-full 
                                  shadow-[0_0_20px_rgba(163,230,53,0.4)] hover:shadow-[0_0_30px_rgba(163,230,53,0.6)]
                                  transition-all hover:scale-105 active:scale-95"
                     >
@@ -781,10 +671,28 @@ const App = () => {
         </div>
         </>
         )}
+        </div>
       </main>
+      
+      {/* 页面切换动画样式 */}
+      <style>{`
+        @keyframes page-fade-in {
+          from {
+            opacity: 0;
+            transform: translateX(20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
+        }
+        .animate-page-fade-in {
+          animation: page-fade-in 0.3s ease-out;
+        }
+      `}</style>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-cyber-dark/80 backdrop-blur-xl border-t border-white/5 pb-safe pt-2 px-4 z-50 h-[80px]">
+      {/* Bottom Navigation - 毛玻璃效果 */}
+      <nav className="fixed bottom-0 left-0 right-0 bg-black/40 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-4 z-50 h-[80px]">
         <div className="flex justify-around items-center h-full max-w-lg mx-auto pb-4">
           {/* Discovery */}
           <button 
