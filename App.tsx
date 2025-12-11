@@ -32,6 +32,7 @@ const App = () => {
   
   // Infinite Scroll State
   const [visibleCount, setVisibleCount] = useState(10);
+  const mainRef = React.useRef<HTMLDivElement>(null);
 
   // 从 Supabase 获取视频数据
   const fetchVideos = useCallback(async () => {
@@ -150,11 +151,15 @@ const App = () => {
 
   // Infinite Scroll Handler - 节流优化
   useEffect(() => {
+    const mainElement = mainRef.current;
+    if (!mainElement) return;
+
     let ticking = false;
     const handleScroll = () => {
       if (!ticking) {
         requestAnimationFrame(() => {
-          if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+          const { scrollTop, scrollHeight, clientHeight } = mainElement;
+          if (scrollTop + clientHeight >= scrollHeight - 500) {
             setVisibleCount(prev => Math.min(prev + 5, filteredVideos.length));
           }
           ticking = false;
@@ -162,8 +167,8 @@ const App = () => {
         ticking = true;
       }
     };
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
+    mainElement.addEventListener('scroll', handleScroll, { passive: true });
+    return () => mainElement.removeEventListener('scroll', handleScroll);
   }, [filteredVideos.length]);
 
   // 下拉刷新处理
@@ -173,8 +178,8 @@ const App = () => {
   }, [fetchVideos]);
 
   return (
-    <PullToRefresh onRefresh={handlePullRefresh}>
-    <div className="min-h-screen bg-cyber-dark pb-24 font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden">
+    <PullToRefresh onRefresh={handlePullRefresh} scrollContainerRef={mainRef}>
+    <div className="h-screen bg-cyber-dark font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden flex flex-col">
       
       {/* 星空渐变背景 */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
@@ -289,7 +294,7 @@ const App = () => {
                 key={chip.id}
                 onClick={() => {
                   setActiveFilter(chip.id as FilterType);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                  mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
                 className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${
                   activeFilter === chip.id 
@@ -320,11 +325,11 @@ const App = () => {
       </header>
 
       {/* Main Content Feed */}
-      <main className="px-3 py-4 max-w-4xl mx-auto">
+      <main ref={mainRef} className="flex-1 overflow-y-auto px-3 py-4 max-w-4xl mx-auto w-full">
         
         {/* RSS 阅读界面 */}
         {activeTab === 'rss' && (
-          <RssFeed />
+          <RssFeed scrollContainerRef={mainRef} />
         )}
         
         {/* 视频内容 */}

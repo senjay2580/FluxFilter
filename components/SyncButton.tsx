@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { formatLastSyncTime, triggerSync, markSynced } from '../lib/autoSync';
 
 interface SyncButtonProps {
@@ -70,23 +71,38 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
           )}
         </button>
 
-        {/* 点击外部关闭 */}
-        {(syncing || message) && (
-          <div 
-            className="fixed inset-0 z-40" 
-            onClick={() => {
-              if (!syncing) {
-                setMessage(null);
+        {/* 弹窗使用 Portal 渲染到 body */}
+        {(syncing || message) && createPortal(
+          <>
+            <style>{`
+              @keyframes slideUp {
+                from { transform: translateY(100%); opacity: 0; }
+                to { transform: translateY(0); opacity: 1; }
               }
-            }}
-          />
-        )}
-
-        {/* 进度弹窗 */}
-        {(syncing || message) && (
-          <div className="absolute top-12 right-0 w-64 bg-cyber-card border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50">
+            `}</style>
+            {/* 点击外部关闭 */}
+            <div 
+              className="fixed inset-0 z-[59] bg-black/20" 
+              onClick={() => {
+                if (!syncing) {
+                  setMessage(null);
+                }
+              }}
+            />
+            {/* 进度弹窗 - 底部抽屉 */}
+            <div 
+              className="fixed bottom-0 left-0 right-0 bg-cyber-card/95 backdrop-blur-xl border-t border-white/10 shadow-2xl z-[60] rounded-t-2xl pb-safe"
+              style={{
+                animation: 'slideUp 0.3s ease-out'
+              }}
+            >
+              {/* 拖动指示器 */}
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-10 h-1 bg-white/20 rounded-full" />
+              </div>
+              
             {/* 头部 */}
-            <div className={`px-4 py-2.5 flex items-center justify-between ${
+            <div className={`px-4 py-2.5 flex items-center justify-between backdrop-blur-sm ${
               message?.includes('失败') || message?.includes('错误')
                 ? 'bg-red-500/20' 
                 : message?.includes('成功') || message?.includes('完成')
@@ -120,7 +136,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                   setSyncing(false);
                   setMessage(null);
                 }}
-                className="text-gray-400 hover:text-white transition-colors"
+                className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all active:scale-95"
                 title={syncing ? '取消同步' : '关闭'}
               >
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -137,12 +153,14 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
             </div>
 
             {/* 底部 */}
-            <div className="px-4 py-2 bg-white/5 border-t border-white/5">
+            <div className="px-4 py-2 bg-white/5 backdrop-blur-sm border-t border-white/5">
               <p className="text-[10px] text-gray-500">
                 上次同步: {lastSync}
               </p>
             </div>
-          </div>
+            </div>
+          </>,
+          document.body
         )}
       </div>
     );

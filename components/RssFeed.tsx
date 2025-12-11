@@ -39,7 +39,11 @@ const generateArticles = (count: number, startId: number) => {
   }));
 };
 
-const RssFeed: React.FC = () => {
+interface RssFeedProps {
+  scrollContainerRef?: React.RefObject<HTMLDivElement>;
+}
+
+const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef }) => {
   const [articles, setArticles] = useState(() => generateArticles(15, 1));
   const [selectedCategory, setSelectedCategory] = useState<string>('全部');
   const [loading, setLoading] = useState(false);
@@ -70,14 +74,18 @@ const RssFeed: React.FC = () => {
 
   // 无限滚动监听
   useEffect(() => {
+    const scrollElement = scrollContainerRef?.current;
+    if (!scrollElement) return;
+
     const handleScroll = () => {
-      if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 300) {
+      const { scrollTop, scrollHeight, clientHeight } = scrollElement;
+      if (scrollTop + clientHeight >= scrollHeight - 300) {
         loadMore();
       }
     };
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, [loadMore]);
+    scrollElement.addEventListener('scroll', handleScroll, { passive: true });
+    return () => scrollElement.removeEventListener('scroll', handleScroll);
+  }, [loadMore, scrollContainerRef]);
 
   return (
     <div className="max-w-2xl mx-auto">

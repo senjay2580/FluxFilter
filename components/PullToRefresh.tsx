@@ -3,9 +3,10 @@ import React, { useState, useRef, useCallback } from 'react';
 interface PullToRefreshProps {
   onRefresh: () => Promise<void>;
   children: React.ReactNode;
+  scrollContainerRef?: React.RefObject<HTMLDivElement>;
 }
 
-const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children }) => {
+const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scrollContainerRef }) => {
   const [pulling, setPulling] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -15,24 +16,26 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children }) =>
   const threshold = 80; // 触发刷新的阈值
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (window.scrollY === 0) {
+    const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
+    if (scrollTop === 0) {
       startY.current = e.touches[0].clientY;
       setPulling(true);
     }
-  }, []);
+  }, [scrollContainerRef]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     if (!pulling || refreshing) return;
     
     const currentY = e.touches[0].clientY;
     const diff = currentY - startY.current;
+    const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
     
-    if (diff > 0 && window.scrollY === 0) {
+    if (diff > 0 && scrollTop === 0) {
       // 阻尼效果
       const distance = Math.min(diff * 0.4, 120);
       setPullDistance(distance);
     }
-  }, [pulling, refreshing]);
+  }, [pulling, refreshing, scrollContainerRef]);
 
   const handleTouchEnd = useCallback(async () => {
     if (!pulling) return;
