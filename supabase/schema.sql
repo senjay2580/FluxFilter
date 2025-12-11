@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS uploader (
     face VARCHAR(500),                   -- 头像URL
     sign TEXT,                           -- 个性签名
     is_active BOOLEAN DEFAULT true,      -- 是否启用追踪
+    last_sync_count INTEGER DEFAULT 0,   -- 上次同步获取的视频数
+    last_sync_at TIMESTAMPTZ,            -- 上次同步时间
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     

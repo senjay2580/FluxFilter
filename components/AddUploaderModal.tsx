@@ -142,11 +142,22 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
                 type="text"
                 value={mid}
                 onChange={(e) => {
-                  setMid(e.target.value);
+                  let value = e.target.value;
+                  // 支持从 "UID:367877" 或 "UID：367877" 格式提取数字
+                  const uidMatch = value.match(/UID[：:]\s*(\d+)/i);
+                  if (uidMatch) {
+                    value = uidMatch[1];
+                  }
+                  // 支持从 space.bilibili.com/367877 链接提取
+                  const urlMatch = value.match(/space\.bilibili\.com\/(\d+)/);
+                  if (urlMatch) {
+                    value = urlMatch[1];
+                  }
+                  setMid(value);
                   setUploaderInfo(null);
                   setError(null);
                 }}
-                placeholder="如: 946974"
+                placeholder="如: 946974 或 UID:946974"
                 className="flex-1 px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
               />
               <button
@@ -168,7 +179,7 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
               </button>
             </div>
             <p className="mt-1.5 text-[10px] text-gray-500">
-              💡 打开UP主空间，URL中 space.bilibili.com/ 后面的数字就是 MID
+              💡 支持直接粘贴 UID:367877 格式或空间链接
             </p>
           </div>
 

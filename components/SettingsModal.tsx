@@ -11,6 +11,8 @@ interface Uploader {
   face: string | null;
   sign: string | null;
   is_active: boolean;
+  last_sync_count: number | null;
+  last_sync_at: string | null;
 }
 
 interface VideoItem {
@@ -335,7 +337,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                     {/* 信息 */}
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-medium truncate">{uploader.name}</p>
-                      <p className="text-[10px] text-gray-500">MID: {uploader.mid}</p>
+                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
+                        <span>MID: {uploader.mid}</span>
+                        {uploader.last_sync_count !== null && (
+                          <>
+                            <span>•</span>
+                            <span className="text-cyber-lime">上次 {uploader.last_sync_count} 个视频</span>
+                          </>
+                        )}
+                      </div>
                     </div>
 
                     {/* 操作按钮 */}

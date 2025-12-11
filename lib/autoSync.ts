@@ -167,6 +167,15 @@ async function syncWithUploaders(
       if (!insertError) {
         totalAdded += todayVideos.length;
         results.push(`${up.name}: ${todayVideos.length}`);
+        
+        // 更新 UP 主的同步记录
+        await supabase
+          .from('uploader')
+          .update({ 
+            last_sync_count: todayVideos.length,
+            last_sync_at: new Date().toISOString()
+          })
+          .eq('id', up.id);
       } else {
         results.push(`${up.name}: 写入失败`);
       }
