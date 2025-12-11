@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { formatLastSyncTime, triggerSyncWithUploaders } from '../lib/autoSync';
 import { supabase } from '../lib/supabase';
+import { getStoredUserId } from '../lib/auth';
 
 interface Uploader {
   id: number;
@@ -33,9 +34,16 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const fetchUploaders = useCallback(async () => {
     setLoadingUploaders(true);
     try {
+      const userId = getStoredUserId();
+      if (!userId) {
+        setUploaders([]);
+        return;
+      }
+      
       const { data } = await supabase
         .from('uploader')
         .select('*')
+        .eq('user_id', userId)
         .eq('is_active', true)
         .order('name');
       

@@ -96,10 +96,11 @@ export async function getVideoCountByDate() {
 // ============================================
 
 /** 获取所有启用的UP主 */
-export async function getActiveUploaders() {
+export async function getActiveUploaders(userId: string) {
   const { data, error } = await supabase
     .from('uploader')
     .select('*')
+    .eq('user_id', userId)
     .eq('is_active', true);
   
   if (error) throw error;
@@ -142,13 +143,13 @@ export async function getWatchlist(userId?: string) {
 }
 
 /** 添加到待看列表 */
-export async function addToWatchlist(bvid: string, note?: string, userId?: string) {
+export async function addToWatchlist(bvid: string, userId: string, note?: string) {
   const { data, error } = await supabase
     .from('watchlist')
     .insert({
       bvid,
       note,
-      user_id: userId || null,
+      user_id: userId,
     })
     .select()
     .single();

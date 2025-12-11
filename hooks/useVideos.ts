@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { getStoredUserId } from '../lib/auth';
 import type { VideoWithUploader } from '../lib/database.types';
 
 interface UseVideosOptions {
@@ -31,12 +32,20 @@ export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
       setLoading(true);
       setError(null);
 
+      const userId = getStoredUserId();
+      if (!userId) {
+        setVideos([]);
+        setLoading(false);
+        return;
+      }
+
       let query = supabase
         .from('video')
         .select(`
           *,
           uploader:uploader!fk_video_uploader (name, face)
         `)
+        .eq('user_id', userId)
         .order('pubdate', { ascending: false })
         .range(isLoadMore ? offset : 0, (isLoadMore ? offset : 0) + limit - 1);
 

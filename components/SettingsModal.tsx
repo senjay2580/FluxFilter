@@ -41,18 +41,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       setUser(currentUser);
       setCookie(currentUser?.bilibili_cookie || '');
       
-      // 获取UP主列表
+      if (!currentUser?.id) {
+        setUploaders([]);
+        setVideoCount(0);
+        return;
+      }
+      
+      // 获取UP主列表（按用户过滤）
       const { data: uploaderData } = await supabase
         .from('uploader')
         .select('*')
+        .eq('user_id', currentUser.id)
         .order('created_at', { ascending: false });
       
       setUploaders(uploaderData || []);
 
-      // 获取视频数量
+      // 获取视频数量（按用户过滤）
       const { count } = await supabase
         .from('video')
-        .select('*', { count: 'exact', head: true });
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', currentUser.id);
       
       setVideoCount(count || 0);
     } catch (err) {

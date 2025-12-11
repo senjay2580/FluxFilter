@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
+import { getStoredUserId } from '../lib/auth';
 import type { WatchlistItem } from '../lib/database.types';
 
 interface UseWatchlistReturn {
@@ -23,9 +24,17 @@ export function useWatchlist(): UseWatchlistReturn {
       setLoading(true);
       setError(null);
 
+      const userId = getStoredUserId();
+      if (!userId) {
+        setWatchlist([]);
+        setLoading(false);
+        return;
+      }
+
       const { data: watchlistData, error: fetchError } = await supabase
         .from('watchlist')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -70,9 +79,15 @@ export function useWatchlist(): UseWatchlistReturn {
 
   const addToWatchlist = useCallback(async (bvid: string, note?: string): Promise<boolean> => {
     try {
+      const userId = getStoredUserId();
+      if (!userId) {
+        alert('请先登录');
+        return false;
+      }
+
       const { data, error } = await supabase
         .from('watchlist')
-        .insert({ bvid, note })
+        .insert({ bvid, note, user_id: userId })
         .select()
         .single();
 

@@ -132,12 +132,19 @@ const App = () => {
       setLoading(true);
       setError(null);
       
+      const userId = currentUser?.id;
+      if (!userId) {
+        setVideos([]);
+        return;
+      }
+      
       const { data, error: fetchError } = await supabase
         .from('video')
         .select(`
           *,
           uploader:uploader!fk_video_uploader (name, face)
         `)
+        .eq('user_id', userId)
         .order('pubdate', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -148,16 +155,20 @@ const App = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   // 从 Supabase 获取待看列表
   const fetchWatchlist = useCallback(async () => {
     if (!isSupabaseConfigured) return;
     
+    const userId = currentUser?.id;
+    if (!userId) return;
+    
     try {
       const { data, error: fetchError } = await supabase
         .from('watchlist')
-        .select('bvid');
+        .select('bvid')
+        .eq('user_id', userId);
       
       if (fetchError) throw fetchError;
       
@@ -166,7 +177,7 @@ const App = () => {
     } catch (err) {
       console.error('获取待看列表失败:', err);
     }
-  }, []);
+  }, [currentUser?.id]);
 
   // 初始加载
   useEffect(() => {
@@ -212,13 +223,13 @@ const App = () => {
     showToast(isInList ? '已从待看列表移除' : '已加入待看列表');
     
     // 同步到 Supabase
-    if (isSupabaseConfigured) {
+    if (isSupabaseConfigured && currentUser?.id) {
       try {
         setWatchlistLoading(true);
         if (isInList) {
-          await removeFromWatchlistByBvid(bvid);
+          await removeFromWatchlistByBvid(bvid, currentUser.id);
         } else {
-          await addToWatchlist(bvid);
+          await addToWatchlist(bvid, currentUser.id);
         }
       } catch (err) {
         console.error('待看列表操作失败:', err);
