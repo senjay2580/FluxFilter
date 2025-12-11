@@ -1124,17 +1124,16 @@ const App = () => {
             {!loading && filteredVideos.length > 0 && (
                 <div className="grid grid-cols-2 gap-3">
                     {filteredVideos.slice(0, visibleCount).map((video) => (
-                        <div key={video.bvid} className="video-card-container">
-                            <VideoCard 
-                                video={video}
-                                onAddToWatchlist={toggleWatchLater}
-                                onRemoveFromWatchlist={toggleWatchLater}
-                                isInWatchlist={watchLaterIds.has(video.bvid)}
-                                openMenuId={openMenuId}
-                                onMenuToggle={setOpenMenuId}
-                                onDelete={handleDeleteVideo}
-                            />
-                        </div>
+                        <VideoCard 
+                            key={video.bvid}
+                            video={video}
+                            onAddToWatchlist={toggleWatchLater}
+                            onRemoveFromWatchlist={toggleWatchLater}
+                            isInWatchlist={watchLaterIds.has(video.bvid)}
+                            openMenuId={openMenuId}
+                            onMenuToggle={setOpenMenuId}
+                            onDelete={handleDeleteVideo}
+                        />
                     ))}
                 </div>
             )}
