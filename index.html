@@ -51,13 +51,10 @@
         color: #ffffff;
         -webkit-tap-highlight-color: transparent;
       }
-      /* 仅对需要动画的元素启用 GPU 加速 */
-      .video-card,
-      .animate-drawer-slide-up,
-      .animate-slide-down {
+      /* GPU 加速 - 移动端渲染稳定性 */
+      * {
         -webkit-transform: translateZ(0);
         transform: translateZ(0);
-        will-change: transform;
       }
       /* 视频卡片渲染优化 */
       .video-card {
