@@ -123,45 +123,92 @@ function filterByTime(articles: Article[], filter: FilterType): Article[] {
 
 const PAGE_SIZE = 20; // 每页显示数量
 
-// 移动端缩放 iframe 组件
+// 移动端缩放 iframe 组件（支持双指缩放）
 const IframeScaled: React.FC<{ src: string; refreshKey: number }> = ({ src, refreshKey }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
-  const [dimensions, setDimensions] = React.useState({ scale: 1, containerHeight: 0 });
-  const DESKTOP_WIDTH = 1100; // 桌面版宽度
+  const [scale, setScale] = React.useState(1);
+  const [translate, setTranslate] = React.useState({ x: 0, y: 0 });
+  const touchRef = React.useRef({ initialDistance: 0, initialScale: 1, lastX: 0, lastY: 0 });
+  const DESKTOP_WIDTH = 1100;
+  const MIN_SCALE = 0.3;
+  const MAX_SCALE = 2;
 
+  // 初始化缩放比例
   React.useEffect(() => {
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        const containerWidth = containerRef.current.offsetWidth;
-        const containerHeight = containerRef.current.offsetHeight;
-        if (window.innerWidth < 768) {
-          setDimensions({
-            scale: containerWidth / DESKTOP_WIDTH,
-            containerHeight: containerHeight,
-          });
-        } else {
-          setDimensions({ scale: 1, containerHeight: containerHeight });
-        }
-      }
-    };
-    updateDimensions();
-    window.addEventListener('resize', updateDimensions);
-    return () => window.removeEventListener('resize', updateDimensions);
+    if (containerRef.current && window.innerWidth < 768) {
+      const initialScale = containerRef.current.offsetWidth / DESKTOP_WIDTH;
+      setScale(initialScale);
+    }
   }, []);
 
+  // 计算两指距离
+  const getDistance = (touches: React.TouchList) => {
+    return Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      touchRef.current.initialDistance = getDistance(e.touches);
+      touchRef.current.initialScale = scale;
+    } else if (e.touches.length === 1) {
+      touchRef.current.lastX = e.touches[0].clientX;
+      touchRef.current.lastY = e.touches[0].clientY;
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      // 双指缩放
+      const currentDistance = getDistance(e.touches);
+      const scaleChange = currentDistance / touchRef.current.initialDistance;
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, touchRef.current.initialScale * scaleChange));
+      setScale(newScale);
+    } else if (e.touches.length === 1 && scale > (containerRef.current?.offsetWidth || 400) / DESKTOP_WIDTH) {
+      // 单指拖动（仅在放大时）
+      const deltaX = e.touches[0].clientX - touchRef.current.lastX;
+      const deltaY = e.touches[0].clientY - touchRef.current.lastY;
+      touchRef.current.lastX = e.touches[0].clientX;
+      touchRef.current.lastY = e.touches[0].clientY;
+      setTranslate(prev => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchRef.current.initialDistance = 0;
+  };
+
+  // 双击重置
+  const handleDoubleClick = () => {
+    if (containerRef.current && window.innerWidth < 768) {
+      setScale(containerRef.current.offsetWidth / DESKTOP_WIDTH);
+      setTranslate({ x: 0, y: 0 });
+    }
+  };
+
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const iframeHeight = isMobile && dimensions.scale > 0 ? dimensions.containerHeight / dimensions.scale : '100%';
+  const containerHeight = containerRef.current?.offsetHeight || window.innerHeight - 48;
+  const iframeHeight = isMobile && scale > 0 ? containerHeight / scale : '100%';
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-hidden">
+    <div 
+      ref={containerRef} 
+      className="flex-1 overflow-hidden touch-none"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onDoubleClick={handleDoubleClick}
+    >
       <iframe 
         key={refreshKey}
         src={src}
-        className="border-0 origin-top-left"
+        className="border-0 origin-top-left pointer-events-auto"
         style={isMobile ? { 
           width: `${DESKTOP_WIDTH}px`,
           height: iframeHeight,
-          transform: `scale(${dimensions.scale})`,
+          transform: `scale(${scale}) translate(${translate.x / scale}px, ${translate.y / scale}px)`,
           transformOrigin: 'top left',
         } : {
           width: '100%',
