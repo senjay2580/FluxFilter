@@ -128,10 +128,11 @@ const IframeScaled: React.FC<{ src: string; refreshKey: number }> = ({ src, refr
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [scale, setScale] = React.useState(1);
   const [translate, setTranslate] = React.useState({ x: 0, y: 0 });
+  const [isPinching, setIsPinching] = React.useState(false);
   const touchRef = React.useRef({ initialDistance: 0, initialScale: 1, lastX: 0, lastY: 0 });
   const DESKTOP_WIDTH = 1100;
-  const MIN_SCALE = 0.3;
-  const MAX_SCALE = 2;
+  const MIN_SCALE = 0.25;
+  const MAX_SCALE = 3;
 
   // 初始化缩放比例
   React.useEffect(() => {
@@ -142,43 +143,61 @@ const IframeScaled: React.FC<{ src: string; refreshKey: number }> = ({ src, refr
   }, []);
 
   // 计算两指距离
-  const getDistance = (touches: React.TouchList) => {
+  const getDistance = (touches: TouchList) => {
     return Math.hypot(
       touches[0].clientX - touches[1].clientX,
       touches[0].clientY - touches[1].clientY
     );
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      touchRef.current.initialDistance = getDistance(e.touches);
-      touchRef.current.initialScale = scale;
-    } else if (e.touches.length === 1) {
-      touchRef.current.lastX = e.touches[0].clientX;
-      touchRef.current.lastY = e.touches[0].clientY;
-    }
-  };
+  React.useEffect(() => {
+    const container = containerRef.current;
+    if (!container || window.innerWidth >= 768) return;
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 2) {
-      // 双指缩放
-      const currentDistance = getDistance(e.touches);
-      const scaleChange = currentDistance / touchRef.current.initialDistance;
-      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, touchRef.current.initialScale * scaleChange));
-      setScale(newScale);
-    } else if (e.touches.length === 1 && scale > (containerRef.current?.offsetWidth || 400) / DESKTOP_WIDTH) {
-      // 单指拖动（仅在放大时）
-      const deltaX = e.touches[0].clientX - touchRef.current.lastX;
-      const deltaY = e.touches[0].clientY - touchRef.current.lastY;
-      touchRef.current.lastX = e.touches[0].clientX;
-      touchRef.current.lastY = e.touches[0].clientY;
-      setTranslate(prev => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
-    }
-  };
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        setIsPinching(true);
+        touchRef.current.initialDistance = getDistance(e.touches);
+        touchRef.current.initialScale = scale;
+        e.preventDefault();
+      } else if (e.touches.length === 1) {
+        touchRef.current.lastX = e.touches[0].clientX;
+        touchRef.current.lastY = e.touches[0].clientY;
+      }
+    };
 
-  const handleTouchEnd = () => {
-    touchRef.current.initialDistance = 0;
-  };
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchRef.current.initialDistance > 0) {
+        e.preventDefault();
+        const currentDistance = getDistance(e.touches);
+        const scaleChange = currentDistance / touchRef.current.initialDistance;
+        const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, touchRef.current.initialScale * scaleChange));
+        setScale(newScale);
+      } else if (e.touches.length === 1 && isPinching) {
+        e.preventDefault();
+        const deltaX = e.touches[0].clientX - touchRef.current.lastX;
+        const deltaY = e.touches[0].clientY - touchRef.current.lastY;
+        touchRef.current.lastX = e.touches[0].clientX;
+        touchRef.current.lastY = e.touches[0].clientY;
+        setTranslate(prev => ({ x: prev.x + deltaX, y: prev.y + deltaY }));
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchRef.current.initialDistance = 0;
+      setTimeout(() => setIsPinching(false), 300);
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, [scale, isPinching]);
 
   // 双击重置
   const handleDoubleClick = () => {
@@ -193,18 +212,13 @@ const IframeScaled: React.FC<{ src: string; refreshKey: number }> = ({ src, refr
   const iframeHeight = isMobile && scale > 0 ? containerHeight / scale : '100%';
 
   return (
-    <div 
-      ref={containerRef} 
-      className="flex-1 overflow-hidden touch-none"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-      onDoubleClick={handleDoubleClick}
-    >
+    <div ref={containerRef} className="flex-1 overflow-hidden relative" onDoubleClick={handleDoubleClick}>
+      {/* 双指缩放时显示覆盖层阻止 iframe 捕获事件 */}
+      {isPinching && <div className="absolute inset-0 z-10" />}
       <iframe 
         key={refreshKey}
         src={src}
-        className="border-0 origin-top-left pointer-events-auto"
+        className="border-0 origin-top-left"
         style={isMobile ? { 
           width: `${DESKTOP_WIDTH}px`,
           height: iframeHeight,
