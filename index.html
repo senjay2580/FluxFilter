@@ -51,6 +51,10 @@
         color: #ffffff;
         -webkit-tap-highlight-color: transparent;
       }
+      /* 消除移动端点击延迟 */
+      button, a, [role="button"] {
+        touch-action: manipulation;
+      }
       /* GPU 加速优化 */
       * {
         -webkit-transform: translateZ(0);
