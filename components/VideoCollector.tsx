@@ -16,28 +16,45 @@ interface CollectedVideo {
   uploader_face: string;
 }
 
-// 解析B站视频链接，提取BV号
-const parseBilibiliLinks = (text: string): string[] => {
-  const bvids: string[] = [];
-  
-  // 匹配多种格式：
-  // 1. BV号本身: BV1xx411c7mD
-  // 2. 完整链接: https://www.bilibili.com/video/BV1xx411c7mD
-  // 3. 短链接: https://b23.tv/xxxxx
-  // 4. 带参数: https://www.bilibili.com/video/BV1xx411c7mD?p=1
-  const bvPattern = /BV[a-zA-Z0-9]{10}/gi;
-  const matches = text.match(bvPattern);
-  
-  if (matches) {
-    matches.forEach(bv => {
-      // BV号区分大小写，只标准化前缀为 BV
-      const normalized = 'BV' + bv.slice(2);
-      if (!bvids.includes(normalized)) {
-        bvids.push(normalized);
-      }
+// 解析短链接获取BV号
+const resolveShortLink = async (shortLink: string): Promise<string | null> => {
+  try {
+    const response = await fetch(`/api/resolve-short-link?url=${encodeURIComponent(shortLink)}`, {
+      cache: 'no-store',
     });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.success ? data.bvid : null;
+  } catch {
+    return null;
   }
-  
+};
+
+// 智能提取B站视频链接，支持多种格式
+const parseBilibiliLinks = async (text: string): Promise<string[]> => {
+  const bvids: string[] = [];
+  const addBvid = (bv: string) => {
+    const normalized = 'BV' + bv.slice(2);
+    if (!bvids.includes(normalized)) bvids.push(normalized);
+  };
+
+  // 1. 直接匹配 BV 号（不区分大小写）
+  const bvMatches = text.match(/BV[a-zA-Z0-9]{10}/gi);
+  bvMatches?.forEach(addBvid);
+
+  // 2. 桌面端/移动端链接
+  const urlMatches = text.matchAll(/https?:\/\/(?:www\.|m\.)?bilibili\.com\/video\/(BV[a-zA-Z0-9]{10})/gi);
+  [...urlMatches].forEach(m => addBvid(m[1]));
+
+  // 3. 短链接 b23.tv - 只有在没找到BV号时才解析
+  if (bvids.length === 0) {
+    const shortLinks = text.match(/https?:\/\/(b23\.tv|bili2233\.cn)\/[a-zA-Z0-9]+/gi);
+    if (shortLinks) {
+      const results = await Promise.all(shortLinks.map(resolveShortLink));
+      results.forEach(bv => bv && addBvid(bv));
+    }
+  }
+
   return bvids;
 };
 
@@ -165,9 +182,19 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
   };
 
   // 解析输入的链接
-  const handleParse = () => {
-    const bvids = parseBilibiliLinks(inputText);
+  const handleParse = async () => {
+    setParsedBvids([]);
+    setResults([]);
+    setImporting(true); // 显示加载状态
+
+    const bvids = await parseBilibiliLinks(inputText);
     setParsedBvids(bvids);
+    setImporting(false);
+
+    if (bvids.length === 0) {
+      setResults([{ bvid: '', success: false, error: '未识别到有效的B站视频链接' }]);
+      setShowResults(true);
+    }
   };
 
   // 开始导入
@@ -421,11 +448,13 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                     setParsedBvids([]);
                   }}
                   placeholder={`支持以下格式：
-• BV1xx411c7mD
-• https://www.bilibili.com/video/BV1xx411c7mD
-• https://b23.tv/xxxxx
+• BV1xx411c7mD (BV号)
+• https://www.bilibili.com/video/BV1xx411c7mD (PC端)
+• https://m.bilibili.com/video/BV1xx411c7mD (移动端)
+• https://b23.tv/xxxxx (短链接)
+• 【标题】 https://b23.tv/xxxxx (分享文本)
 
-可一次粘贴多个链接...`}
+可一次粘贴多个链接或分享文本...`}
                   rows={6}
                   className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-500 focus:border-cyber-lime/50 focus:outline-none resize-none text-sm"
                   disabled={importing}
@@ -437,9 +466,16 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                 <button
                   onClick={handleParse}
                   disabled={!inputText.trim()}
-                  className="w-full py-3 bg-white/10 hover:bg-white/15 rounded-xl text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-4"
+                  className="w-full py-3 bg-white/10 hover:bg-white/15 rounded-xl text-white font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed mb-4 flex items-center justify-center gap-2"
                 >
-                  解析链接
+                  {importing ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      解析中...
+                    </>
+                  ) : (
+                    '解析链接'
+                  )}
                 </button>
               )}
 

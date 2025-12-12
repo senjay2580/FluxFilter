@@ -81,20 +81,26 @@ export async function triggerSyncWithUploaders(
   uploaders: Uploader[],
   onProgress?: (msg: string) => void,
   shouldCancel?: () => boolean
-): Promise<{ success: boolean; message: string; videosAdded?: number; cancelled?: boolean }> {
+): Promise<{
+  success: boolean;
+  message: string;
+  videosAdded?: number;
+  cancelled?: boolean;
+  newVideos?: Array<{bvid: string; title: string; pic: string; uploader_name: string}>;
+}> {
   try {
     return await syncWithUploaders(uploaders, onProgress, shouldCancel);
   } catch (error: any) {
     console.error('同步失败:', error);
     const errMsg = error?.message || String(error);
-    
+
     if (errMsg.includes('-799') || errMsg.includes('频繁')) {
       return { success: false, message: '⏳ B站限流中，请等待2分钟后再试' };
     }
     if (errMsg.includes('-352') || errMsg.includes('风控')) {
       return { success: false, message: '🛡️ B站风控触发，请稍后再试' };
     }
-    
+
     return { success: false, message: '同步失败: ' + errMsg };
   }
 }
@@ -106,7 +112,13 @@ async function syncWithUploaders(
   uploaders: Uploader[],
   onProgress?: (msg: string) => void,
   shouldCancel?: () => boolean
-): Promise<{ success: boolean; message: string; videosAdded?: number; cancelled?: boolean }> {
+): Promise<{
+  success: boolean;
+  message: string;
+  videosAdded?: number;
+  cancelled?: boolean;
+  newVideos?: Array<{bvid: string; title: string; pic: string; uploader_name: string}>;
+}> {
   if (!isSupabaseConfigured) {
     return { success: false, message: '⚠️ 请先配置 Supabase 环境变量' };
   }
@@ -118,6 +130,7 @@ async function syncWithUploaders(
   let totalAdded = 0;
   const results: string[] = [];
   let completedCount = 0;
+  const newVideos: Array<{bvid: string; title: string; pic: string; uploader_name: string}> = [];
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -265,31 +278,59 @@ async function syncWithUploaders(
   }
   
   // ============================================
-  // 阶段2：分批写入数据库（每批最多 200 条）
+  // 阶段2：查询已存在的视频，然后写入新视频
   // ============================================
   if (allVideos.length > 0) {
-    const BATCH_SIZE = 200;
-    const batches = [];
-    
-    for (let i = 0; i < allVideos.length; i += BATCH_SIZE) {
-      batches.push(allVideos.slice(i, i + BATCH_SIZE));
+    const userId = uploaders[0]?.user_id;
+    if (!userId) {
+      return { success: false, message: '用户ID未找到' };
     }
-    
-    onProgress?.(`💾 写入 ${allVideos.length} 个视频 (${batches.length} 批)...`);
-    
-    // 并发写入所有批次
-    const writePromises = batches.map(batch => 
-      supabase.from('video').upsert(batch, { onConflict: 'user_id,bvid' })
-    );
-    
-    const writeResults = await Promise.all(writePromises);
-    const successCount = writeResults.filter(r => !r.error).length;
-    
-    if (successCount === batches.length) {
-      totalAdded = allVideos.length;
-    } else {
-      // 部分成功
-      totalAdded = successCount * BATCH_SIZE;
+
+    // 1. 查询已存在的bvid
+    onProgress?.(`🔍 检查已存在的视频...`);
+    const allBvids = allVideos.map(v => v.bvid);
+    const { data: existingVideos } = await supabase
+      .from('video')
+      .select('bvid')
+      .eq('user_id', userId)
+      .in('bvid', allBvids);
+
+    const existingBvids = new Set(existingVideos?.map(v => v.bvid) || []);
+
+    // 2. 过滤出真正新增的视频
+    const reallyNewVideos = allVideos.filter(v => !existingBvids.has(v.bvid));
+    totalAdded = reallyNewVideos.length;
+
+    // 3. 记录新增视频信息
+    newVideos.push(...reallyNewVideos.map(v => ({
+      bvid: v.bvid,
+      title: v.title,
+      pic: v.pic,
+      uploader_name: uploaders.find(u => u.mid === v.mid)?.name || 'Unknown'
+    })));
+
+    // 4. 写入所有视频（包括更新）
+    if (allVideos.length > 0) {
+      const BATCH_SIZE = 200;
+      const batches = [];
+
+      for (let i = 0; i < allVideos.length; i += BATCH_SIZE) {
+        batches.push(allVideos.slice(i, i + BATCH_SIZE));
+      }
+
+      onProgress?.(`💾 写入 ${allVideos.length} 个视频 (${batches.length} 批)...`);
+
+      // 并发写入所有批次
+      const writePromises = batches.map(batch =>
+        supabase.from('video').upsert(batch, { onConflict: 'user_id,bvid' })
+      );
+
+      const writeResults = await Promise.all(writePromises);
+      const failedBatches = writeResults.filter(r => r.error);
+
+      if (failedBatches.length > 0) {
+        console.error('部分批次写入失败:', failedBatches);
+      }
     }
   }
 
@@ -303,6 +344,7 @@ async function syncWithUploaders(
     success: true,
     message: `✅ 同步完成！新增 ${totalAdded} 个视频`,
     videosAdded: totalAdded,
+    newVideos: newVideos.slice(0, 50), // 最多返回50个，避免数据过大
   };
 }
 

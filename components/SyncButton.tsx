@@ -55,6 +55,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const [progress, setProgress] = useState(0);
   const [currentUploader, setCurrentUploader] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [newVideos, setNewVideos] = useState<Array<{bvid: string; title: string; pic: string; uploader_name: string}>>([]);
   
   const cancelRef = useRef(false);
 
@@ -100,6 +101,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     setSyncStatus('idle');
     setProgress(0);
     setMessage(null);
+    setNewVideos([]);
     setShowModal(true);
   };
 
@@ -215,27 +217,32 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         setMessage('已取消同步');
       } else {
         setProgress(100);
-        
+
+        // 保存新增视频列表
+        if (result.newVideos && result.newVideos.length > 0) {
+          setNewVideos(result.newVideos);
+        }
+
         // 计算耗时
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        const successMsg = result.success 
+        const successMsg = result.success
           ? `✅ 同步完成！新增 ${result.videosAdded || 0} 个视频，耗时 ${duration}秒`
           : result.message;
-        
+
         setMessage(successMsg);
         setSyncStatus(result.success ? 'success' : 'error');
         setLastSync(formatLastSyncTime());
-        
+
         if (result.success && result.videosAdded && result.videosAdded > 0) {
           window.dispatchEvent(new CustomEvent('sync-complete'));
-          
+
           // 同步成功后使视频统计缓存失效
           const userId = getStoredUserId();
           if (userId) {
             invalidateCache(CACHE_KEYS.VIDEO_COUNT_BY_DATE(userId));
           }
         }
-        
+
         // 记录同步完成（用于节流计数）
         if (result.success) {
           recordSyncComplete();
@@ -310,8 +317,8 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
 
           {/* 完成状态覆盖层 */}
           {(syncStatus === 'success' || syncStatus === 'error') && !syncing && (
-            <div className="absolute inset-0 z-10 bg-[#0c0c14] flex flex-col items-center justify-center p-8">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${
+            <div className="absolute inset-0 z-10 bg-[#0c0c14] flex flex-col items-center justify-center p-6 pt-12 overflow-hidden">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
                 syncStatus === 'success' ? 'bg-green-500/20' : 'bg-red-500/20'
               }`}>
                 {syncStatus === 'success' ? (
@@ -327,13 +334,67 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
               <p className={`font-medium mb-2 ${syncStatus === 'success' ? 'text-green-400' : 'text-red-400'}`}>
                 {syncStatus === 'success' ? '同步完成' : '同步失败'}
               </p>
-              <p className="text-gray-400 text-sm text-center max-w-xs">{message}</p>
-              <button
-                onClick={() => { setSyncStatus('idle'); setMessage(null); }}
-                className="mt-6 px-6 py-2 bg-cyber-lime text-black rounded-xl hover:bg-lime-400 transition-colors font-medium"
-              >
-                完成
-              </button>
+              <p className="text-gray-400 text-sm text-center max-w-xs mb-4 px-4">{message}</p>
+
+              {/* 新增视频列表 */}
+              {syncStatus === 'success' && newVideos.length > 0 && (
+                <div className="w-full max-w-md mt-4 px-4">
+                  <div className="flex items-center justify-between mb-3 px-2">
+                    <span className="text-cyber-lime text-sm font-medium">新增视频 ({newVideos.length})</span>
+                    {newVideos.length > 3 && (
+                      <span className="text-xs text-gray-500">滚动查看更多</span>
+                    )}
+                  </div>
+                  <div className="max-h-[45vh] overflow-y-auto space-y-2 px-1 custom-scrollbar">
+                    {newVideos.map((video) => (
+                      <div
+                        key={video.bvid}
+                        onClick={() => window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank')}
+                        className="group flex gap-3 p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyber-lime/30 rounded-xl cursor-pointer transition-all active:scale-[0.98]"
+                      >
+                        <div className="relative w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-white/5">
+                          <img
+                            src={video.pic?.replace('http:', 'https:')}
+                            alt={video.title}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                          <h4 className="text-white text-xs font-medium line-clamp-2 leading-tight group-hover:text-cyber-lime transition-colors">
+                            {video.title}
+                          </h4>
+                          <span className="text-gray-400 text-[10px] truncate mt-1">
+                            {video.uploader_name}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <style>{`
+                .custom-scrollbar::-webkit-scrollbar {
+                  width: 6px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-track {
+                  background: rgba(255,255,255,0.05);
+                  border-radius: 10px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                  background: rgba(163,230,53,0.3);
+                  border-radius: 10px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                  background: rgba(163,230,53,0.5);
+                }
+              `}</style>
             </div>
           )}
 

@@ -84,21 +84,32 @@ function formatTimeAgo(dateStr: string): string {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-// 使用 rss2json API 获取数据
+// 使用 rss2json API 获取数据，添加超时控制
 async function fetchRssSource(source: RssSource): Promise<Article[]> {
   try {
     // 使用 rss2json.com 免费 API（每天1000次请求）
     const apiUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
-    const response = await fetch(apiUrl);
-    
+
+    // 创建超时控制器
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒超时
+
+    const response = await fetch(apiUrl, {
+      signal: controller.signal,
+      // 添加缓存控制
+      cache: 'no-cache'
+    });
+
+    clearTimeout(timeoutId);
+
     if (!response.ok) throw new Error('Fetch failed');
-    
+
     const data = await response.json();
-    
+
     if (data.status !== 'ok' || !data.items) {
       throw new Error('Invalid response');
     }
-    
+
     return data.items.slice(0, 10).map((item: any, index: number) => {
       const pubDate = new Date(item.pubDate);
       return {
@@ -112,8 +123,13 @@ async function fetchRssSource(source: RssSource): Promise<Article[]> {
         category: source.category,
       };
     });
-  } catch (e) {
-    console.warn(`Failed to fetch ${source.name}:`, e);
+  } catch (e: any) {
+    // 区分超时错误
+    if (e.name === 'AbortError') {
+      console.warn(`⏱️ ${source.name} 请求超时`);
+    } else {
+      console.warn(`❌ Failed to fetch ${source.name}:`, e);
+    }
     return [];
   }
 }
@@ -126,19 +142,22 @@ interface RssFeedProps {
 // 时间筛选辅助函数
 function filterByTime(articles: Article[], filter: FilterType): Article[] {
   if (filter === 'all') return articles;
-  
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-  
+
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
   return articles.filter(article => {
-    const diff = now - article.rawDate;
+    const articleDate = new Date(article.rawDate);
+    const articleDayStart = new Date(articleDate.getFullYear(), articleDate.getMonth(), articleDate.getDate());
+    const daysDiff = Math.floor((dayStart.getTime() - articleDayStart.getTime()) / (24 * 60 * 60 * 1000));
+
     switch (filter) {
       case 'today':
-        return diff < dayMs;
+        return daysDiff === 0; // 今天发布的
       case 'week':
-        return diff < 7 * dayMs;
+        return daysDiff >= 0 && daysDiff < 7; // 最近7天
       case 'month':
-        return diff < 30 * dayMs;
+        return daysDiff >= 0 && daysDiff < 30; // 最近30天
       default:
         return true;
     }
@@ -292,20 +311,24 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
   const fetchRss = useCallback(async () => {
     setLoading(true);
     setError(null);
-    
+
     try {
       // 根据选择的源获取数据
-      const sourcesToFetch = selectedSource === '全部' 
-        ? getAllSources() 
+      const sourcesToFetch = selectedSource === '全部'
+        ? getAllSources()
         : getAllSources().filter(s => s.id === selectedSource);
-      
-      // 并行获取所有源
-      const results = await Promise.all(
+
+      // 使用 Promise.allSettled 代替 Promise.all，即使部分失败也能显示成功的
+      const results = await Promise.allSettled(
         sourcesToFetch.map(source => fetchRssSource(source))
       );
-      
-      const allArticles = results.flat();
-      
+
+      // 提取成功的结果
+      const allArticles = results
+        .filter((result): result is PromiseFulfilledResult<Article[]> => result.status === 'fulfilled')
+        .map(result => result.value)
+        .flat();
+
       // 按时间排序
       allArticles.sort((a, b) => {
         const order = ['刚刚', '小时', '天', '月'];
@@ -313,19 +336,30 @@ const RssFeed: React.FC<RssFeedProps> = ({ scrollContainerRef, timeFilter = 'all
         const aOrder = getOrder(a.publishedAt);
         const bOrder = getOrder(b.publishedAt);
         if (aOrder !== bOrder) return aOrder - bOrder;
-        
+
         // 同级别内按数字排序
         const aNum = parseInt(a.publishedAt) || 0;
         const bNum = parseInt(b.publishedAt) || 0;
         return aNum - bNum;
       });
-      
+
       setArticles(allArticles);
-      
+
+      // 统计失败的源
+      const failedCount = results.filter(r => r.status === 'rejected').length;
+
       if (allArticles.length === 0) {
-        setError('暂无数据，请稍后重试');
+        if (failedCount === sourcesToFetch.length) {
+          setError('所有RSS源加载失败，请检查网络连接');
+        } else {
+          setError('暂无数据，请稍后重试');
+        }
+      } else if (failedCount > 0) {
+        // 部分源失败，显示警告但不阻止显示
+        console.warn(`⚠️ ${failedCount}/${sourcesToFetch.length} 个RSS源加载失败`);
       }
     } catch (e) {
+      console.error('RSS加载异常:', e);
       setError('加载失败，请稍后重试');
     } finally {
       setLoading(false);

@@ -14,11 +14,22 @@ const DateFilterPicker: React.FC<DateFilterPickerProps> = ({ isOpen, onClose, on
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
-  
+  const currentDay = currentDate.getDate();
+
+  // 默认选中今天的日期
   const [selectedYear, setSelectedYear] = useState<number>(currentFilter.year || currentYear);
-  const [selectedMonth, setSelectedMonth] = useState<number | undefined>(currentFilter.month);
-  const [selectedDay, setSelectedDay] = useState<number | undefined>(currentFilter.day);
-  const [viewMode, setViewMode] = useState<'month' | 'day'>('month'); // 月份视图或日历视图
+  const [selectedMonth, setSelectedMonth] = useState<number | undefined>(
+    currentFilter.month !== undefined ? currentFilter.month : currentMonth
+  );
+  const [selectedDay, setSelectedDay] = useState<number | undefined>(
+    currentFilter.day !== undefined ? currentFilter.day : currentDay
+  );
+  const [viewMode, setViewMode] = useState<'month' | 'day'>(
+    // 如果已经选中了具体日期，直接进入日历视图
+    currentFilter.day !== undefined || (currentFilter.month === undefined && currentFilter.year === undefined)
+      ? 'day'
+      : 'month'
+  );
   
   const years = Array.from({ length: 6 }, (_, i) => currentYear - i);
   const months = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月'];
@@ -79,12 +90,12 @@ const DateFilterPicker: React.FC<DateFilterPickerProps> = ({ isOpen, onClose, on
     setViewMode('month');
   };
 
-  // 清除筛选
+  // 清除筛选 - 重置为今天
   const handleClear = () => {
     setSelectedYear(currentYear);
-    setSelectedMonth(undefined);
-    setSelectedDay(undefined);
-    setViewMode('month');
+    setSelectedMonth(currentMonth);
+    setSelectedDay(currentDay);
+    setViewMode('day');
   };
 
   if (!isOpen) return null;

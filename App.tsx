@@ -37,7 +37,7 @@ const App = () => {
   });
   const [watchLaterIds, setWatchLaterIds] = useState<Set<string>>(new Set());
   const [watchlistLoading, setWatchlistLoading] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<FilterType>('today'); // 默认今天
+  const [activeFilter, setActiveFilter] = useState<FilterType>('all'); // 默认全部
   const [customDateFilter, setCustomDateFilter] = useState<DateFilter>({});
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -108,6 +108,7 @@ const App = () => {
   // 真实数据状态
   const [videos, setVideos] = useState<VideoWithUploader[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true); // 首次加载标记
   const [error, setError] = useState<string | null>(null);
   
   // 快捷入口数量
@@ -133,7 +134,7 @@ const App = () => {
       
       // TODO数量（从 localStorage 读取）
       try {
-        const todos = JSON.parse(localStorage.getItem('todos') || '[]');
+        const todos = JSON.parse(localStorage.getItem('fluxf-todos') || '[]');
         setTodoCount(todos.filter((t: any) => !t.completed).length);
       } catch { setTodoCount(0); }
       
@@ -158,44 +159,85 @@ const App = () => {
     setVisibleCount(10);
   }, [activeFilter, selectedUploader, searchTerm, activeTab]);
 
-  // 滑动切换Tab
+  // 滑动切换Tab - B站式交互体验
   const touchStartX = React.useRef<number>(0);
+  const touchStartY = React.useRef<number>(0);
   const touchEndX = React.useRef<number>(0);
+  const touchEndY = React.useRef<number>(0);
+  const touchStartTime = React.useRef<number>(0);
   const isSwiping = React.useRef<boolean>(false);
-  const tabs: Tab[] = ['home', 'watchLater', 'rss', 'todo'];
+  const swipeDirection = React.useRef<'horizontal' | 'vertical' | 'none'>('none');
+  const tabs: Tab[] = ['home', 'watchLater', 'rss', 'settings'];
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
-    touchEndX.current = e.touches[0].clientX; // 重置为起始位置
+    touchStartY.current = e.touches[0].clientY;
+    touchEndX.current = e.touches[0].clientX;
+    touchEndY.current = e.touches[0].clientY;
+    touchStartTime.current = Date.now();
     isSwiping.current = false;
+    swipeDirection.current = 'none';
   }, []);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     touchEndX.current = e.touches[0].clientX;
-    // 水平移动超过10px才算滑动
-    if (Math.abs(touchEndX.current - touchStartX.current) > 10) {
+    touchEndY.current = e.touches[0].clientY;
+
+    const deltaX = Math.abs(touchEndX.current - touchStartX.current);
+    const deltaY = Math.abs(touchEndY.current - touchStartY.current);
+
+    // 首次移动时确定滑动方向
+    if (swipeDirection.current === 'none' && (deltaX > 10 || deltaY > 10)) {
+      // 水平滑动距离明显大于垂直滑动，才认为是水平滑动
+      swipeDirection.current = deltaX > deltaY * 1.5 ? 'horizontal' : 'vertical';
+    }
+
+    // 只有明确的水平滑动才标记为滑动状态
+    if (swipeDirection.current === 'horizontal' && deltaX > 50) {
       isSwiping.current = true;
     }
   }, []);
 
   const handleTouchEnd = useCallback(() => {
-    // 没有发生滑动则不处理
-    if (!isSwiping.current) return;
-    
-    const diff = touchStartX.current - touchEndX.current;
-    const threshold = 80; // 滑动阈值
+    // 不是水平滑动，或没有发生滑动，则不处理
+    if (swipeDirection.current !== 'horizontal' || !isSwiping.current) {
+      swipeDirection.current = 'none';
+      return;
+    }
 
-    if (Math.abs(diff) < threshold) return;
+    const diffX = touchStartX.current - touchEndX.current;
+    const diffY = Math.abs(touchEndY.current - touchStartY.current);
+    const duration = Date.now() - touchStartTime.current;
+
+    // 计算滑动速度 (px/ms)
+    const velocity = Math.abs(diffX) / duration;
+
+    // 动态阈值：快速滑动(velocity > 0.5)降低阈值到80px，慢速滑动提高到120px
+    const threshold = velocity > 0.5 ? 80 : 120;
+
+    // 垂直滑动过多，可能是斜向滑动，不触发切换
+    if (diffY > 50) {
+      swipeDirection.current = 'none';
+      return;
+    }
+
+    // 水平滑动距离不够
+    if (Math.abs(diffX) < threshold) {
+      swipeDirection.current = 'none';
+      return;
+    }
 
     const currentIndex = tabs.indexOf(activeTab);
-    
-    if (diff > 0 && currentIndex < tabs.length - 1) {
+
+    if (diffX > 0 && currentIndex < tabs.length - 1) {
       // 左滑 -> 下一个tab
       setActiveTab(tabs[currentIndex + 1]);
-    } else if (diff < 0 && currentIndex > 0) {
+    } else if (diffX < 0 && currentIndex > 0) {
       // 右滑 -> 上一个tab
       setActiveTab(tabs[currentIndex - 1]);
     }
+
+    swipeDirection.current = 'none';
   }, [activeTab, tabs]);
 
   // 处理 API 错误 - 检测认证过期和网络问题
@@ -226,6 +268,7 @@ const App = () => {
     // 未配置 Supabase 或游客模式时直接返回空
     if (!isSupabaseConfigured || !currentUser?.id) {
       setLoading(false);
+      setInitialLoading(false);
       setVideos([]);
       return;
     }
@@ -234,7 +277,11 @@ const App = () => {
       setLoading(true);
       setError(null);
       setNetworkError(null);
-      
+
+      // 确保最小加载时间，避免闪烁
+      const minLoadTime = initialLoading ? 500 : 0;
+      const startTime = Date.now();
+
       const { data, error: fetchError } = await supabase
         .from('video')
         .select(`
@@ -245,14 +292,22 @@ const App = () => {
         .order('pubdate', { ascending: false });
 
       if (fetchError) throw fetchError;
+
+      // 等待最小加载时间
+      const elapsed = Date.now() - startTime;
+      if (elapsed < minLoadTime) {
+        await new Promise(resolve => setTimeout(resolve, minLoadTime - elapsed));
+      }
+
       setVideos((data as VideoWithUploader[]) || []);
     } catch (err) {
       const message = handleApiError(err, '获取视频失败');
       setError(message);
     } finally {
       setLoading(false);
+      setInitialLoading(false);
     }
-  }, [currentUser?.id, handleApiError]);
+  }, [currentUser?.id, handleApiError, initialLoading]);
 
   // 从 Supabase 获取待看列表
   const fetchWatchlist = useCallback(async () => {
@@ -453,12 +508,13 @@ const App = () => {
       if (activeFilter === 'all') return true;
 
       const insertDate = new Date(v.created_at);
-      const diffTime = Math.abs(now.getTime() - insertDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const timeDiff = dayStart.getTime() - new Date(insertDate.getFullYear(), insertDate.getMonth(), insertDate.getDate()).getTime();
+      const daysDiff = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
 
-      if (activeFilter === 'today') return diffDays <= 1;
-      if (activeFilter === 'week') return diffDays <= 7;
-      if (activeFilter === 'month') return diffDays <= 30;
+      if (activeFilter === 'today') return daysDiff === 0; // 今天插入的
+      if (activeFilter === 'week') return daysDiff >= 0 && daysDiff < 7; // 最近7天
+      if (activeFilter === 'month') return daysDiff >= 0 && daysDiff < 30; // 最近30天
 
       if (activeFilter === 'custom') {
          if (!customDateFilter.year) return true;
@@ -807,9 +863,9 @@ const App = () => {
       </header>
 
       {/* Main Content Feed */}
-      <main 
-        ref={mainRef} 
-        className="flex-1 overflow-y-auto px-3 py-4 max-w-4xl mx-auto w-full"
+      <main
+        ref={mainRef}
+        className="flex-1 overflow-y-auto px-3 py-4 pb-24 max-w-4xl mx-auto w-full"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -920,8 +976,8 @@ const App = () => {
               )}
             </h2>
 
-            {/* 加载状态 */}
-            {loading && <Loader3D text="正在加载视频..." />}
+            {/* 加载状态 - 仅在已登录时显示 */}
+            {loading && currentUser && <Loader3D text="正在加载视频..." />}
 
             {/* 错误提示 */}
             {error && (
@@ -931,8 +987,118 @@ const App = () => {
                 </div>
             )}
 
-            {/* 空状态提示 - 精美插画风格 */}
-            {!loading && !error && videos.length === 0 && (
+            {/* 未登录CTA - 精美的登录提示 (仅在无视频缓存时显示) */}
+            {!loading && !currentUser && videos.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-20 px-6">
+                  {/* 动画背景 */}
+                  <div className="relative w-full max-w-sm">
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-64 h-64 rounded-full bg-gradient-to-br from-cyber-lime/20 to-cyan-500/10 blur-3xl animate-pulse"></div>
+                    </div>
+
+                    {/* 主要插画 */}
+                    <div className="relative z-10 mb-8">
+                      <svg viewBox="0 0 200 150" className="w-full h-48">
+                        {/* 视频播放器框架 */}
+                        <rect x="30" y="25" width="140" height="90" rx="12"
+                          fill="none" stroke="url(#loginGrad)" strokeWidth="2" opacity="0.6">
+                          <animate attributeName="opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite"/>
+                        </rect>
+
+                        {/* 播放按钮 */}
+                        <circle cx="100" cy="70" r="25" fill="none" stroke="#a3e635" strokeWidth="2.5" opacity="0.5"/>
+                        <polygon points="92,60 92,80 112,70" fill="#a3e635" opacity="0.7">
+                          <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite"/>
+                        </polygon>
+
+                        {/* 用户图标 */}
+                        <circle cx="100" cy="120" r="15" fill="none" stroke="#22d3ee" strokeWidth="2" opacity="0.4"/>
+                        <path d="M100 115 Q100 110, 105 110 Q110 110, 110 115" stroke="#22d3ee" strokeWidth="2" fill="none" opacity="0.4"/>
+                        <circle cx="100" cy="108" r="3" fill="#22d3ee" opacity="0.4"/>
+
+                        {/* 浮动装饰 */}
+                        <circle cx="50" cy="50" r="4" fill="#a3e635" opacity="0.5">
+                          <animate attributeName="cy" values="50;45;50" dur="2s" repeatCount="indefinite"/>
+                        </circle>
+                        <circle cx="150" cy="60" r="5" fill="#22d3ee" opacity="0.4">
+                          <animate attributeName="cy" values="60;55;60" dur="2.5s" repeatCount="indefinite"/>
+                        </circle>
+                        <rect x="160" y="90" width="8" height="8" rx="2" fill="#f472b6" opacity="0.3">
+                          <animate attributeName="y" values="90;85;90" dur="2s" repeatCount="indefinite"/>
+                        </rect>
+
+                        <defs>
+                          <linearGradient id="loginGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stopColor="#a3e635"/>
+                            <stop offset="100%" stopColor="#22d3ee"/>
+                          </linearGradient>
+                        </defs>
+                      </svg>
+                    </div>
+
+                    {/* 文字内容 */}
+                    <div className="relative z-10 text-center">
+                      <h3 className="text-2xl font-bold text-white mb-3 bg-gradient-to-r from-cyber-lime via-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                        开始你的视频之旅
+                      </h3>
+                      <p className="text-gray-400 text-sm mb-8 leading-relaxed max-w-xs mx-auto">
+                        登录后可以同步追踪你喜欢的 UP主，
+                        <br />
+                        永不错过精彩内容
+                      </p>
+
+                      {/* CTA按钮 */}
+                      <button
+                        onClick={() => setAuthExpired(true)}
+                        className="group relative px-8 py-4 bg-gradient-to-r from-cyber-lime via-lime-400 to-cyan-400 rounded-2xl font-bold text-black
+                                   shadow-[0_0_40px_rgba(163,230,53,0.5)] hover:shadow-[0_0_60px_rgba(163,230,53,0.7)]
+                                   transition-all duration-300 hover:scale-105 active:scale-100
+                                   overflow-hidden"
+                      >
+                        {/* 按钮内发光动画 */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent
+                                      translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+
+                        <span className="relative flex items-center gap-2 text-base">
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                            <polyline points="10 17 15 12 10 7" />
+                            <line x1="15" y1="12" x2="3" y2="12" />
+                          </svg>
+                          立即登录
+                        </span>
+                      </button>
+
+                      {/* 特性列表 */}
+                      <div className="mt-8 flex items-center justify-center gap-6 text-xs text-gray-500">
+                        <div className="flex items-center gap-1.5">
+                          <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                            <polyline points="22 4 12 14.01 9 11.01" />
+                          </svg>
+                          <span>云端同步</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <svg className="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                          </svg>
+                          <span>完全免费</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <svg className="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                          <span>安全可靠</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+            )}
+
+            {/* 空状态提示 - 已登录但无视频数据 */}
+            {!loading && !error && currentUser && videos.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 px-6">
                   {/* 插画 SVG */}
                   <div className="relative w-64 h-48 mb-8">

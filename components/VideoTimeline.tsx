@@ -178,6 +178,7 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [openMenuBvid, setOpenMenuBvid] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>(getDateKey(Date.now())); // 默认今天
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dateRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -195,30 +196,27 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
 
   // 跳转到指定日期
   const scrollToDate = useCallback((dateKey: string) => {
-    const element = dateRefs.current.get(dateKey);
-    if (element && scrollContainerRef.current) {
-      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setShowDatePicker(false);
-    }
+    setSelectedDate(dateKey);
+    setShowDatePicker(false);
   }, []);
 
-  // 按发布时间分组和排序
-  const groupedVideos = useMemo(() => {
+  // 按发布时间分组和排序 - 只显示所有有视频的日期
+  const allGroupedVideos = useMemo(() => {
     // 按 pubdate 降序排序
     const sorted = [...videos].sort((a, b) => {
       const dateA = parsePubdate(a.pubdate);
       const dateB = parsePubdate(b.pubdate);
       return dateB.getTime() - dateA.getTime();
     });
-    
+
     // 按日期分组
     const groups: { date: string; dateLabel: string; videos: VideoWithUploader[] }[] = [];
     let currentDate = '';
-    
+
     sorted.forEach(video => {
       const dateKey = getDateKey(video.pubdate);
       const dateLabel = getDateLabel(video.pubdate);
-      
+
       if (dateKey !== currentDate) {
         currentDate = dateKey;
         groups.push({ date: dateKey, dateLabel, videos: [video] });
@@ -226,16 +224,42 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
         groups[groups.length - 1].videos.push(video);
       }
     });
-    
+
     return groups;
   }, [videos]);
 
-  // 今日视频统计
+  // 当前显示的日期组
+  const currentGroup = useMemo(() => {
+    return allGroupedVideos.find(g => g.date === selectedDate) || allGroupedVideos[0];
+  }, [allGroupedVideos, selectedDate]);
+
+  // 当前日期在所有日期中的索引
+  const currentDateIndex = useMemo(() => {
+    return allGroupedVideos.findIndex(g => g.date === selectedDate);
+  }, [allGroupedVideos, selectedDate]);
+
+  // 切换到前一天
+  const gotoPrevDay = useCallback(() => {
+    const prevIndex = currentDateIndex + 1;
+    if (prevIndex < allGroupedVideos.length) {
+      setSelectedDate(allGroupedVideos[prevIndex].date);
+    }
+  }, [currentDateIndex, allGroupedVideos]);
+
+  // 切换到后一天
+  const gotoNextDay = useCallback(() => {
+    const nextIndex = currentDateIndex - 1;
+    if (nextIndex >= 0) {
+      setSelectedDate(allGroupedVideos[nextIndex].date);
+    }
+  }, [currentDateIndex, allGroupedVideos]);
+
+  // 当日视频统计
   const todayStats = useMemo(() => {
-    const todayVideos = videos.filter(v => isToday(v.pubdate));
-    const uploaders = new Set(todayVideos.map(v => v.uploader?.name)).size;
-    return { count: todayVideos.length, uploaders };
-  }, [videos]);
+    if (!currentGroup) return { count: 0, uploaders: 0 };
+    const uploaders = new Set(currentGroup.videos.map(v => v.uploader?.name)).size;
+    return { count: currentGroup.videos.length, uploaders };
+  }, [currentGroup]);
 
   const handleVideoClick = useCallback((bvid: string) => {
     if (onVideoClick) {
@@ -262,33 +286,53 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
           
           {/* 中间标题区域 */}
           <div className="flex-1 flex flex-col items-center justify-center">
-            <h1 className="text-white font-bold text-lg flex items-center justify-center gap-2">
-              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="12" y1="20" x2="12" y2="10"/>
-                <line x1="18" y1="20" x2="18" y2="4"/>
-                <line x1="6" y1="20" x2="6" y2="16"/>
-              </svg>
-              发布时间轴
+            <h1 className="text-white font-bold text-base flex items-center justify-center gap-2">
+              {currentGroup?.dateLabel || '时间轴'}
             </h1>
             <p className="text-gray-500 text-xs mt-0.5">
               {todayStats.count} 个视频 · {todayStats.uploaders} 位UP主
             </p>
           </div>
-          
-          {/* 日期选择按钮 */}
-          <button
-            onClick={() => setShowDatePicker(!showDatePicker)}
-            className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${
-              showDatePicker ? 'bg-cyber-lime text-black' : 'bg-white/10 hover:bg-white/20 text-white'
-            }`}
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-              <line x1="16" y1="2" x2="16" y2="6"/>
-              <line x1="8" y1="2" x2="8" y2="6"/>
-              <line x1="3" y1="10" x2="21" y2="10"/>
-            </svg>
-          </button>
+
+          {/* 左右切换和日期选择 */}
+          <div className="flex items-center gap-2">
+            {/* 前一天 */}
+            <button
+              onClick={gotoPrevDay}
+              disabled={currentDateIndex >= allGroupedVideos.length - 1}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+
+            {/* 日期选择 */}
+            <button
+              onClick={() => setShowDatePicker(!showDatePicker)}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
+                showDatePicker ? 'bg-cyber-lime text-black' : 'bg-white/10 hover:bg-white/20 text-white'
+              }`}
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+            </button>
+
+            {/* 后一天 */}
+            <button
+              onClick={gotoNextDay}
+              disabled={currentDateIndex <= 0}
+              className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 18l6-6-6-6"/>
+              </svg>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -306,15 +350,15 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
             {/* 头部 */}
             <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
               <span className="text-white font-medium">选择日期</span>
-              <span className="text-gray-500 text-xs">{groupedVideos.length} 天</span>
+              <span className="text-gray-500 text-xs">{allGroupedVideos.length} 天</span>
             </div>
-            
+
             {/* 日期网格 - 按月份分组 */}
             <div className="overflow-y-auto max-h-[calc(70vh-52px)] p-3">
               {(() => {
                 // 按月份分组
-                const monthGroups = new Map<string, typeof groupedVideos>();
-                groupedVideos.forEach(group => {
+                const monthGroups = new Map<string, typeof allGroupedVideos>();
+                allGroupedVideos.forEach(group => {
                   const date = new Date(group.date);
                   const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
                   const monthLabel = date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long' });
@@ -323,28 +367,28 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
                   }
                   monthGroups.get(monthKey)!.push({ ...group, monthLabel });
                 });
-                
+
                 return Array.from(monthGroups.entries()).map(([monthKey, days]) => (
                   <div key={monthKey} className="mb-4 last:mb-0">
                     {/* 月份标题 */}
                     <div className="text-xs text-gray-500 mb-2 px-1">
                       {(days[0] as any).monthLabel}
                     </div>
-                    
+
                     {/* 日期网格 */}
                     <div className="grid grid-cols-7 gap-1">
                       {days.map(group => {
                         const date = new Date(group.date);
                         const day = date.getDate();
-                        const isCurrentDay = isToday(group.videos[0]?.pubdate);
-                        
+                        const isCurrentDay = group.date === selectedDate;
+
                         return (
                           <button
                             key={group.date}
                             onClick={() => scrollToDate(group.date)}
                             className={`relative aspect-square rounded-xl flex flex-col items-center justify-center transition-all ${
-                              isCurrentDay 
-                                ? 'bg-cyber-lime text-black font-bold' 
+                              isCurrentDay
+                                ? 'bg-cyber-lime text-black font-bold scale-105'
                                 : 'bg-white/5 hover:bg-white/15 text-white'
                             }`}
                           >
@@ -367,7 +411,7 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
       {/* 时间轴内容 */}
       <div ref={scrollContainerRef} className="h-[calc(100vh-64px)] overflow-y-auto overscroll-none">
         <div className="max-w-xl mx-auto px-4 py-6 pl-20">
-          {groupedVideos.length === 0 ? (
+          {!currentGroup ? (
             <div className="flex flex-col items-center justify-center py-20 text-gray-500">
               <svg className="w-16 h-16 mb-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
@@ -378,26 +422,21 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
               <p>暂无视频数据</p>
             </div>
           ) : (
-            groupedVideos.map((group, groupIndex) => (
-              <div 
-                key={group.date} 
-                ref={el => { if (el) dateRefs.current.set(group.date, el); }}
-              >
-                <DateHeader date={group.dateLabel} count={group.videos.length} />
-                
-                {group.videos.map((video, index) => (
-                  <TimelineNode
-                    key={video.bvid}
-                    video={video}
-                    isFirst={groupIndex === 0 && index === 0}
-                    isLast={groupIndex === groupedVideos.length - 1 && index === group.videos.length - 1}
-                    onClick={() => handleVideoClick(video.bvid)}
-                    onMenuClick={() => setOpenMenuBvid(openMenuBvid === video.bvid ? null : video.bvid)}
-                    isMenuOpen={openMenuBvid === video.bvid}
-                  />
-                ))}
-              </div>
-            ))
+            <div>
+              <DateHeader date={currentGroup.dateLabel} count={currentGroup.videos.length} />
+
+              {currentGroup.videos.map((video, index) => (
+                <TimelineNode
+                  key={video.bvid}
+                  video={video}
+                  isFirst={index === 0}
+                  isLast={index === currentGroup.videos.length - 1}
+                  onClick={() => handleVideoClick(video.bvid)}
+                  onMenuClick={() => setOpenMenuBvid(openMenuBvid === video.bvid ? null : video.bvid)}
+                  isMenuOpen={openMenuBvid === video.bvid}
+                />
+              ))}
+            </div>
           )}
         </div>
       </div>

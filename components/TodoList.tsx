@@ -67,19 +67,22 @@ const Confetti: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 // 时间筛选辅助函数
 function filterTodosByTime(todos: Todo[], filter: FilterType): Todo[] {
   if (filter === 'all') return todos;
-  
-  const now = Date.now();
-  const dayMs = 24 * 60 * 60 * 1000;
-  
+
+  const now = new Date();
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
   return todos.filter(todo => {
-    const diff = now - todo.createdAt;
+    const todoDate = new Date(todo.createdAt);
+    const todoDayStart = new Date(todoDate.getFullYear(), todoDate.getMonth(), todoDate.getDate());
+    const daysDiff = Math.floor((dayStart.getTime() - todoDayStart.getTime()) / (24 * 60 * 60 * 1000));
+
     switch (filter) {
       case 'today':
-        return diff < dayMs;
+        return daysDiff === 0; // 今天创建的
       case 'week':
-        return diff < 7 * dayMs;
+        return daysDiff >= 0 && daysDiff < 7; // 最近7天
       case 'month':
-        return diff < 30 * dayMs;
+        return daysDiff >= 0 && daysDiff < 30; // 最近30天
       default:
         return true;
     }
@@ -87,7 +90,16 @@ function filterTodosByTime(todos: Todo[], filter: FilterType): Todo[] {
 }
 
 const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, timeFilter = 'all' as FilterType }) => {
-  const [todos, setTodos] = useState<Todo[]>([]);
+  // 使用惰性初始化，直接从localStorage读取初始值，避免空数组覆盖问题
+  const [todos, setTodos] = useState<Todo[]>(() => {
+    try {
+      const saved = localStorage.getItem('fluxf-todos');
+      return saved ? JSON.parse(saved) : [];
+    } catch (error) {
+      console.error('读取待办事项失败:', error);
+      return [];
+    }
+  });
   const [newTodo, setNewTodo] = useState('');
   const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
@@ -96,13 +108,13 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
   const [editText, setEditText] = useState('');
   const [editPriority, setEditPriority] = useState<'low' | 'medium' | 'high'>('medium');
 
+  // 保存到localStorage，添加错误处理
   useEffect(() => {
-    const saved = localStorage.getItem('fluxf-todos');
-    if (saved) setTodos(JSON.parse(saved));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('fluxf-todos', JSON.stringify(todos));
+    try {
+      localStorage.setItem('fluxf-todos', JSON.stringify(todos));
+    } catch (error) {
+      console.error('保存待办事项失败:', error);
+    }
   }, [todos]);
 
   const addTodo = () => {

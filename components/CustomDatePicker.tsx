@@ -29,9 +29,38 @@ const getHeatLevel = (count: number) => {
 
 const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, onApply, currentFilter, videos }) => {
   const today = new Date();
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  // 默认选中今天的日期
+  const initYear = currentFilter.year !== undefined ? currentFilter.year : today.getFullYear();
+  const initMonth = currentFilter.month !== undefined ? currentFilter.month : today.getMonth();
+  const initDay = currentFilter.day !== undefined ? currentFilter.day : today.getDate();
+
+  const [currentMonth, setCurrentMonth] = useState(initMonth);
+  const [currentYear, setCurrentYear] = useState(initYear);
+  const [selectedDate, setSelectedDate] = useState<Date | null>(
+    // 默认选中今天
+    currentFilter.year !== undefined && currentFilter.month !== undefined && currentFilter.day !== undefined
+      ? new Date(currentFilter.year, currentFilter.month, currentFilter.day)
+      : new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  );
+
+  // 当打开时重置到当前筛选或今天
+  React.useEffect(() => {
+    if (isOpen) {
+      const year = currentFilter.year !== undefined ? currentFilter.year : today.getFullYear();
+      const month = currentFilter.month !== undefined ? currentFilter.month : today.getMonth();
+      const day = currentFilter.day !== undefined ? currentFilter.day : today.getDate();
+
+      setCurrentYear(year);
+      setCurrentMonth(month);
+
+      if (currentFilter.year !== undefined && currentFilter.month !== undefined && currentFilter.day !== undefined) {
+        setSelectedDate(new Date(currentFilter.year, currentFilter.month, currentFilter.day));
+      } else {
+        // 默认选中今天
+        setSelectedDate(new Date(today.getFullYear(), today.getMonth(), today.getDate()));
+      }
+    }
+  }, [isOpen, currentFilter]);
 
   // 统计每天的视频数量（支持两种数据格式）
   const videoCountByDate = useMemo(() => {
