@@ -9,6 +9,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
@@ -26,20 +27,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 禁用缓存
-    res.setHeader('Cache-Control', 'no-store');
+    // 手动跟随重定向，获取 Location 头
+    let currentUrl = url;
+    let finalUrl = url;
     
-    // 使用fetch跟随重定向
-    const response = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      },
-    });
+    for (let i = 0; i < 5; i++) { // 最多跟随5次重定向
+      const response = await fetch(currentUrl, {
+        method: 'HEAD',
+        redirect: 'manual', // 不自动跟随重定向
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        },
+      });
+
+      // 检查是否是重定向响应
+      if (response.status >= 300 && response.status < 400) {
+        const location = response.headers.get('location');
+        if (location) {
+          // 处理相对路径
+          currentUrl = location.startsWith('http') ? location : new URL(location, currentUrl).href;
+          finalUrl = currentUrl;
+          continue;
+        }
+      }
+      
+      // 不是重定向，结束循环
+      finalUrl = currentUrl;
+      break;
+    }
 
     // 从最终URL中提取BV号
-    const finalUrl = response.url;
     const bvMatch = finalUrl.match(/BV[a-zA-Z0-9]{10}/i);
 
     if (bvMatch) {
