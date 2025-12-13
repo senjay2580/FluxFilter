@@ -1,9 +1,10 @@
-import React, { memo, useMemo, useCallback } from 'react';
+import React, { memo, useMemo, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Video } from '../types';
 import { ClockIcon } from './Icons';
-import { handleVideoClick, formatDuration } from '../lib/bilibili';
+import { formatDuration } from '../lib/bilibili';
 import type { VideoWithUploader } from '../lib/database.types';
+import EmbeddedPlayer from './EmbeddedPlayer';
 
 // 支持两种数据格式：旧的 Video 类型和新的 VideoWithUploader 类型
 interface VideoCardProps {
@@ -14,6 +15,7 @@ interface VideoCardProps {
   openMenuId?: string | null;
   onMenuToggle?: (bvid: string | null) => void;
   onDelete?: (bvid: string) => void;
+  onTranscript?: (videoUrl: string) => void;
 }
 
 // 类型守卫：检查是否为数据库视频类型
@@ -40,8 +42,9 @@ const formatPubdate = (pubdate: string | number): string => {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 };
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete }) => {
-  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete, onTranscript }) => {
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showEmbeddedPlayer, setShowEmbeddedPlayer] = useState(false);
   
   // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
   const videoData = useMemo(() => {
@@ -70,8 +73,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
 
   // 使用 useCallback 缓存事件处理函数
   const handleClick = useCallback(() => {
-    handleVideoClick(bvid);
-  }, [bvid]);
+    setShowEmbeddedPlayer(true);
+  }, []);
 
   const handleMoreClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -347,6 +350,46 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                 </div>
               </button>
 
+              {/* 转写文案 - 跳转外部系统 */}
+              {onTranscript && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const videoUrl = `https://www.bilibili.com/video/${bvid}`;
+                    // 跳转到外部转写系统，携带视频元数据
+                    const transcriptSystemUrl = (import.meta as any).env?.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
+                    const params = new URLSearchParams({
+                      url: videoUrl,
+                      title: title,
+                      author: author,
+                      bvid: bvid,
+                    });
+                    window.open(`${transcriptSystemUrl}?${params.toString()}`, '_blank');
+                    onMenuToggle?.(null);
+                  }}
+                  className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                      <polyline points="10 9 9 9 8 9"/>
+                    </svg>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <span className="text-[15px] text-white font-medium">转写文案</span>
+                    <p className="text-xs text-gray-500 mt-0.5">跳转到转写系统处理</p>
+                  </div>
+                  <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </button>
+              )}
+
               {/* 在B站打开 */}
               <button
                 onClick={(e) => {
@@ -467,11 +510,19 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
       document.body
     )}
 
+    {/* 嵌入式播放器 */}
+    {showEmbeddedPlayer && (
+      <EmbeddedPlayer
+        bvid={bvid}
+        title={title}
+        onClose={() => setShowEmbeddedPlayer(false)}
+      />
+    )}
     </>
   );
 };
 
-// 使用 memo 避免不必要的重渲染
+// 使用 memo 避免不必
 export default memo(VideoCard, (prevProps, nextProps) => {
   // 只有这些属性变化时才重新渲染
   const prevVideo = prevProps.video;
@@ -482,6 +533,7 @@ export default memo(VideoCard, (prevProps, nextProps) => {
   return (
     prevBvid === nextBvid &&
     prevProps.isInWatchlist === nextProps.isInWatchlist &&
-    prevProps.openMenuId === nextProps.openMenuId
+    prevProps.openMenuId === nextProps.openMenuId &&
+    prevProps.onTranscript === nextProps.onTranscript
   );
 });

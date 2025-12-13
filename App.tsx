@@ -442,6 +442,13 @@ const App = () => {
     }
   }, [currentUser?.id, fetchVideos]);
 
+  // 处理转写文案 - 跳转到外部转写系统
+  const handleTranscript = useCallback((videoUrl: string) => {
+    const transcriptSystemUrl = import.meta.env.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
+    const params = new URLSearchParams({ url: videoUrl });
+    window.open(`${transcriptSystemUrl}?${params.toString()}`, '_blank');
+  }, []);
+
   // 获取所有UP主列表（去重，按视频数量排序）
   const uploaders = useMemo(() => {
     const uploaderMap = new Map<number, { mid: number; name: string; face: string | null; count: number; latestTime: string }>();
@@ -963,6 +970,23 @@ const App = () => {
                 </span>
               )}
             </button>
+
+            {/* 视频下载 & 文案转写 - 跳转外部系统 */}
+            <button
+              onClick={() => {
+                const transcriptSystemUrl = import.meta.env.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
+                window.open(transcriptSystemUrl, '_blank');
+              }}
+              className="relative w-11 h-11 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl flex items-center justify-center hover:from-purple-500/30 hover:to-pink-500/30 transition-all active:scale-[0.95]"
+              title="视频下载 & 文案转写"
+            >
+              <svg className="w-5 h-5 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </button>
           </div>
         )}
 
@@ -1296,6 +1320,7 @@ const App = () => {
                             openMenuId={openMenuId}
                             onMenuToggle={setOpenMenuId}
                             onDelete={handleDeleteVideo}
+                            onTranscript={handleTranscript}
                         />
                     ))}
                 </div>
