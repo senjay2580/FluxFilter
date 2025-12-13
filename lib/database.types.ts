@@ -133,3 +133,51 @@ export interface UpsertVideoParams {
   like_count: number;
   pubdate: string;
 }
+
+// ============================================
+// 笔记相关类型
+// ============================================
+
+export type NoteColor = 'default' | 'red' | 'orange' | 'yellow' | 'green' | 'blue' | 'purple' | 'pink';
+
+export interface Note {
+  id: number;
+  user_id: string;
+  title: string;
+  content: string; // HTML 富文本内容
+  preview: string | null; // 纯文本预览
+  color: NoteColor;
+  category: string | null;
+  is_pinned: boolean;
+  pin_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NoteCategory {
+  id: number;
+  user_id: string;
+  name: string;
+  color: NoteColor;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface CreateNoteParams {
+  title: string;
+  content: string;
+  preview?: string;
+  color?: NoteColor;
+  category?: string;
+  is_pinned?: boolean;
+}
+
+export interface UpdateNoteParams {
+  title?: string;
+  content?: string;
+  preview?: string;
+  color?: NoteColor;
+  category?: string;
+  is_pinned?: boolean;
+  pin_order?: number;
+}

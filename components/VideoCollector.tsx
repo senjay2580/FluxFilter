@@ -105,6 +105,9 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
   // 删除确认
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; title: string } | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
+  
+  // 剪贴板内容
+  const [clipboardContent, setClipboardContent] = useState<string>('');
 
   // 加载收藏视频
   const loadVideos = useCallback(async () => {
@@ -127,6 +130,25 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
   useEffect(() => {
     loadVideos();
   }, [loadVideos]);
+
+  // 读取剪贴板内容
+  const readClipboard = useCallback(async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text && text !== clipboardContent) {
+        setClipboardContent(text);
+      }
+    } catch {
+      // 剪贴板访问被拒绝
+    }
+  }, [clipboardContent]);
+
+  // 抽屉打开时读取剪贴板
+  useEffect(() => {
+    if (isDrawerOpen) {
+      readClipboard();
+    }
+  }, [isDrawerOpen, readClipboard]);
 
   // 格式化时长
   const formatDuration = (seconds: number) => {
@@ -439,6 +461,28 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                 粘贴B站视频链接，支持多个链接（每行一个或用空格分隔）
               </p>
 
+              {/* 剪贴板提示 - 在输入框上方 */}
+              {clipboardContent && !inputText && (
+                <button
+                  onClick={() => {
+                    setInputText(clipboardContent);
+                    setParsedBvids([]);
+                  }}
+                  className="w-full mb-3 p-3 bg-cyber-lime/15 hover:bg-cyber-lime/25 border border-cyber-lime/30 rounded-xl transition-all text-left group"
+                >
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                    </svg>
+                    <span className="text-cyber-lime text-xs font-medium">点击粘贴</span>
+                  </div>
+                  <p className="text-gray-400 text-xs line-clamp-2 group-hover:text-gray-300 break-all">
+                    {clipboardContent.length > 150 ? clipboardContent.slice(0, 150) + '...' : clipboardContent}
+                  </p>
+                </button>
+              )}
+
               {/* 输入区域 */}
               <div className="mb-4">
                 <textarea
@@ -447,6 +491,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                     setInputText(e.target.value);
                     setParsedBvids([]);
                   }}
+                  onFocus={readClipboard}
                   placeholder={`支持以下格式：
 • BV1xx411c7mD (BV号)
 • https://www.bilibili.com/video/BV1xx411c7mD (PC端)

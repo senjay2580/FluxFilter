@@ -423,8 +423,6 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
             </div>
           ) : (
             <div>
-              <DateHeader date={currentGroup.dateLabel} count={currentGroup.videos.length} />
-
               {currentGroup.videos.map((video, index) => (
                 <TimelineNode
                   key={video.bvid}

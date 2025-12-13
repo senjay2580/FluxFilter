@@ -13,9 +13,10 @@ interface SettingsPageProps {
   isOpen: boolean;
   onClose: () => void;
   initialView?: SettingsView;
+  onOpenNotes?: () => void;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialView = 'main' }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialView = 'main', onOpenNotes }) => {
   const [currentView, setCurrentView] = useState<SettingsView>(initialView);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -110,6 +111,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialVie
             <h1 className="text-white font-bold text-lg">{getTitle()}</h1>
             <p className="text-gray-500 text-xs">{getDescription()}</p>
           </div>
+
+          {/* 视频收藏夹页面 - 打开B站按钮 */}
+          {currentView === 'collector' && (
+            <button
+              onClick={() => {
+                window.open('https://www.bilibili.com', '_blank');
+                showToast('在B站复制视频链接后返回粘贴');
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/30 rounded-xl transition-all active:scale-95"
+            >
+              <svg className="w-4 h-4 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+              <span className="text-pink-400 text-sm font-medium">B站</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -182,6 +201,34 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialVie
               </div>
             </button>
 
+            {/* 笔记入口 */}
+            <button
+              onClick={() => {
+                onClose();
+                onOpenNotes?.();
+              }}
+              className="w-full p-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all active:scale-[0.98] text-left"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <line x1="10" y1="9" x2="8" y2="9"/>
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-white font-medium">笔记</h3>
+                  <p className="text-gray-500 text-sm">记录灵感，整理思路</p>
+                </div>
+                <svg className="w-5 h-5 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </div>
+            </button>
+
             {/* 视频下载 & 文案转写入口 - 跳转外部系统 */}
             <button
               onClick={() => handleNavigateToTranscriptSystem()}
@@ -209,25 +256,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ isOpen, onClose, initialVie
               </div>
             </button>
 
-            {/* 分割线 */}
-            <div className="py-2">
-              <div className="h-px bg-white/10" />
-            </div>
-
-            {/* 其他设置项 */}
-            <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
-              <h4 className="text-gray-400 text-xs font-medium mb-3">关于</h4>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400 text-sm">版本</span>
-                  <span className="text-white text-sm">1.0.0</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-gray-400 text-sm">开发者</span>
-                  <span className="text-white text-sm">Senjay</span>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 

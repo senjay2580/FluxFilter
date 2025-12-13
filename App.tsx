@@ -19,6 +19,7 @@ import VideoTimeline from './components/VideoTimeline';
 import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import HighPriorityTodoReminder from './components/HighPriorityTodoReminder';
+import NotesPage from './components/NotesPage';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
 import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
 import { clearCookieCache } from './lib/bilibili';
@@ -46,6 +47,7 @@ const App = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialView, setSettingsInitialView] = useState<'main' | 'todo' | 'reminder' | 'collector'>('main');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isNotesOpen, setIsNotesOpen] = useState(false);
   
   // UP主筛选
   const [selectedUploader, setSelectedUploader] = useState<{ mid: number; name: string } | null>(null);
@@ -115,6 +117,7 @@ const App = () => {
   const [collectedCount, setCollectedCount] = useState(0);
   const [todoCount, setTodoCount] = useState(0);
   const [reminderCount, setReminderCount] = useState(0);
+  const [notesCount, setNotesCount] = useState(0);
   
   // 时间轴
   const [showTimeline, setShowTimeline] = useState(false);
@@ -143,6 +146,13 @@ const App = () => {
         const tasks = JSON.parse(localStorage.getItem('interval-reminder-tasks') || '[]');
         setReminderCount(tasks.filter((t: any) => t.isActive).length);
       } catch { setReminderCount(0); }
+
+      // 笔记数量
+      const { count: nCount } = await supabase
+        .from('notes')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId);
+      setNotesCount(nCount || 0);
     };
     
     loadCounts();
@@ -760,7 +770,8 @@ const App = () => {
           </div>
         </div>
 
-        {/* Filter Chips - 毛玻璃效果 */}
+        {/* Filter Chips - 毛玻璃效果 (RSS页面隐藏) */}
+        {activeTab !== 'rss' && (
         <div className="bg-black/30 backdrop-blur-xl border-b border-white/10 py-2 overflow-x-auto no-scrollbar touch-pan-x">
           <div className="flex px-4 gap-2 w-max">
             {/* All 按钮 */}
@@ -867,6 +878,7 @@ const App = () => {
             </div>
           </div>
         </div>
+        )}
       </header>
 
       {/* Main Content Feed */}
@@ -895,6 +907,13 @@ const App = () => {
           isOpen={activeTab === 'settings'}
           onClose={() => setActiveTab('home')}
           initialView={settingsInitialView}
+          onOpenNotes={() => setIsNotesOpen(true)}
+        />
+
+        {/* 笔记页面 */}
+        <NotesPage
+          isOpen={isNotesOpen}
+          onClose={() => setIsNotesOpen(false)}
         />
         
         {/* 视频内容 */}
@@ -971,14 +990,11 @@ const App = () => {
               )}
             </button>
 
-            {/* 视频下载 & 文案转写 - 跳转外部系统 */}
+            {/* 笔记 */}
             <button
-              onClick={() => {
-                const transcriptSystemUrl = import.meta.env.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
-                window.open(transcriptSystemUrl, '_blank');
-              }}
+              onClick={() => setIsNotesOpen(true)}
               className="relative w-11 h-11 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl flex items-center justify-center hover:from-purple-500/30 hover:to-pink-500/30 transition-all active:scale-[0.95]"
-              title="视频下载 & 文案转写"
+              title="笔记"
             >
               <svg className="w-5 h-5 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -986,6 +1002,11 @@ const App = () => {
                 <line x1="16" y1="13" x2="8" y2="13"/>
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
+              {notesCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-purple-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                  {notesCount > 99 ? '99+' : notesCount}
+                </span>
+              )}
             </button>
           </div>
         )}
@@ -1439,7 +1460,7 @@ const App = () => {
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
               </svg>
             </div>
-            <span className="text-[9px] font-medium">设置</span>
+            <span className="text-[9px] font-medium">Setting</span>
           </button>
         </div>
       </nav>
