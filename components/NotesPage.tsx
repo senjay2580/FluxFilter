@@ -394,13 +394,20 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
 interface NoteCardProps {
   note: Note;
   onClick: () => void;
-  onPin: () => void;
-  onDelete: () => void;
-  onCopy: () => void;
+  onLongPress: () => void;
   isDark?: boolean;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
+  animationIndex?: number;
+  isDeleting?: boolean;
 }
 
-const NoteCard: React.FC<NoteCardProps> = ({ note, onClick, onPin, onDelete, onCopy, isDark = false }) => {
+const NoteCard: React.FC<NoteCardProps> = ({ 
+  note, onClick, onLongPress, isDark = false, 
+  selectionMode = false, isSelected = false, onToggleSelect,
+  animationIndex = 0, isDeleting = false
+}) => {
   const colorConfig = isDark ? darkColorConfig : lightColorConfig;
   const config = colorConfig[note.color];
   
@@ -424,14 +431,14 @@ const NoteCard: React.FC<NoteCardProps> = ({ note, onClick, onPin, onDelete, onC
     if (contentLength < 1000) return 12;
     return 18; // 1000+ 字显示更多
   };
-  const [showMenu, setShowMenu] = useState(false);
+  
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // 长按开始
   const handleTouchStart = () => {
+    if (selectionMode) return; // 选择模式下不触发长按
     longPressTimer.current = setTimeout(() => {
-      setShowMenu(true);
+      onLongPress();
       if ('vibrate' in navigator) navigator.vibrate(50);
     }, 500);
   };
@@ -446,22 +453,12 @@ const NoteCard: React.FC<NoteCardProps> = ({ note, onClick, onPin, onDelete, onC
 
   // 点击卡片
   const handleClick = () => {
-    if (!showMenu) onClick();
-  };
-
-  // 关闭菜单
-  const closeMenu = () => setShowMenu(false);
-
-  // 点击外部关闭菜单
-  useEffect(() => {
-    if (showMenu) {
-      const handleClickOutside = (e: MouseEvent) => {
-        if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu();
-      };
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+    if (selectionMode && onToggleSelect) {
+      onToggleSelect();
+    } else {
+      onClick();
     }
-  }, [showMenu]);
+  };
   
   return (
     <div
@@ -472,27 +469,44 @@ const NoteCard: React.FC<NoteCardProps> = ({ note, onClick, onPin, onDelete, onC
       onMouseUp={handleTouchEnd}
       onMouseLeave={handleTouchEnd}
       onClick={handleClick}
-      className={`relative p-4 rounded-2xl cursor-pointer transition-all duration-300 ${note.is_pinned ? 'z-10' : ''}`}
+      className={`relative p-4 rounded-2xl cursor-pointer transition-all duration-300 ${note.is_pinned ? 'z-10' : ''} ${isDeleting ? 'note-card-delete' : 'note-card-enter'}`}
       style={{ 
         backgroundColor: config.card,
         border: `1px solid ${config.border}`,
-        boxShadow: note.is_pinned 
-          ? '0 10px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
-          : '0 2px 8px rgba(0,0,0,0.06)',
-        transform: note.is_pinned ? 'translateY(-4px) scale(1.02)' : 'none',
-        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif'
+        boxShadow: isSelected 
+          ? '0 0 0 3px rgba(0,122,255,0.3), 0 4px 12px rgba(0,0,0,0.1)'
+          : note.is_pinned 
+            ? '0 10px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
+            : '0 2px 8px rgba(0,0,0,0.06)',
+        transform: isSelected ? 'scale(0.98)' : note.is_pinned ? 'translateY(-4px) scale(1.02)' : 'none',
+        opacity: isSelected ? 0.9 : 1,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
+        animationDelay: `${animationIndex * 50}ms`,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
-      {/* 置顶图钉 - 左上角黄色 */}
-      {note.is_pinned && (
+      {/* 选择槽位 - 选择模式下显示，放在卡片内部 */}
+      {selectionMode && (
         <div 
-          className="absolute -top-2 -left-2 w-7 h-7 rounded-full flex items-center justify-center z-20"
+          className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center z-20 transition-all"
           style={{ 
-            background: 'linear-gradient(135deg, #FFD60A 0%, #FF9F0A 100%)',
-            boxShadow: '0 4px 12px rgba(255,159,10,0.4)' 
+            backgroundColor: isSelected ? '#007AFF' : 'transparent',
+            border: isSelected ? 'none' : `2px solid ${isDark ? '#48484A' : '#C7C7CC'}`,
           }}
         >
-          <svg className="w-3.5 h-3.5 text-white" viewBox="0 0 24 24" fill="currentColor">
+          {isSelected && (
+            <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M5 12l5 5L20 7" />
+            </svg>
+          )}
+        </div>
+      )}
+
+      {/* 置顶图钉 - 右上角简洁图标 */}
+      {note.is_pinned && !selectionMode && (
+        <div className="absolute top-3 right-3 z-20">
+          <svg className="w-4 h-4" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="currentColor">
             <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z"/>
           </svg>
         </div>
@@ -542,72 +556,30 @@ const NoteCard: React.FC<NoteCardProps> = ({ note, onClick, onPin, onDelete, onC
           {new Date(note.updated_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
         </span>
       </div>
-
-      {/* 长按菜单 - Apple 风格 */}
-      {showMenu && (
-        <div 
-          ref={menuRef}
-          className="absolute inset-0 z-30 flex items-center justify-center"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* 背景遮罩 */}
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm rounded-2xl" onClick={closeMenu} />
-          
-          {/* 菜单内容 - Apple 风格 */}
-          <div 
-            className="relative overflow-hidden min-w-[160px]"
-            style={{ 
-              backgroundColor: 'rgba(255,255,255,0.95)',
-              backdropFilter: 'blur(20px)',
-              borderRadius: '14px',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-              animation: 'scaleIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-            }}
-          >
-            {/* 复制内容 */}
-            <button
-              onClick={() => { onCopy(); closeMenu(); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-black/5 transition-colors"
-              style={{ color: '#1C1C1E' }}
-            >
-              <svg className="w-5 h-5" style={{ color: '#007AFF' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-              </svg>
-              复制内容
-            </button>
-            
-            {/* 置顶/取消置顶 */}
-            <button
-              onClick={() => { onPin(); closeMenu(); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-black/5 transition-colors"
-              style={{ color: '#1C1C1E', borderTop: '0.5px solid rgba(0,0,0,0.1)' }}
-            >
-              <svg className="w-5 h-5" style={{ color: note.is_pinned ? '#FF9F0A' : '#007AFF' }} viewBox="0 0 24 24" fill={note.is_pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z"/>
-              </svg>
-              {note.is_pinned ? '取消置顶' : '置顶'}
-            </button>
-            
-            {/* 删除 */}
-            <button
-              onClick={() => { onDelete(); closeMenu(); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-black/5 transition-colors"
-              style={{ color: '#FF3B30', borderTop: '0.5px solid rgba(0,0,0,0.1)' }}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/>
-              </svg>
-              删除
-            </button>
-          </div>
-        </div>
-      )}
-
+      
+      {/* 卡片动画样式 */}
       <style>{`
-        @keyframes scaleIn {
-          from { opacity: 0; transform: scale(0.8); }
-          to { opacity: 1; transform: scale(1); }
+        .note-card-enter {
+          animation: noteCardEnter 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        }
+        .note-card-delete {
+          animation: noteCardDelete 0.3s ease-out forwards;
+        }
+        @keyframes noteCardEnter {
+          from {
+            opacity: 0;
+            transform: translateY(20px) scale(0.9);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes noteCardDelete {
+          to {
+            opacity: 0;
+            transform: scale(0.8) translateY(-10px);
+          }
         }
       `}</style>
     </div>
@@ -857,6 +829,13 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
     return saved === 'true';
   });
   
+  // 选择模式状态
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedNotes, setSelectedNotes] = useState<Set<number>>(new Set());
+  
+  // 删除动画状态
+  const [deletingNotes, setDeletingNotes] = useState<Set<number>>(new Set());
+  
   // 计算实际主题
   const isDark = getActualTheme(themeMode) === 'dark';
   const theme = getThemeColors(isDark);
@@ -1028,18 +1007,29 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // 切换置顶
+  // 切换置顶 - 使用乐观更新避免卡顿
   const handleTogglePin = async (note: Note) => {
-    // 使用较小的数字作为 pin_order，避免超出 INTEGER 范围
-    const newPinOrder = note.is_pinned ? 0 : Math.floor(Date.now() / 1000) % 2147483647;
+    const newPinned = !note.is_pinned;
+    const newPinOrder = newPinned ? Math.floor(Date.now() / 1000) % 2147483647 : 0;
+    
+    // 乐观更新 - 立即更新本地状态
+    setNotes(prev => prev.map(n => 
+      n.id === note.id ? { ...n, is_pinned: newPinned, pin_order: newPinOrder } : n
+    ).sort((a, b) => {
+      if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+      if (a.is_pinned && b.is_pinned) return (b.pin_order || 0) - (a.pin_order || 0);
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    }));
+    
+    // 后台同步到数据库
     const { error } = await supabase
       .from('notes')
-      .update({ is_pinned: !note.is_pinned, pin_order: newPinOrder })
+      .update({ is_pinned: newPinned, pin_order: newPinOrder })
       .eq('id', note.id);
     if (error) {
       console.error('置顶失败:', error);
+      loadNotes(); // 失败时重新加载
     }
-    loadNotes();
   };
 
   // 删除笔记
@@ -1056,29 +1046,119 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
     <div className="fixed inset-0 z-[99998] flex flex-col" style={{ backgroundColor: theme.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif' }}>
       {/* 顶部导航 - Apple 风格 */}
       <div className="sticky top-0 z-10" style={{ backgroundColor: theme.headerBg, backdropFilter: 'blur(20px)', borderBottom: `0.5px solid ${theme.border}` }}>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <button onClick={onClose} className="p-2 -ml-2 rounded-xl hover:bg-black/5 transition-colors">
-            <svg className="w-6 h-6" style={{ color: theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </button>
-          
-          <div className="flex-1">
-            <h1 className="font-bold text-xl" style={{ color: theme.text }}>笔记</h1>
-            <p className="text-xs" style={{ color: theme.textSecondary }}>{notes.length} 条笔记</p>
-          </div>
+        {/* 选择模式工具栏 */}
+        {selectionMode ? (
+          <div className="flex items-center gap-3 px-4 py-3">
+            <button 
+              onClick={() => { setSelectionMode(false); setSelectedNotes(new Set()); }} 
+              className="p-2 -ml-2 rounded-xl hover:bg-black/5 transition-colors"
+            >
+              <span style={{ color: theme.accent }} className="text-base font-medium">取消</span>
+            </button>
+            
+            <div className="flex-1 text-center">
+              <span className="font-semibold" style={{ color: theme.text }}>
+                已选择 {selectedNotes.size} 项
+              </span>
+            </div>
 
-          {/* 简洁模式切换按钮 */}
-          <button
-            onClick={() => setCompactMode(!compactMode)}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
-            style={{ backgroundColor: compactMode ? theme.accent : theme.inputBg }}
-            title={compactMode ? '详细模式' : '简洁模式'}
-          >
-            <svg className="w-5 h-5" style={{ color: compactMode ? '#FFFFFF' : theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
+            {/* 选择模式操作按钮 */}
+            <div className="flex items-center gap-2">
+              {/* 复制 */}
+              <button
+                onClick={() => {
+                  const selectedNotesArr = notes.filter(n => selectedNotes.has(n.id));
+                  const content = selectedNotesArr.map(n => {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = n.content || '';
+                    return `${n.title || '无标题'}\n${tempDiv.textContent || ''}`;
+                  }).join('\n\n---\n\n');
+                  navigator.clipboard.writeText(content);
+                  setSelectionMode(false);
+                  setSelectedNotes(new Set());
+                }}
+                disabled={selectedNotes.size === 0}
+                className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 disabled:opacity-30"
+                style={{ backgroundColor: theme.inputBg }}
+                title="复制"
+              >
+                <svg className="w-5 h-5" style={{ color: theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+              </button>
+              
+              {/* 置顶 */}
+              <button
+                onClick={async () => {
+                  for (const noteId of selectedNotes) {
+                    const note = notes.find(n => n.id === noteId);
+                    if (note) await handleTogglePin(note);
+                  }
+                  setSelectionMode(false);
+                  setSelectedNotes(new Set());
+                }}
+                disabled={selectedNotes.size === 0}
+                className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 disabled:opacity-30"
+                style={{ backgroundColor: theme.inputBg }}
+                title="置顶"
+              >
+                <svg className="w-5 h-5" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z"/>
+                </svg>
+              </button>
+              
+              {/* 删除 */}
+              <button
+                onClick={async () => {
+                  // 先播放删除动画
+                  setDeletingNotes(new Set(selectedNotes));
+                  // 等待动画完成
+                  await new Promise(resolve => setTimeout(resolve, 300));
+                  // 删除数据
+                  for (const noteId of selectedNotes) {
+                    await supabase.from('notes').delete().eq('id', noteId);
+                  }
+                  setDeletingNotes(new Set());
+                  setSelectionMode(false);
+                  setSelectedNotes(new Set());
+                  loadNotes();
+                }}
+                disabled={selectedNotes.size === 0}
+                className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 disabled:opacity-30"
+                style={{ backgroundColor: 'rgba(255,59,48,0.1)' }}
+                title="删除"
+              >
+                <svg className="w-5 h-5" style={{ color: '#FF3B30' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 px-4 py-3">
+            <button onClick={onClose} className="p-2 -ml-2 rounded-xl hover:bg-black/5 transition-colors">
+              <svg className="w-6 h-6" style={{ color: theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
+            </button>
+            
+            <div className="flex-1">
+              <h1 className="font-bold text-xl" style={{ color: theme.text }}>笔记</h1>
+              <p className="text-xs" style={{ color: theme.textSecondary }}>{notes.length} 条笔记</p>
+            </div>
+
+            {/* 简洁模式切换按钮 */}
+            <button
+              onClick={() => setCompactMode(!compactMode)}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
+              style={{ backgroundColor: compactMode ? theme.accent : theme.inputBg }}
+              title={compactMode ? '详细模式' : '简洁模式'}
+            >
+              <svg className="w-5 h-5" style={{ color: compactMode ? '#FFFFFF' : theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            </button>
 
           {/* 主题切换按钮 - 显示当前实际主题图标 */}
           <button
@@ -1132,7 +1212,8 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
               <path d="M12 5v14M5 12h14" />
             </svg>
           </button>
-        </div>
+          </div>
+        )}
 
         {/* 搜索栏 - Apple 风格 */}
         <div className="px-4 pb-3">
@@ -1183,8 +1264,48 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
       {/* 笔记列表 - Apple 风格 */}
       <div className="flex-1 overflow-y-auto p-4">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="w-8 h-8 border-3 rounded-full animate-spin" style={{ borderColor: theme.border, borderTopColor: theme.accent }} />
+          <div style={{ columnCount: 2, columnGap: '12px' }}>
+            {[...Array(6)].map((_, i) => (
+              <div 
+                key={i} 
+                className="skeleton-card"
+                style={{ 
+                  breakInside: 'avoid', 
+                  marginBottom: '12px',
+                  backgroundColor: theme.cardBg,
+                  borderRadius: '16px',
+                  padding: '16px',
+                  border: `1px solid ${theme.border}`,
+                  animationDelay: `${i * 100}ms`
+                }}
+              >
+                <div className="skeleton-line" style={{ width: '60%', height: '14px', marginBottom: '12px', backgroundColor: theme.inputBg, borderRadius: '4px' }} />
+                <div className="skeleton-line" style={{ width: '100%', height: '10px', marginBottom: '8px', backgroundColor: theme.inputBg, borderRadius: '4px' }} />
+                <div className="skeleton-line" style={{ width: '90%', height: '10px', marginBottom: '8px', backgroundColor: theme.inputBg, borderRadius: '4px' }} />
+                <div className="skeleton-line" style={{ width: '70%', height: '10px', marginBottom: '16px', backgroundColor: theme.inputBg, borderRadius: '4px' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <div className="skeleton-line" style={{ width: '30px', height: '10px', backgroundColor: theme.inputBg, borderRadius: '4px' }} />
+                  <div className="skeleton-line" style={{ width: '50px', height: '10px', backgroundColor: theme.inputBg, borderRadius: '4px' }} />
+                </div>
+              </div>
+            ))}
+            <style>{`
+              .skeleton-card {
+                animation: skeletonPulse 1.5s ease-in-out infinite;
+              }
+              .skeleton-line {
+                animation: skeletonShimmer 1.5s ease-in-out infinite;
+              }
+              @keyframes skeletonPulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.6; }
+              }
+              @keyframes skeletonShimmer {
+                0% { opacity: 0.5; }
+                50% { opacity: 0.8; }
+                100% { opacity: 0.5; }
+              }
+            `}</style>
           </div>
         ) : filteredNotes.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
@@ -1275,17 +1396,25 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                     </h3>
                     {/* 瀑布流布局 */}
                     <div style={{ columnCount: 2, columnGap: '12px' }}>
-                      {pinnedNotes.map((note) => (
+                      {pinnedNotes.map((note, index) => (
                         <div key={note.id} style={{ breakInside: 'avoid', marginBottom: '12px' }}>
                           <NoteCard
                             note={note}
                             onClick={() => setEditingNote(note)}
-                            onPin={() => handleTogglePin(note)}
-                            onDelete={() => setDeleteConfirm(note)}
-                            onCopy={() => {
-                              navigator.clipboard.writeText(note.preview || note.title || '');
-                            }}
+                            onLongPress={() => { setSelectionMode(true); setSelectedNotes(new Set([note.id])); }}
                             isDark={isDark}
+                            selectionMode={selectionMode}
+                            isSelected={selectedNotes.has(note.id)}
+                            onToggleSelect={() => {
+                              setSelectedNotes(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(note.id)) newSet.delete(note.id);
+                                else newSet.add(note.id);
+                                return newSet;
+                              });
+                            }}
+                            animationIndex={index}
+                            isDeleting={deletingNotes.has(note.id)}
                           />
                         </div>
                       ))}
@@ -1301,17 +1430,25 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                     )}
                     {/* 瀑布流布局 */}
                     <div style={{ columnCount: 2, columnGap: '12px' }}>
-                      {unpinnedNotes.map((note) => (
+                      {unpinnedNotes.map((note, index) => (
                         <div key={note.id} style={{ breakInside: 'avoid', marginBottom: '12px' }}>
                           <NoteCard
                             note={note}
                             onClick={() => setEditingNote(note)}
-                            onPin={() => handleTogglePin(note)}
-                            onDelete={() => setDeleteConfirm(note)}
-                            onCopy={() => {
-                              navigator.clipboard.writeText(note.preview || note.title || '');
-                            }}
+                            onLongPress={() => { setSelectionMode(true); setSelectedNotes(new Set([note.id])); }}
                             isDark={isDark}
+                            selectionMode={selectionMode}
+                            isSelected={selectedNotes.has(note.id)}
+                            onToggleSelect={() => {
+                              setSelectedNotes(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(note.id)) newSet.delete(note.id);
+                                else newSet.add(note.id);
+                                return newSet;
+                              });
+                            }}
+                            animationIndex={pinnedNotes.length + index}
+                            isDeleting={deletingNotes.has(note.id)}
                           />
                         </div>
                       ))}
