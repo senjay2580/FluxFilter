@@ -181,3 +181,66 @@ export interface UpdateNoteParams {
   is_pinned?: boolean;
   pin_order?: number;
 }
+
+
+// ============================================
+// 学习日志相关类型
+// ============================================
+
+export interface LearningLog {
+  id: number;
+  user_id: string;
+  video_url: string;
+  video_title: string;
+  summary: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateLearningLogParams {
+  video_url: string;
+  video_title?: string;
+  summary?: string;
+}
+
+export interface UpdateLearningLogParams {
+  video_title?: string;
+  summary?: string;
+}
+
+// ============================================
+// 资源中心相关类型
+// ============================================
+
+export interface ResourceFolder {
+  id: number;
+  user_id: string;
+  name: string;
+  parent_id: number | null;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface Resource {
+  id: number;
+  user_id: string;
+  folder_id: number | null;
+  name: string;
+  url: string;
+  icon: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateResourceFolderParams {
+  name: string;
+  parent_id?: number | null;
+  sort_order?: number;
+}
+
+export interface CreateResourceParams {
+  name: string;
+  url: string;
+  icon?: string;
+  folder_id?: number | null;
+}

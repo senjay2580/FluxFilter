@@ -222,3 +222,206 @@ export async function isInWatchlist(bvid: string, userId?: string) {
   if (error) throw error;
   return data && data.length > 0;
 }
+
+
+// ============================================
+// 学习日志操作
+// ============================================
+
+import type { LearningLog, CreateLearningLogParams, UpdateLearningLogParams, Resource, CreateResourceParams } from './database.types';
+
+/** 获取学习日志列表 */
+export async function getLearningLogs(userId: string) {
+  const { data, error } = await supabase
+    .from('learning_log')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  return data as LearningLog[];
+}
+
+/** 创建学习日志 */
+export async function createLearningLog(userId: string, params: CreateLearningLogParams) {
+  const { data, error } = await supabase
+    .from('learning_log')
+    .insert({
+      user_id: userId,
+      video_url: params.video_url,
+      video_title: params.video_title || '',
+      summary: params.summary || '',
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as LearningLog;
+}
+
+/** 更新学习日志 */
+export async function updateLearningLog(id: number, params: UpdateLearningLogParams) {
+  const { data, error } = await supabase
+    .from('learning_log')
+    .update({
+      ...params,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as LearningLog;
+}
+
+/** 删除学习日志 */
+export async function deleteLearningLog(id: number) {
+  const { error } = await supabase
+    .from('learning_log')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+}
+
+// ============================================
+// 资源中心操作
+// ============================================
+
+import type { ResourceFolder, CreateResourceFolderParams } from './database.types';
+
+/** 获取文件夹列表 */
+export async function getResourceFolders(userId: string) {
+  const { data, error } = await supabase
+    .from('resource_folder')
+    .select('*')
+    .eq('user_id', userId)
+    .order('sort_order', { ascending: true });
+  
+  if (error) throw error;
+  return data as ResourceFolder[];
+}
+
+/** 创建文件夹 */
+export async function createResourceFolder(userId: string, params: CreateResourceFolderParams) {
+  const { data, error } = await supabase
+    .from('resource_folder')
+    .insert({
+      user_id: userId,
+      name: params.name,
+      parent_id: params.parent_id || null,
+      sort_order: params.sort_order || 0,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as ResourceFolder;
+}
+
+/** 批量创建文件夹 */
+export async function createResourceFolders(userId: string, folders: CreateResourceFolderParams[]) {
+  const { data, error } = await supabase
+    .from('resource_folder')
+    .insert(
+      folders.map(f => ({
+        user_id: userId,
+        name: f.name,
+        parent_id: f.parent_id || null,
+        sort_order: f.sort_order || 0,
+      }))
+    )
+    .select();
+  
+  if (error) throw error;
+  return data as ResourceFolder[];
+}
+
+/** 删除文件夹 */
+export async function deleteResourceFolder(id: number) {
+  const { error } = await supabase
+    .from('resource_folder')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+}
+
+/** 获取资源列表 */
+export async function getResources(userId: string, folderId?: number | null) {
+  let query = supabase
+    .from('resource')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  
+  if (folderId !== undefined) {
+    if (folderId === null) {
+      query = query.is('folder_id', null);
+    } else {
+      query = query.eq('folder_id', folderId);
+    }
+  }
+  
+  const { data, error } = await query;
+  if (error) throw error;
+  return data as Resource[];
+}
+
+/** 创建资源 */
+export async function createResource(userId: string, params: CreateResourceParams) {
+  const { data, error } = await supabase
+    .from('resource')
+    .insert({
+      user_id: userId,
+      name: params.name,
+      url: params.url,
+      icon: params.icon || null,
+      folder_id: params.folder_id || null,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as Resource;
+}
+
+/** 批量创建资源 */
+export async function createResources(userId: string, resources: CreateResourceParams[]) {
+  const { data, error } = await supabase
+    .from('resource')
+    .insert(
+      resources.map(r => ({
+        user_id: userId,
+        name: r.name,
+        url: r.url,
+        icon: r.icon || null,
+        folder_id: r.folder_id || null,
+      }))
+    )
+    .select();
+  
+  if (error) throw error;
+  return data as Resource[];
+}
+
+/** 删除资源 */
+export async function deleteResource(id: number) {
+  const { error } = await supabase
+    .from('resource')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+}
+
+/** 批量删除资源 */
+export async function deleteResources(ids: number[]) {
+  const { error } = await supabase
+    .from('resource')
+    .delete()
+    .in('id', ids);
+  
+  if (error) throw error;
+}

@@ -15,6 +15,7 @@ interface VideoCardProps {
   openMenuId?: string | null;
   onMenuToggle?: (bvid: string | null) => void;
   onDelete?: (bvid: string) => void;
+  onDeleteWithLog?: (bvid: string, title: string) => void;
   onTranscript?: (videoUrl: string) => void;
 }
 
@@ -42,7 +43,7 @@ const formatPubdate = (pubdate: string | number): string => {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 };
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete, onTranscript }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete, onDeleteWithLog, onTranscript }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmbeddedPlayer, setShowEmbeddedPlayer] = useState(false);
   
@@ -465,6 +466,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
           className="relative bg-[#1a1a1f] rounded-2xl p-6 max-w-sm w-full border border-white/10 shadow-2xl"
           style={{ animation: 'scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)' }}
         >
+          {/* 右上角关闭按钮 */}
+          <button
+            onClick={() => setShowDeleteConfirm(false)}
+            className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-colors"
+          >
+            <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+          
           {/* 警告图标 */}
           <div className="flex justify-center mb-4">
             <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center">
@@ -477,32 +488,43 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
           </div>
           
           {/* 标题 */}
-          <h3 className="text-white text-lg font-bold text-center mb-2">确定删除？</h3>
+          <h3 className="text-white text-lg font-bold text-center mb-2">删除视频</h3>
           
           {/* 描述 */}
-          <p className="text-gray-400 text-sm text-center mb-6 leading-relaxed">
-            此操作将永久删除视频<br/>
-            <span className="text-white font-medium">"{title.length > 20 ? title.slice(0, 20) + '...' : title}"</span><br/>
-            删除后无法恢复
+          <p className="text-gray-400 text-sm text-center mb-1 leading-relaxed">
+            <span className="text-white font-medium">"{title.length > 25 ? title.slice(0, 25) + '...' : title}"</span>
           </p>
+          <p className="text-gray-500 text-xs text-center mb-5">是否记录到学习日志？</p>
           
           {/* 按钮 */}
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowDeleteConfirm(false)}
-              className="flex-1 py-3 bg-white/10 hover:bg-white/15 rounded-xl text-white font-medium transition-colors"
-            >
-              取消
-            </button>
+          <div className="space-y-2">
+            {/* 记录并删除 */}
+            {onDeleteWithLog && (
+              <button
+                onClick={() => {
+                  onDeleteWithLog(bvid, title);
+                  setShowDeleteConfirm(false);
+                  onMenuToggle?.(null);
+                }}
+                className="w-full py-3 bg-cyber-lime text-black font-medium rounded-xl hover:bg-cyber-lime/90 transition-colors flex items-center justify-center gap-2"
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                </svg>
+                记录到学习日志
+              </button>
+            )}
+            
+            {/* 直接删除 - 红色 */}
             <button
               onClick={() => {
-                onDelete(bvid);
+                onDelete?.(bvid);
                 setShowDeleteConfirm(false);
                 onMenuToggle?.(null);
               }}
-              className="flex-1 py-3 bg-red-500 hover:bg-red-600 rounded-xl text-white font-medium transition-colors"
+              className="w-full py-3 bg-red-500 hover:bg-red-600 rounded-xl text-white font-medium transition-colors"
             >
-              确认删除
+              直接删除
             </button>
           </div>
         </div>

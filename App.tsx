@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Tab, FilterType, DateFilter } from './types';
 import VideoCard from './components/VideoCard';
 import { HomeIcon, ClockIcon, SearchIcon, CalendarIcon, SlidersIcon } from './components/Icons';
@@ -20,6 +21,8 @@ import LogoSvg from './assets/logo.svg';
 import PWAInstallPrompt from './components/PWAInstallPrompt';
 import HighPriorityTodoReminder from './components/HighPriorityTodoReminder';
 import NotesPage from './components/NotesPage';
+import LearningLog from './components/LearningLog';
+import ResourceCenter from './components/ResourceCenter';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
 import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
 import { clearCookieCache } from './lib/bilibili';
@@ -48,6 +51,11 @@ const App = () => {
   const [settingsInitialView, setSettingsInitialView] = useState<'main' | 'todo' | 'reminder' | 'collector'>('main');
   const [searchTerm, setSearchTerm] = useState('');
   const [isNotesOpen, setIsNotesOpen] = useState(false);
+  const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
+  const [isLearningLogOpen, setIsLearningLogOpen] = useState(false);
+  const [learningLogInitialData, setLearningLogInitialData] = useState<{ url: string; title: string }>({ url: '', title: '' });
+  const [isResourceCenterOpen, setIsResourceCenterOpen] = useState(false);
+  const [deleteConfirmVideo, setDeleteConfirmVideo] = useState<{ bvid: string; title: string; url: string } | null>(null);
   
   // UP主筛选
   const [selectedUploader, setSelectedUploader] = useState<{ mid: number; name: string } | null>(null);
@@ -423,18 +431,34 @@ const App = () => {
     }
   }, [watchLaterIds, watchlistLoading]);
 
-  // 删除视频
-  const handleDeleteVideo = useCallback(async (bvid: string) => {
+  // 显示删除确认框
+  const showDeleteConfirm = useCallback((bvid: string, title: string) => {
+    const videoUrl = `https://www.bilibili.com/video/${bvid}`;
+    setDeleteConfirmVideo({ bvid, title, url: videoUrl });
+  }, []);
+
+  // 执行删除视频
+  const executeDeleteVideo = useCallback(async (bvid: string, shouldLog: boolean = false) => {
     if (!currentUser?.id || !isSupabaseConfigured) {
       showToast('请先登录');
       return;
     }
 
+    const video = videos.find(v => v.bvid === bvid);
+    
+    // 如果需要记录，跳转到学习日志
+    if (shouldLog && video) {
+      setLearningLogInitialData({ 
+        url: `https://www.bilibili.com/video/${bvid}`, 
+        title: video.title 
+      });
+      setIsLearningLogOpen(true);
+    }
+
+    // 异步删除视频
     try {
-      // 先从 UI 中移除
       setVideos(prev => prev.filter(v => v.bvid !== bvid));
       
-      // 从数据库删除
       const { error } = await supabase
         .from('video')
         .delete()
@@ -446,11 +470,18 @@ const App = () => {
       showToast('视频已删除');
     } catch (err) {
       console.error('删除视频失败:', err);
-      // 删除失败，重新加载数据
       fetchVideos();
       showToast('删除失败，请重试');
     }
-  }, [currentUser?.id, fetchVideos]);
+    
+    setDeleteConfirmVideo(null);
+  }, [currentUser?.id, fetchVideos, videos]);
+
+  // 兼容旧的删除方法（直接删除不确认）
+  const handleDeleteVideo = useCallback(async (bvid: string) => {
+    const video = videos.find(v => v.bvid === bvid);
+    showDeleteConfirm(bvid, video?.title || '');
+  }, [videos, showDeleteConfirm]);
 
   // 处理转写文案 - 跳转到外部转写系统
   const handleTranscript = useCallback((videoUrl: string) => {
@@ -908,6 +939,8 @@ const App = () => {
           onClose={() => setActiveTab('home')}
           initialView={settingsInitialView}
           onOpenNotes={() => setIsNotesOpen(true)}
+          onOpenLearningLog={() => { setLearningLogInitialData({ url: '', title: '' }); setIsLearningLogOpen(true); }}
+          onOpenResourceCenter={() => setIsResourceCenterOpen(true)}
         />
 
         {/* 笔记页面 */}
@@ -915,6 +948,182 @@ const App = () => {
           isOpen={isNotesOpen}
           onClose={() => setIsNotesOpen(false)}
         />
+
+        {/* 学习日志页面 */}
+        <LearningLog
+          isOpen={isLearningLogOpen}
+          onClose={() => setIsLearningLogOpen(false)}
+          initialVideoUrl={learningLogInitialData.url}
+          initialVideoTitle={learningLogInitialData.title}
+        />
+
+        {/* 资源中心 */}
+        <ResourceCenter
+          isOpen={isResourceCenterOpen}
+          onClose={() => setIsResourceCenterOpen(false)}
+        />
+
+        {/* 删除确认框 */}
+        {deleteConfirmVideo && createPortal(
+          <div 
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setDeleteConfirmVideo(null); }}
+          >
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <div 
+              className="relative w-full max-w-sm rounded-2xl overflow-hidden p-6"
+              style={{ 
+                backgroundColor: 'rgba(30,30,35,0.98)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                animation: 'scaleIn 0.2s ease-out'
+              }}
+            >
+              {/* 右上角关闭按钮 */}
+              <button
+                onClick={() => setDeleteConfirmVideo(null)}
+                className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-colors"
+              >
+                <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+              
+              <h3 className="text-lg font-semibold text-white mb-2">删除视频</h3>
+              <p className="text-sm text-gray-400 mb-1 line-clamp-2">{deleteConfirmVideo.title}</p>
+              <p className="text-xs text-gray-500 mb-6">确定要删除这个视频吗？</p>
+              
+              <div className="space-y-3">
+                {/* 记录并删除 */}
+                <button
+                  onClick={() => executeDeleteVideo(deleteConfirmVideo.bvid, true)}
+                  className="w-full py-3 bg-cyber-lime text-black font-medium rounded-xl hover:bg-cyber-lime/90 transition-colors flex items-center justify-center gap-2"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  记录到学习日志
+                </button>
+                
+                {/* 直接删除 - 红色 */}
+                <button
+                  onClick={() => executeDeleteVideo(deleteConfirmVideo.bvid, false)}
+                  className="w-full py-3 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors"
+                >
+                  直接删除
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
+        {/* 应用九宫格模态框 - Portal到body确保居中 */}
+        {isAppsModalOpen && createPortal(
+          <div 
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setIsAppsModalOpen(false); }}
+          >
+            {/* 背景遮罩 */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            
+            {/* 模态框内容 */}
+            <div 
+              className="relative w-full max-w-sm rounded-3xl overflow-hidden"
+              style={{ 
+                backgroundColor: 'rgba(20,20,25,0.95)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(163,230,53,0.2)',
+                animation: 'scaleIn 0.25s ease-out'
+              }}
+            >
+              
+              {/* 标题 */}
+              <div className="px-6 pt-5 pb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-white">应用</h2>
+                <button 
+                  onClick={() => setIsAppsModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                >
+                  <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              
+              {/* 应用网格 */}
+              <div className="px-6 pb-8 grid grid-cols-3 gap-5">
+                {/* Reddit - 官方图标 */}
+                <button className="flex flex-col items-center gap-2 group">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FF4500' }}>
+                    <svg className="w-10 h-10" viewBox="0 0 20 20" fill="white">
+                      <path d="M16.5 8.5c.83 0 1.5.67 1.5 1.5 0 .6-.36 1.12-.87 1.36.02.15.04.3.04.46 0 2.35-2.74 4.26-6.12 4.26s-6.12-1.91-6.12-4.26c0-.16.01-.31.04-.46-.51-.24-.87-.76-.87-1.36 0-.83.67-1.5 1.5-1.5.39 0 .74.15 1.01.39 1-.72 2.37-1.18 3.89-1.24l.74-3.48c.02-.09.07-.16.15-.21.08-.05.17-.06.26-.04l2.45.52c.17-.33.52-.56.92-.56.57 0 1.04.47 1.04 1.04s-.47 1.04-1.04 1.04c-.55 0-1-.43-1.04-.97l-2.2-.46-.66 3.12c1.49.07 2.83.53 3.81 1.24.27-.24.62-.39 1.01-.39zM6.96 11.04c0 .57.47 1.04 1.04 1.04s1.04-.47 1.04-1.04-.47-1.04-1.04-1.04-1.04.47-1.04 1.04zm5.08 2.32c-.36.36-1.04.53-2.04.53s-1.68-.17-2.04-.53c-.12-.12-.12-.31 0-.43.12-.12.31-.12.43 0 .24.24.74.36 1.61.36s1.37-.12 1.61-.36c.12-.12.31-.12.43 0 .12.12.12.31 0 .43zm-.04-1.28c.57 0 1.04-.47 1.04-1.04s-.47-1.04-1.04-1.04-1.04.47-1.04 1.04.47 1.04 1.04 1.04z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Reddit</span>
+                </button>
+
+                {/* 知乎 - 官方图标 */}
+                <button className="flex flex-col items-center gap-2 group">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#0066FF' }}>
+                    <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
+                      <path d="M5.721 0C2.251 0 0 2.25 0 5.719V18.28C0 21.751 2.252 24 5.721 24h12.56C21.751 24 24 21.75 24 18.281V5.72C24 2.249 21.75 0 18.281 0zm1.964 4.078h6.789c.164 0 .296.132.296.296v.818c0 .164-.132.296-.296.296H7.685c-.164 0-.296-.132-.296-.296v-.818c0-.164.132-.296.296-.296zm-.296 3.245c0-.164.132-.296.296-.296h3.394c.164 0 .296.132.296.296v7.285c0 .164-.132.296-.296.296H7.685c-.164 0-.296-.132-.296-.296zm5.393 0c0-.164.132-.296.296-.296h3.394c.164 0 .296.132.296.296v7.285c0 .164-.132.296-.296.296h-3.394c-.164 0-.296-.132-.296-.296z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">知乎</span>
+                </button>
+
+                {/* 小红书 - 官方图标 */}
+                <button className="flex flex-col items-center gap-2 group">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FE2C55' }}>
+                    <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">小红书</span>
+                </button>
+
+                {/* 百度贴吧 - 官方图标 */}
+                <button className="flex flex-col items-center gap-2 group">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#4A90E2' }}>
+                    <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
+                      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">贴吧</span>
+                </button>
+
+                {/* Obsidian - 官方图标 */}
+                <button className="flex flex-col items-center gap-2 group">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#7C3AED' }}>
+                    <svg className="w-9 h-9" viewBox="0 0 65 100" fill="white">
+                      <path d="M47.9 0L65 35.5 32.5 100 0 35.5 17.1 0h30.8zM32.5 20L20 45h25L32.5 20z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Obsidian</span>
+                </button>
+
+                {/* LinuxDo - 使用 Discourse 风格图标 */}
+                <button className="flex flex-col items-center gap-2 group">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#F1592A' }}>
+                    <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
+                      <path d="M12.103 0C5.533 0 0 5.278 0 11.79c0 2.307.674 4.463 1.834 6.287L0 24l6.134-1.758A12.03 12.03 0 0012.103 24c6.57 0 11.897-5.278 11.897-11.79C24 5.698 18.673 0 12.103 0zm.09 4.049c3.467 0 6.283 2.816 6.283 6.283 0 3.467-2.816 6.283-6.283 6.283a6.283 6.283 0 01-6.283-6.283c0-3.467 2.816-6.283 6.283-6.283z"/>
+                    </svg>
+                  </div>
+                  <span className="text-xs text-gray-400 group-hover:text-white transition-colors">LinuxDo</span>
+                </button>
+              </div>
+            </div>
+            
+            <style>{`
+              @keyframes scaleIn {
+                from { transform: scale(0.9); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
+              }
+            `}</style>
+          </div>,
+          document.body
+        )}
         
         {/* 视频内容 */}
         {(activeTab === 'home' || activeTab === 'watchLater') && (
@@ -1007,6 +1216,37 @@ const App = () => {
                   {notesCount > 99 ? '99+' : notesCount}
                 </span>
               )}
+            </button>
+
+            {/* 转写 - 笔图标 - 绿色主题 */}
+            <button
+              onClick={() => {
+                const transcriptSystemUrl = import.meta.env.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
+                window.open(transcriptSystemUrl, '_blank');
+              }}
+              className="relative w-11 h-11 bg-gradient-to-br from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center hover:from-cyber-lime/30 hover:to-emerald-500/30 transition-all active:scale-[0.95]"
+              title="视频转写"
+            >
+              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                <path d="M2 2l7.586 7.586"/>
+                <circle cx="11" cy="11" r="2"/>
+              </svg>
+            </button>
+
+            {/* 应用九宫格 - 绿色主题 */}
+            <button
+              onClick={() => setIsAppsModalOpen(true)}
+              className="relative w-11 h-11 bg-gradient-to-br from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center hover:from-cyber-lime/30 hover:to-emerald-500/30 transition-all active:scale-[0.95]"
+              title="应用"
+            >
+              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+              </svg>
             </button>
           </div>
         )}
@@ -1340,7 +1580,8 @@ const App = () => {
                             isInWatchlist={watchLaterIds.has(video.bvid)}
                             openMenuId={openMenuId}
                             onMenuToggle={setOpenMenuId}
-                            onDelete={handleDeleteVideo}
+                            onDelete={(bvid) => executeDeleteVideo(bvid, false)}
+                            onDeleteWithLog={(bvid, title) => executeDeleteVideo(bvid, true)}
                             onTranscript={handleTranscript}
                         />
                     ))}
