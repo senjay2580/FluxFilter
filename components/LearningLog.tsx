@@ -147,9 +147,15 @@ const LearningLog: React.FC<LearningLogProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f]">
+    <div className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f] animate-page-enter">
+      {/* 背景装饰 */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -right-40 w-80 h-80 bg-cyber-lime/5 rounded-full blur-3xl animate-blob" />
+        <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl animate-blob animation-delay-2000" />
+      </div>
+      
       {/* 顶部导航 */}
-      <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-xl border-b border-white/10">
+      <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-xl border-b border-white/10 animate-slide-down">
         <div className="flex items-center gap-3 px-4 py-3">
           <button onClick={onClose} className="p-2 -ml-2 rounded-xl hover:bg-white/10 transition-colors">
             <svg className="w-6 h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -208,10 +214,11 @@ const LearningLog: React.FC<LearningLogProps> = ({
             <p className="text-gray-500">暂无学习记录</p>
           </div>
         ) : (
-          filteredEntries.map((entry) => (
+          filteredEntries.map((entry, index) => (
             <div 
               key={entry.id}
-              className="bg-white/5 border border-white/10 rounded-xl p-3 hover:border-cyber-lime/30 transition-colors"
+              className="bg-white/5 border border-white/10 rounded-xl p-3 hover:border-cyber-lime/30 transition-colors animate-list-item"
+              style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="flex gap-3">
                 <div className="shrink-0 flex flex-col items-center gap-1">
@@ -294,6 +301,32 @@ const LearningLog: React.FC<LearningLogProps> = ({
           </div>
         </div>
       )}
+
+      {/* 动画样式 */}
+      <style>{`
+        @keyframes page-enter {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slide-down {
+          from { opacity: 0; transform: translateY(-20px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes list-item {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes blob {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(30px, -30px) scale(1.1); }
+          66% { transform: translate(-20px, 20px) scale(0.9); }
+        }
+        .animate-page-enter { animation: page-enter 0.3s ease-out; }
+        .animate-slide-down { animation: slide-down 0.4s ease-out; }
+        .animate-list-item { animation: list-item 0.4s ease-out both; }
+        .animate-blob { animation: blob 8s ease-in-out infinite; }
+        .animation-delay-2000 { animation-delay: 2s; }
+      `}</style>
     </div>,
     document.body
   );

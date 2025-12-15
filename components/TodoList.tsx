@@ -204,6 +204,11 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ todo, position, onClose, onEdit
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        @keyframes modal-enter { from { opacity: 0; transform: scale(0.95) translateY(20px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes pulse-slow { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 0.8; transform: scale(1.1); } }
+        .animate-modal-enter { animation: modal-enter 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+        .animate-pulse-slow { animation: pulse-slow 4s ease-in-out infinite; }
+        .animation-delay-1000 { animation-delay: 1s; }
       `}</style>
     </div>,
     document.body
@@ -385,10 +390,17 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
   if (!embedded && !isOpen) return null;
 
   const content = (
-    <div className={`flex flex-col ${embedded ? 'h-full' : 'w-full max-w-lg bg-[#0c0c14] rounded-3xl shadow-2xl max-h-[90vh]'}`}>
+    <div className={`flex flex-col ${embedded ? 'h-full' : 'w-full max-w-lg bg-[#0c0c14] rounded-3xl shadow-2xl max-h-[90vh]'} ${!embedded ? 'animate-modal-enter' : ''}`}>
+      {/* 背景装饰 */}
+      {!embedded && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none rounded-3xl">
+          <div className="absolute -top-20 -right-20 w-40 h-40 bg-cyber-lime/10 rounded-full blur-3xl animate-pulse-slow" />
+          <div className="absolute -bottom-20 -left-20 w-40 h-40 bg-emerald-500/10 rounded-full blur-3xl animate-pulse-slow animation-delay-1000" />
+        </div>
+      )}
 
       {/* 头部区域 */}
-      <div className="px-5 pt-5 pb-4">
+      <div className="px-5 pt-5 pb-4 relative z-10">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center shadow-lg shadow-cyber-lime/20">

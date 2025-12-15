@@ -1675,7 +1675,7 @@ const App = () => {
           <button 
             onClick={() => setActiveTab('rss')} 
             className={`flex flex-col items-center gap-1 transition-all duration-300 ${
-              activeTab === 'rss' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500 hover:text-cyber-lime'
+              activeTab === 'rss' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'
             }`}
           >
             <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'rss' ? 'bg-cyber-lime/10' : ''}`}>
@@ -1692,7 +1692,7 @@ const App = () => {
           <button 
             onClick={() => { setSettingsInitialView('main'); setActiveTab('settings'); }}
             className={`flex flex-col items-center gap-1 transition-all duration-300 ${
-              activeTab === 'settings' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500 hover:text-cyber-lime'
+              activeTab === 'settings' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'
             }`}
           >
             <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-cyber-lime/10' : ''}`}>

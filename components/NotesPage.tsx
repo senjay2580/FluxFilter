@@ -1043,9 +1043,15 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99998] flex flex-col" style={{ backgroundColor: theme.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif' }}>
+    <div className="fixed inset-0 z-[99998] flex flex-col notes-page-enter" style={{ backgroundColor: theme.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif' }}>
+      {/* 背景装饰 */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 right-20 w-80 h-80 rounded-full blur-3xl notes-blob" style={{ background: isDark ? 'rgba(0,122,255,0.08)' : 'rgba(0,122,255,0.05)' }} />
+        <div className="absolute bottom-20 -left-40 w-80 h-80 rounded-full blur-3xl notes-blob notes-blob-delay" style={{ background: isDark ? 'rgba(175,82,222,0.08)' : 'rgba(175,82,222,0.05)' }} />
+      </div>
+      
       {/* 顶部导航 - Apple 风格 */}
-      <div className="sticky top-0 z-10" style={{ backgroundColor: theme.headerBg, backdropFilter: 'blur(20px)', borderBottom: `0.5px solid ${theme.border}` }}>
+      <div className="sticky top-0 z-10 notes-header-enter" style={{ backgroundColor: theme.headerBg, backdropFilter: 'blur(20px)', borderBottom: `0.5px solid ${theme.border}` }}>
         {/* 选择模式工具栏 */}
         {selectionMode ? (
           <div className="flex items-center gap-3 px-4 py-3">
@@ -1577,6 +1583,17 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
         </div>,
         document.body
       )}
+
+      {/* 页面动画样式 */}
+      <style>{`
+        .notes-page-enter { animation: notesPageEnter 0.3s ease-out; }
+        .notes-header-enter { animation: notesHeaderEnter 0.4s ease-out; }
+        .notes-blob { animation: notesBlob 8s ease-in-out infinite; }
+        .notes-blob-delay { animation-delay: 2s; }
+        @keyframes notesPageEnter { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes notesHeaderEnter { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes notesBlob { 0%, 100% { transform: translate(0, 0) scale(1); } 33% { transform: translate(20px, -20px) scale(1.1); } 66% { transform: translate(-15px, 15px) scale(0.95); } }
+      `}</style>
     </div>,
     document.body
   );

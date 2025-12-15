@@ -422,10 +422,16 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f]">
+    <div className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f] animate-page-enter">
+      {/* 背景装饰 */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 right-10 w-60 h-60 bg-cyber-lime/5 rounded-full blur-3xl animate-float" />
+        <div className="absolute bottom-20 left-10 w-60 h-60 bg-blue-500/5 rounded-full blur-3xl animate-float animation-delay-2000" />
+      </div>
+      
       {/* 移动端文件夹抽屉遮罩 */}
       {sidebarOpen && (
-        <div className="fixed inset-0 bg-black/60 z-10 sm:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/60 z-10 sm:hidden animate-fade-in" onClick={() => setSidebarOpen(false)} />
       )}
       
       {/* 左侧文件夹侧边栏 */}
@@ -599,7 +605,18 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         </div>
       )}
 
-      <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }`}</style>
+      <style>{`
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes page-enter { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes float { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-20px) scale(1.05); } }
+        @keyframes slide-in-left { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        .animate-page-enter { animation: page-enter 0.3s ease-out; }
+        .animate-fade-in { animation: fade-in 0.2s ease-out; }
+        .animate-float { animation: float 6s ease-in-out infinite; }
+        .animate-slide-in-left { animation: slide-in-left 0.3s ease-out; }
+        .animation-delay-2000 { animation-delay: 2s; }
+      `}</style>
     </div>,
     document.body
   );

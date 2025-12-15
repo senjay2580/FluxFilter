@@ -391,10 +391,11 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3">
-            {videos.map(video => (
+            {videos.map((video, index) => (
               <div
                 key={video.id}
-                className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden hover:bg-white/10 transition-colors"
+                className="bg-white/5 rounded-2xl border border-white/10 overflow-hidden hover:bg-white/10 transition-colors animate-card-enter"
+                style={{ animationDelay: `${index * 50}ms` }}
               >
                 {/* 封面 */}
                 <div 
@@ -600,8 +601,15 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                 from { transform: translateY(100%); }
                 to { transform: translateY(0); }
               }
+              @keyframes card-enter {
+                from { opacity: 0; transform: translateY(16px) scale(0.95); }
+                to { opacity: 1; transform: translateY(0) scale(1); }
+              }
               .animate-drawer-slide-up {
                 animation: drawer-slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+              }
+              .animate-card-enter {
+                animation: card-enter 0.4s ease-out both;
               }
             `}</style>
           </div>

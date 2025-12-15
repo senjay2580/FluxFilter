@@ -25,9 +25,9 @@ const EmbeddedPlayer: React.FC<EmbeddedPlayerProps> = ({ bvid, title, onClose })
   }, []);
 
   return createPortal(
-    <div className="fixed inset-0 z-[999999] bg-black flex flex-col">
+    <div className="fixed inset-0 z-[999999] bg-black flex flex-col animate-player-enter">
       {/* 顶部导航栏 */}
-      <div className="flex items-center justify-between px-4 py-3 bg-[#0c0c0c] border-b border-white/10 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-[#0c0c0c] border-b border-white/10 shrink-0 animate-header-slide">
         {/* 返回按钮 */}
         <button
           onClick={onClose}
@@ -59,7 +59,7 @@ const EmbeddedPlayer: React.FC<EmbeddedPlayerProps> = ({ bvid, title, onClose })
       </div>
 
       {/* iframe 嵌入区域 */}
-      <div className="flex-1 relative bg-black">
+      <div className="flex-1 relative bg-black animate-content-fade">
         <iframe
           src={embedUrl}
           className="absolute inset-0 w-full h-full border-0"
@@ -68,6 +68,15 @@ const EmbeddedPlayer: React.FC<EmbeddedPlayerProps> = ({ bvid, title, onClose })
           referrerPolicy="no-referrer-when-downgrade"
         />
       </div>
+      {/* 动画样式 */}
+      <style>{`
+        @keyframes player-enter { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes header-slide { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes content-fade { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+        .animate-player-enter { animation: player-enter 0.25s ease-out; }
+        .animate-header-slide { animation: header-slide 0.3s ease-out; }
+        .animate-content-fade { animation: content-fade 0.35s ease-out; }
+      `}</style>
     </div>,
     document.body
   );
