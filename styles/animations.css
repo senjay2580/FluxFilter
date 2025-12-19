@@ -1,0 +1,307 @@
+/* macOS 风格动画 - 流畅、弹性、自然 */
+
+/* ===== 基础缓动函数 ===== */
+:root {
+  /* macOS 标准缓动 */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+  /* 弹性缓动 */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-spring-soft: cubic-bezier(0.22, 1.2, 0.36, 1);
+  /* 快速响应 */
+  --ease-snap: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ===== 弹窗/模态框动画 ===== */
+@keyframes modalBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalBackdropOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes modalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modalScaleOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+}
+
+/* 底部弹出（移动端） */
+@keyframes sheetSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheetSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+}
+
+/* ===== Toast 通知动画 ===== */
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes toastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px) scale(0.95);
+  }
+}
+
+/* 顶部通知 */
+@keyframes notifyDropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-100%) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes notifyDropOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+}
+
+/* ===== 列表项动画 ===== */
+@keyframes listItemIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes listItemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== 按钮/交互反馈 ===== */
+@keyframes buttonPress {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+
+@keyframes ripple {
+  from {
+    opacity: 0.5;
+    transform: scale(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(2.5);
+  }
+}
+
+/* ===== 加载动画 ===== */
+@keyframes spinSmooth {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ===== 页面过渡 ===== */
+@keyframes pageSlideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pageSlideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pageFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ===== 工具类 ===== */
+.animate-modal-in {
+  animation: modalScaleIn 0.35s var(--ease-out-expo) forwards;
+}
+
+.animate-modal-out {
+  animation: modalScaleOut 0.25s var(--ease-out-quart) forwards;
+}
+
+.animate-sheet-in {
+  animation: sheetSlideIn 0.4s var(--ease-out-expo) forwards;
+}
+
+.animate-sheet-out {
+  animation: sheetSlideOut 0.3s var(--ease-out-quart) forwards;
+}
+
+.animate-backdrop-in {
+  animation: modalBackdropIn 0.3s var(--ease-out-quart) forwards;
+}
+
+.animate-backdrop-out {
+  animation: modalBackdropOut 0.25s var(--ease-out-quart) forwards;
+}
+
+.animate-toast-in {
+  animation: toastSlideIn 0.4s var(--ease-spring-soft) forwards;
+}
+
+.animate-toast-out {
+  animation: toastSlideOut 0.3s var(--ease-out-quart) forwards;
+}
+
+.animate-notify-in {
+  animation: notifyDropIn 0.4s var(--ease-spring-soft) forwards;
+}
+
+.animate-notify-out {
+  animation: notifyDropOut 0.3s var(--ease-out-quart) forwards;
+}
+
+.animate-list-item {
+  animation: listItemFadeIn 0.3s var(--ease-out-expo) forwards;
+  animation-fill-mode: both;
+}
+
+.animate-page-in {
+  animation: pageSlideInRight 0.4s var(--ease-out-expo) forwards;
+}
+
+.animate-spin-smooth {
+  animation: spinSmooth 1s linear infinite;
+}
+
+.animate-pulse-soft {
+  animation: pulse 2s var(--ease-in-out-quart) infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ===== 交互状态 ===== */
+.interactive-scale {
+  transition: transform 0.2s var(--ease-out-expo), box-shadow 0.2s var(--ease-out-expo);
+}
+
+.interactive-scale:hover {
+  transform: scale(1.02);
+}
+
+.interactive-scale:active {
+  transform: scale(0.98);
+}
+
+/* 按钮按压效果 */
+.btn-press {
+  transition: transform 0.15s var(--ease-out-expo), opacity 0.15s;
+}
+
+.btn-press:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+}
+
+/* 卡片悬浮效果 */
+.card-hover {
+  transition: transform 0.3s var(--ease-out-expo), box-shadow 0.3s var(--ease-out-expo);
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* ===== 延迟动画（用于列表） ===== */
+.delay-75 { animation-delay: 75ms; }
+.delay-100 { animation-delay: 100ms; }
+.delay-150 { animation-delay: 150ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }
+.delay-500 { animation-delay: 500ms; }

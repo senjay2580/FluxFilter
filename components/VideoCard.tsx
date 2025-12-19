@@ -1,7 +1,7 @@
 import React, { memo, useMemo, useCallback, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Video } from '../types';
-import { ClockIcon } from './Icons';
+import { ClockIcon } from './shared/Icons';
 import { formatDuration } from '../lib/bilibili';
 import type { VideoWithUploader } from '../lib/database.types';
 import EmbeddedPlayer from './EmbeddedPlayer';

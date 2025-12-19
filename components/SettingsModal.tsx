@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../lib/supabase';
 import { getCurrentUser, updateBilibiliCookie, logout, type User } from '../lib/auth';
 import { clearCookieCache } from '../lib/bilibili';
-import { ClockIcon } from './Icons';
+import { ClockIcon } from './shared/Icons';
 
 interface Uploader {
   id: number;

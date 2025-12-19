@@ -8,7 +8,7 @@ import DateFilterPicker from './components/DateFilterPicker';
 import SyncButton from './components/SyncButton';
 import AddUploaderModal from './components/AddUploaderModal';
 import TodoList from './components/TodoList';
-import Loader3D from './components/Loader3D';
+import Loader from './components/shared/Loader';
 import SplashScreen from './components/SplashScreen';
 import PullToRefresh from './components/PullToRefresh';
 import RssFeed from './components/RssFeed';
@@ -636,7 +636,7 @@ const App = () => {
   if (isAuthenticated === null) {
     return (
       <div className="h-screen bg-[#050510] flex items-center justify-center">
-        <Loader3D text="正在加载..." />
+        <Loader text="正在加载..." />
       </div>
     );
   }
@@ -1384,7 +1384,7 @@ const App = () => {
             </h2>
 
             {/* 加载状态 - 仅在已登录时显示 */}
-            {loading && currentUser && <Loader3D text="正在加载视频..." />}
+            {loading && currentUser && <Loader text="正在加载视频..." />}
 
             {/* 错误提示 */}
             {error && (
@@ -1940,9 +1940,9 @@ const App = () => {
         }}
       />
 
-      {/* Toast 提示 - 右上角毛玻璃 */}
+      {/* Toast 提示 - 右上角毛玻璃 macOS 风格 */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 animate-slide-in-right">
+        <div className="fixed top-4 right-4 z-50 animate-notify-in">
           <div className="relative px-4 py-3 rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
             {/* 毛玻璃背景层 */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
@@ -1952,15 +1952,6 @@ const App = () => {
               <span className="text-white text-sm font-medium">{toast}</span>
             </div>
           </div>
-          <style>{`
-            @keyframes slide-in-right {
-              from { transform: translateX(100%); opacity: 0; }
-              to { transform: translateX(0); opacity: 1; }
-            }
-            .animate-slide-in-right {
-              animation: slide-in-right 0.3s ease-out;
-            }
-          `}</style>
         </div>
       )}
 

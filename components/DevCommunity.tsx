@@ -389,11 +389,11 @@ const DevCommunity: React.FC = () => {
 
       {/* GitHub 列表 */}
       {activeTab === 'github' && githubRepos.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {githubRepos.map(repo => (
             <div
               key={repo.id}
-              className="block p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyber-lime/30 rounded-xl transition-all group cursor-pointer select-none"
+              className="block p-5 bg-[#1a2634] hover:bg-[#1f2d3d] rounded-2xl transition-all group cursor-pointer select-none shadow-lg"
               onClick={() => handleCardClick(repo.html_url)}
               onContextMenu={handleContextMenu}
               onMouseDown={(e) => handleLongPressStart(e, {
@@ -412,21 +412,21 @@ const DevCommunity: React.FC = () => {
               })}
               onTouchEnd={handleLongPressEnd}
             >
-              <div className="flex items-start gap-3">
-                <img src={repo.owner.avatar_url} alt="" className="w-10 h-10 rounded-lg" />
+              <div className="flex items-start gap-4">
+                <img src={repo.owner.avatar_url} alt="" className="w-12 h-12 rounded-xl" />
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-white font-medium group-hover:text-cyber-lime transition-colors truncate">
+                  <h3 className="text-white font-semibold group-hover:text-amber-400 transition-colors truncate text-base">
                     {repo.full_name}
                   </h3>
-                  <p className="text-gray-500 text-sm line-clamp-2 mt-1">{repo.description || '暂无描述'}</p>
-                  <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-gray-500">
+                  <p className="text-gray-400 text-sm line-clamp-2 mt-1.5">{repo.description || '暂无描述'}</p>
+                  <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-500">
                     {repo.language && (
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: LANGUAGE_COLORS[repo.language] || '#888' }} />
                         {repo.language}
                       </span>
                     )}
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1 text-amber-500/80">
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                       {formatNumber(repo.stargazers_count)}
                     </span>
@@ -434,7 +434,7 @@ const DevCommunity: React.FC = () => {
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 18V6h10l-5 6 5 6H7z"/></svg>
                       {formatNumber(repo.forks_count)}
                     </span>
-                    <span className="flex items-center gap-1 text-cyber-lime/70">
+                    <span className="flex items-center gap-1 text-amber-500/60">
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
                       {formatGitHubDate(repo.created_at)}
                     </span>
@@ -448,11 +448,11 @@ const DevCommunity: React.FC = () => {
 
       {/* Stack Overflow 列表 */}
       {activeTab === 'stackoverflow' && soQuestions.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {soQuestions.map(q => (
             <div
               key={q.question_id}
-              className="block p-4 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-orange-500/30 rounded-xl transition-all group cursor-pointer select-none"
+              className="block p-5 bg-[#1a2634] hover:bg-[#1f2d3d] rounded-2xl transition-all group cursor-pointer select-none shadow-lg"
               onClick={() => handleCardClick(q.link)}
               onContextMenu={handleContextMenu}
               onMouseDown={(e) => handleLongPressStart(e, {
@@ -471,24 +471,24 @@ const DevCommunity: React.FC = () => {
               })}
               onTouchEnd={handleLongPressEnd}
             >
-              <h3 className="text-white font-medium group-hover:text-orange-400 transition-colors line-clamp-2">
+              <h3 className="text-white font-semibold group-hover:text-amber-400 transition-colors line-clamp-2 text-base">
                 {q.title}
               </h3>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-3">
                 {q.tags.slice(0, 4).map(tag => (
-                  <span key={tag} className="px-2 py-0.5 bg-blue-500/20 text-blue-400 text-xs rounded">
+                  <span key={tag} className="px-2.5 py-1 bg-amber-500/10 text-amber-400/80 text-xs rounded-lg">
                     {tag}
                   </span>
                 ))}
               </div>
               <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 text-amber-500/80">
                   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
                   {q.score} 票
                 </span>
                 <span>{q.answer_count} 回答</span>
                 <span>{formatNumber(q.view_count)} 浏览</span>
-                <span>{formatDate(q.creation_date)}</span>
+                <span className="text-amber-500/60">{formatDate(q.creation_date)}</span>
               </div>
             </div>
           ))}
