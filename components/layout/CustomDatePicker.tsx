@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { DateFilter } from '../types';
-import { ChevronLeftIcon, ChevronRightIcon } from './shared/Icons';
-import type { VideoWithUploader } from '../lib/database.types';
+import { DateFilter } from '../../types';
+import { ChevronLeftIcon, ChevronRightIcon } from '../shared/Icons';
+import type { VideoWithUploader } from '../../lib/database.types';
 
 // 通用视频类型（支持旧格式和新格式）
 type VideoItem = { createdAt?: Date; pubdate?: string | null };

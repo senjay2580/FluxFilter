@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { getCurrentUser } from '../lib/auth';
+import { supabase, isSupabaseConfigured } from '../../lib/supabase';
+import { getCurrentUser } from '../../lib/auth';
 
 interface VideoItem {
   id: string;

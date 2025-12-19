@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../lib/supabase';
-import { getStoredUserId } from '../lib/auth';
-import type { Note, NoteColor, NoteCategory, CreateNoteParams, UpdateNoteParams } from '../lib/database.types';
+import { supabase } from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
+import type { Note, NoteColor, NoteCategory, CreateNoteParams, UpdateNoteParams } from '../../lib/database.types';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';

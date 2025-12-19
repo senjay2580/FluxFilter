@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { VideoWithUploader } from '../lib/database.types';
-import { ClockIcon } from './shared/Icons';
+import type { VideoWithUploader } from '../../lib/database.types';
+import { ClockIcon } from '../shared/Icons';
 
 interface VideoTimelineProps {
   videos: VideoWithUploader[];

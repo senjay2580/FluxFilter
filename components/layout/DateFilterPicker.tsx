@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { DateFilter } from '../types';
-import { CheckIcon } from './shared/Icons';
+import { DateFilter } from '../../types';
+import { CheckIcon } from '../shared/Icons';
 
 interface DateFilterPickerProps {
   isOpen: boolean;

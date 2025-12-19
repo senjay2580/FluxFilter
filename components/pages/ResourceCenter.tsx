@@ -4,9 +4,9 @@ import {
   isSupabaseConfigured, getResources, getResourceFolders,
   createResource, createResources, createResourceFolder,
   deleteResource, deleteResources, deleteResourceFolder
-} from '../lib/supabase';
-import { getStoredUserId } from '../lib/auth';
-import type { Resource, ResourceFolder } from '../lib/database.types';
+} from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
+import type { Resource, ResourceFolder } from '../../lib/database.types';
 
 interface ResourceCenterProps { isOpen: boolean; onClose: () => void; }
 interface FolderNode extends ResourceFolder { children: FolderNode[]; }

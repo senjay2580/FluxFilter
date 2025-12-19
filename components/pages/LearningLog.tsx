@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { isSupabaseConfigured, getLearningLogs, createLearningLog, updateLearningLog, deleteLearningLog } from '../lib/supabase';
-import { getStoredUserId } from '../lib/auth';
-import type { LearningLog as LearningLogType } from '../lib/database.types';
+import { isSupabaseConfigured, getLearningLogs, createLearningLog, updateLearningLog, deleteLearningLog } from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
+import type { LearningLog as LearningLogType } from '../../lib/database.types';
 
 interface LearningLogProps {
   isOpen: boolean;

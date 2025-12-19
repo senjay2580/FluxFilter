@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../lib/supabase';
-import { getStoredUserId } from '../lib/auth';
+import { supabase } from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
 
 // 收藏视频类型
 interface CollectedVideo {

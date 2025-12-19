@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import IntervalReminder from './IntervalReminder';
-import TodoList from './TodoList';
-import VideoCollector from './VideoCollector';
-import DevCommunity from './DevCommunity';
-import VideoDownloader from './VideoDownloader';
-import AudioTranscriber from './AudioTranscriber';
+import IntervalReminder from '../tools/IntervalReminder';
+import TodoList from '../tools/TodoList';
+import VideoCollector from '../video/VideoCollector';
+import DevCommunity from '../pages/DevCommunity';
+import VideoDownloader from '../tools/VideoDownloader';
+import AudioTranscriber from '../tools/AudioTranscriber';
 
 export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber';
 

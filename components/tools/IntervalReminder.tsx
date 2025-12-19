@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { ReminderTask, ReminderPriority, PausedState } from '../types';
+import type { ReminderTask, ReminderPriority, PausedState } from '../../types';
 
 // 动态导入 assets 目录下所有 mp3 文件
 const audioModules = import.meta.glob('../assets/*.mp3', { eager: true, import: 'default' }) as Record<string, string>;

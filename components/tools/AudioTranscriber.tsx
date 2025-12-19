@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import DeleteConfirmModal from './shared/DeleteConfirmModal';
+import DeleteConfirmModal from '../shared/DeleteConfirmModal';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 
