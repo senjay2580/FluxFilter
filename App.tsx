@@ -35,10 +35,7 @@ const App = () => {
   const [authExpired, setAuthExpired] = useState(false); // 认证过期标记
   const [networkError, setNetworkError] = useState<string | null>(null); // 网络错误
   
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
-    const saved = localStorage.getItem('activeTab');
-    return (saved as Tab) || 'home';
-  });
+  const [activeTab, setActiveTab] = useState<Tab>('home');
   const [watchLaterIds, setWatchLaterIds] = useState<Set<string>>(new Set());
   const [watchlistLoading, setWatchlistLoading] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all'); // 默认全部
@@ -743,6 +740,9 @@ const App = () => {
         <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-black/40 to-transparent" />
       </div>
       
+      {/* 主内容区域容器 - PC端在侧边栏右侧 */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 lg:ml-56 overflow-hidden">
+      
       {/* Header & Sticky Filter */}
       <header className="sticky top-0 z-40 w-full transition-all duration-300">
         {/* Top Bar - 毛玻璃效果 */}
@@ -915,7 +915,7 @@ const App = () => {
       {/* Main Content Feed */}
       <main
         ref={mainRef}
-        className="flex-1 overflow-y-auto px-3 py-4 pb-24 max-w-4xl mx-auto w-full"
+        className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-3 lg:px-6 xl:px-8 py-4 pb-24 lg:pb-6"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -1144,24 +1144,29 @@ const App = () => {
           </div>
         )}
         
-        {/* 热门轮播图 */}
-        {activeTab === 'home' && !searchTerm && activeFilter === 'all' && videos.length > 0 && (
-          <HotCarousel videos={hotVideos} />
-        )}
-
-        {/* 快捷入口 - 均匀分布居中 */}
+        {/* PC端：轮播图和快捷入口左右排布 */}
         {activeTab === 'home' && !searchTerm && (
-          <div className="flex justify-center gap-4 mb-4">
+          <div className="flex flex-col lg:flex-row lg:gap-6 mb-6">
+            {/* 热门轮播图 - PC端占 70% */}
+            {activeFilter === 'all' && videos.length > 0 && (
+              <div className="lg:w-[70%] lg:shrink-0">
+                <HotCarousel videos={hotVideos} />
+              </div>
+            )}
+
+            {/* 快捷入口 - PC端占 30%，网格布局 */}
+            <div className="flex justify-center gap-3 mt-4 lg:mt-0 lg:flex-1 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start">
             {/* 收藏夹 */}
             <button
               onClick={() => { setSettingsInitialView('collector'); setActiveTab('settings'); }}
-              className="relative w-11 h-11 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-xl flex items-center justify-center hover:from-cyan-500/30 hover:to-blue-500/30 transition-all active:scale-[0.95]"
+              className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all active:scale-[0.98]"
             >
-              <svg className="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
               </svg>
+              <span className="hidden lg:block text-sm text-cyan-400 font-medium">收藏夹</span>
               {collectedCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-cyan-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 lg:top-2 lg:right-2 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-cyan-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
                   {collectedCount > 99 ? '99+' : collectedCount}
                 </span>
               )}
@@ -1170,14 +1175,15 @@ const App = () => {
             {/* 提醒 */}
             <button
               onClick={() => { setSettingsInitialView('reminder'); setActiveTab('settings'); }}
-              className="relative w-11 h-11 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl flex items-center justify-center hover:from-amber-500/30 hover:to-orange-500/30 transition-all active:scale-[0.95]"
+              className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-amber-500/30 hover:to-orange-500/30 transition-all active:scale-[0.98]"
             >
-              <svg className="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10"/>
                 <polyline points="12 6 12 12 16 14"/>
               </svg>
+              <span className="hidden lg:block text-sm text-amber-400 font-medium">提醒</span>
               {reminderCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-amber-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-amber-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
                   {reminderCount > 99 ? '99+' : reminderCount}
                 </span>
               )}
@@ -1186,14 +1192,15 @@ const App = () => {
             {/* TODO */}
             <button
               onClick={() => { setSettingsInitialView('todo'); setActiveTab('settings'); }}
-              className="relative w-11 h-11 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-xl flex items-center justify-center hover:from-blue-500/30 hover:to-purple-500/30 transition-all active:scale-[0.95]"
+              className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-blue-500/30 hover:to-purple-500/30 transition-all active:scale-[0.98]"
             >
-              <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M9 11l3 3L22 4"/>
                 <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
               </svg>
+              <span className="hidden lg:block text-sm text-blue-400 font-medium">待办</span>
               {todoCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-blue-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-blue-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
                   {todoCount > 99 ? '99+' : todoCount}
                 </span>
               )}
@@ -1202,52 +1209,55 @@ const App = () => {
             {/* 笔记 */}
             <button
               onClick={() => setIsNotesOpen(true)}
-              className="relative w-11 h-11 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl flex items-center justify-center hover:from-purple-500/30 hover:to-pink-500/30 transition-all active:scale-[0.95]"
+              className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-purple-500/30 hover:to-pink-500/30 transition-all active:scale-[0.98]"
               title="笔记"
             >
-              <svg className="w-5 h-5 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                 <polyline points="14 2 14 8 20 8"/>
                 <line x1="16" y1="13" x2="8" y2="13"/>
                 <line x1="16" y1="17" x2="8" y2="17"/>
               </svg>
+              <span className="hidden lg:block text-sm text-purple-300 font-medium">笔记</span>
               {notesCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 bg-purple-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-purple-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
                   {notesCount > 99 ? '99+' : notesCount}
                 </span>
               )}
             </button>
 
-            {/* 转写 - 笔图标 - 绿色主题 */}
+            {/* 转写 */}
             <button
               onClick={() => {
                 const transcriptSystemUrl = import.meta.env.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
                 window.open(transcriptSystemUrl, '_blank');
               }}
-              className="relative w-11 h-11 bg-gradient-to-br from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center hover:from-cyber-lime/30 hover:to-emerald-500/30 transition-all active:scale-[0.95]"
+              className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-cyber-lime/30 hover:to-emerald-500/30 transition-all active:scale-[0.98]"
               title="视频转写"
             >
-              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 19l7-7 3 3-7 7-3-3z"/>
                 <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-                <path d="M2 2l7.586 7.586"/>
                 <circle cx="11" cy="11" r="2"/>
               </svg>
+              <span className="hidden lg:block text-sm text-cyber-lime font-medium">转写</span>
             </button>
 
-            {/* 应用九宫格 - 绿色主题 */}
+            {/* 应用 */}
             <button
               onClick={() => setIsAppsModalOpen(true)}
-              className="relative w-11 h-11 bg-gradient-to-br from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center hover:from-cyber-lime/30 hover:to-emerald-500/30 transition-all active:scale-[0.95]"
+              className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-cyber-lime/30 hover:to-emerald-500/30 transition-all active:scale-[0.98]"
               title="应用"
             >
-              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="3" width="7" height="7" rx="1"/>
                 <rect x="14" y="3" width="7" height="7" rx="1"/>
                 <rect x="3" y="14" width="7" height="7" rx="1"/>
                 <rect x="14" y="14" width="7" height="7" rx="1"/>
               </svg>
+              <span className="hidden lg:block text-sm text-cyber-lime font-medium">应用</span>
             </button>
+            </div>
           </div>
         )}
 
@@ -1570,21 +1580,23 @@ const App = () => {
             
             {/* 视频列表 */}
             {!loading && filteredVideos.length > 0 && (
-                <div className="grid grid-cols-2 gap-3">
-                    {filteredVideos.slice(0, visibleCount).map((video) => (
-                        <VideoCard 
-                            key={video.bvid}
-                            video={video}
-                            onAddToWatchlist={toggleWatchLater}
-                            onRemoveFromWatchlist={toggleWatchLater}
-                            isInWatchlist={watchLaterIds.has(video.bvid)}
-                            openMenuId={openMenuId}
-                            onMenuToggle={setOpenMenuId}
-                            onDelete={(bvid) => executeDeleteVideo(bvid, false)}
-                            onDeleteWithLog={(bvid, title) => executeDeleteVideo(bvid, true)}
-                            onTranscript={handleTranscript}
-                        />
-                    ))}
+                <div>
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-x-4 gap-y-6 lg:gap-x-4 lg:gap-y-8">
+                      {filteredVideos.slice(0, visibleCount).map((video) => (
+                          <VideoCard 
+                              key={video.bvid}
+                              video={video}
+                              onAddToWatchlist={toggleWatchLater}
+                              onRemoveFromWatchlist={toggleWatchLater}
+                              isInWatchlist={watchLaterIds.has(video.bvid)}
+                              openMenuId={openMenuId}
+                              onMenuToggle={setOpenMenuId}
+                              onDelete={(bvid) => executeDeleteVideo(bvid, false)}
+                              onDeleteWithLog={(bvid, title) => executeDeleteVideo(bvid, true)}
+                              onTranscript={handleTranscript}
+                          />
+                      ))}
+                  </div>
                 </div>
             )}
             
@@ -1616,6 +1628,7 @@ const App = () => {
         )}
         </div>
       </main>
+      </div>
       
       {/* 页面切换动画样式 */}
       <style>{`
@@ -1634,8 +1647,94 @@ const App = () => {
         }
       `}</style>
 
-      {/* Bottom Navigation - 毛玻璃效果 */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-black/40 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-4 z-50 h-[80px]">
+      {/* PC 侧边栏导航 - YouTube 风格 */}
+      <nav className="hidden lg:flex fixed left-0 top-0 bottom-0 w-56 bg-[#0f0f0f] border-r border-white/5 flex-col py-3 z-50 overflow-y-auto no-scrollbar">
+        {/* Logo */}
+        <div className="px-4 py-2 mb-2">
+          <div className="flex items-center gap-2">
+            <img src={LogoSvg} alt="FluxF" className="w-8 h-8" />
+            <span className="text-white font-bold text-lg">FluxF</span>
+          </div>
+        </div>
+        
+        {/* 主导航 */}
+        <div className="px-2 space-y-1">
+          {/* 首页 */}
+          <button 
+            onClick={() => setActiveTab('home')}
+            className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${
+              activeTab === 'home' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
+            }`}
+          >
+            <HomeIcon className="w-5 h-5" />
+            <span className="text-sm font-medium">首页</span>
+          </button>
+
+          {/* 待看 */}
+          <button 
+            onClick={() => setActiveTab('watchLater')}
+            className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${
+              activeTab === 'watchLater' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
+            }`}
+          >
+            <ClockIcon className="w-5 h-5" />
+            <span className="text-sm font-medium">待看列表</span>
+          </button>
+
+          {/* RSS */}
+          <button 
+            onClick={() => setActiveTab('rss')} 
+            className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${
+              activeTab === 'rss' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
+            }`}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 11a9 9 0 0 1 9 9" />
+              <path d="M4 4a16 16 0 0 1 16 16" />
+              <circle cx="5" cy="19" r="1" fill="currentColor" />
+            </svg>
+            <span className="text-sm font-medium">RSS 订阅</span>
+          </button>
+        </div>
+
+        {/* 分隔线 */}
+        <div className="my-3 mx-4 border-t border-white/10" />
+
+        {/* 工具区 */}
+        <div className="px-2 space-y-1">
+          <p className="px-3 py-2 text-xs text-gray-500 font-medium">工具</p>
+          
+          {/* 添加UP主 */}
+          <button 
+            onClick={() => setIsAddUploaderOpen(true)}
+            className="w-full flex items-center gap-5 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-white/5 transition-all"
+          >
+            <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="16"/>
+              <line x1="8" y1="12" x2="16" y2="12"/>
+            </svg>
+            <span className="text-sm font-medium">添加 UP主</span>
+          </button>
+
+          {/* 设置 */}
+          <button 
+            onClick={() => { setSettingsInitialView('main'); setActiveTab('settings'); }}
+            className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${
+              activeTab === 'settings' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
+            }`}
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span className="text-sm font-medium">设置</span>
+          </button>
+        </div>
+      </nav>
+
+      {/* 移动端底部导航 - lg 以下显示 */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-black/40 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-4 z-50 h-[80px]">
         <div className="flex justify-around items-center h-full max-w-lg mx-auto pb-4">
           {/* Discovery */}
           <button 

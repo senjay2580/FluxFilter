@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { formatLastSyncTime, triggerSyncWithUploaders } from '../lib/autoSync';
 import { supabase } from '../lib/supabase';
@@ -6,10 +6,8 @@ import { getStoredUserId, getStoredUsername } from '../lib/auth';
 import { 
   waitForSyncLock, 
   releaseSyncLock, 
-  getQueueStatus, 
   checkSyncThrottle, 
-  recordSyncComplete,
-  getSyncRateLimitStatus 
+  recordSyncComplete
 } from '../lib/syncQueue';
 import { cachedFetch, invalidateCache, CACHE_KEYS, CACHE_TTL } from '../lib/cache';
 
@@ -56,8 +54,11 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const [currentUploader, setCurrentUploader] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [newVideos, setNewVideos] = useState<Array<{bvid: string; title: string; pic: string; uploader_name: string}>>([]);
+  const [showSuccessModal, setShowSuccessModal] = useState(false); // 后台同步完成后显示成功弹窗
+  const [backgroundResult, setBackgroundResult] = useState<{message: string; newVideos: any[]}>({ message: '', newVideos: [] });
   
   const cancelRef = useRef(false);
+  const isBackgroundRef = useRef(false); // 使用 ref 追踪是否为后台同步
 
   const fetchUploaders = useCallback(async (forceRefresh = false) => {
     setLoadingUploaders(true);
@@ -106,7 +107,12 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   };
 
   const handleCloseModal = () => {
-    if (syncing) cancelRef.current = true;
+    // 如果正在同步，转为后台同步模式
+    if (syncing) {
+      isBackgroundRef.current = true; // 标记为后台同步
+      setShowModal(false);
+      return;
+    }
     setShowModal(false);
     setSyncStatus('idle');
   };
@@ -151,7 +157,9 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
       }
     }
     
+    // 重置状态
     cancelRef.current = false;
+    isBackgroundRef.current = false; // 重置后台同步标记
     setSyncing(true);
     setSyncStatus('syncing');
     setMessage('🚀 准备同步...');
@@ -195,7 +203,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
 
       // 2. 执行同步（selectedUploaders 已在上面定义）
       const result = await triggerSyncWithUploaders(
-        selectedUploaders, 
+        selectedUploaders as any, 
         (progressMsg) => {
           if (cancelRef.current) return;
           
@@ -247,16 +255,36 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         if (result.success) {
           recordSyncComplete();
         }
+
+        // 如果是后台同步，显示成功弹窗
+        if (isBackgroundRef.current) {
+          setBackgroundResult({
+            message: successMsg,
+            newVideos: result.newVideos || []
+          });
+          setShowSuccessModal(true);
+        }
       }
     } catch (error) {
       if (!cancelRef.current) {
-        setMessage('同步失败: ' + String(error));
+        const errorMsg = '同步失败: ' + String(error);
+        setMessage(errorMsg);
         setSyncStatus('error');
+        
+        // 后台同步失败也显示结果
+        if (isBackgroundRef.current) {
+          setBackgroundResult({
+            message: errorMsg,
+            newVideos: []
+          });
+          setShowSuccessModal(true);
+        }
       }
     } finally {
       // 释放同步锁
       await releaseSyncLock(lockId);
       setSyncing(false);
+      isBackgroundRef.current = false; // 重置后台同步标记
       cancelRef.current = false;
     }
   };
@@ -502,22 +530,140 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     );
   };
 
+  // 渲染后台同步完成弹窗
+  const renderSuccessModal = () => {
+    if (!showSuccessModal) return null;
+
+    const isSuccess = !backgroundResult.message.includes('失败');
+
+    return createPortal(
+      <div 
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+        onClick={() => setShowSuccessModal(false)}
+      >
+        <div 
+          className="w-full max-w-md mx-4 bg-[#0c0c14] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+          onClick={e => e.stopPropagation()}
+          style={{ animation: 'scaleIn 0.25s ease-out' }}
+        >
+          {/* 头部 */}
+          <div className="p-6 text-center">
+            <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
+              isSuccess ? 'bg-green-500/20' : 'bg-red-500/20'
+            }`}>
+              {isSuccess ? (
+                <svg className="w-8 h-8 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg className="w-8 h-8 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              )}
+            </div>
+            <h3 className={`text-lg font-bold mb-2 ${isSuccess ? 'text-green-400' : 'text-red-400'}`}>
+              {isSuccess ? '同步完成' : '同步失败'}
+            </h3>
+            <p className="text-gray-400 text-sm">{backgroundResult.message}</p>
+          </div>
+
+          {/* 新增视频列表 */}
+          {isSuccess && backgroundResult.newVideos.length > 0 && (
+            <div className="px-4 pb-4">
+              <div className="text-cyber-lime text-sm font-medium mb-2 px-2">
+                新增视频 ({backgroundResult.newVideos.length})
+              </div>
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {backgroundResult.newVideos.slice(0, 5).map((video: any) => (
+                  <div
+                    key={video.bvid}
+                    onClick={() => window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank')}
+                    className="flex gap-3 p-2 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer transition-all"
+                  >
+                    <img
+                      src={video.pic?.replace('http:', 'https:')}
+                      alt={video.title}
+                      className="w-20 h-12 rounded-lg object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-white text-xs font-medium line-clamp-2">{video.title}</h4>
+                      <span className="text-gray-500 text-[10px]">{video.uploader_name}</span>
+                    </div>
+                  </div>
+                ))}
+                {backgroundResult.newVideos.length > 5 && (
+                  <p className="text-center text-gray-500 text-xs py-2">
+                    还有 {backgroundResult.newVideos.length - 5} 个视频...
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 关闭按钮 */}
+          <div className="p-4 border-t border-white/10">
+            <button
+              onClick={() => setShowSuccessModal(false)}
+              className="w-full py-3 bg-cyber-lime text-black font-medium rounded-xl hover:bg-lime-400 transition-colors"
+            >
+              知道了
+            </button>
+          </div>
+        </div>
+        
+        <style>{`
+          @keyframes scaleIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+          }
+        `}</style>
+      </div>,
+      document.body
+    );
+  };
+
+  // 后台同步状态：正在同步但弹窗已关闭
+  const isBackgroundSyncing = syncing && !showModal;
+
   return (
     <>
       <button
         onClick={handleOpenModal}
-        className={`${compact ? 'w-8 h-8 rounded-full' : 'px-4 py-2 rounded-xl'} flex items-center justify-center gap-2 transition-all bg-white/5 border border-white/10 hover:border-cyber-lime/50`}
-        title={`同步视频 (${lastSync})`}
+        className={`${compact ? 'w-8 h-8 rounded-full' : 'px-4 py-2 rounded-xl'} flex items-center justify-center gap-2 transition-all ${
+          isBackgroundSyncing 
+            ? 'bg-cyber-lime/20 border border-cyber-lime/50' 
+            : 'bg-white/5 border border-white/10 hover:border-cyber-lime/50'
+        }`}
+        title={isBackgroundSyncing ? '正在后台同步...' : `同步视频 (${lastSync})`}
       >
-        <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg 
+          className={`w-4 h-4 ${isBackgroundSyncing ? 'text-cyber-lime' : 'text-gray-400'}`}
+          style={isBackgroundSyncing ? { animation: 'spin 1s linear infinite' } : undefined}
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2"
+        >
           <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
           <path d="M3 3v5h5" />
           <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
           <path d="M16 21h5v-5" />
         </svg>
-        {!compact && <span className="text-sm text-gray-400">同步</span>}
+        {!compact && <span className={`text-sm ${isBackgroundSyncing ? 'text-cyber-lime' : 'text-gray-400'}`}>
+          {isBackgroundSyncing ? '同步中...' : '同步'}
+        </span>}
       </button>
       {renderModal()}
+      {renderSuccessModal()}
+      {isBackgroundSyncing && (
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      )}
     </>
   );
 };

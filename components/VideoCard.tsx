@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useCallback, useState } from 'react';
+import React, { memo, useMemo, useCallback, useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Video } from '../types';
 import { ClockIcon } from './Icons';
@@ -46,6 +46,9 @@ const formatPubdate = (pubdate: string | number): string => {
 const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete, onDeleteWithLog, onTranscript }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmbeddedPlayer, setShowEmbeddedPlayer] = useState(false);
+  const [showTitleTooltip, setShowTitleTooltip] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const titleRef = useRef<HTMLHeadingElement>(null);
   
   // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
   const videoData = useMemo(() => {
@@ -224,8 +227,21 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
 
           <div className="flex-1 min-w-0">
             {/* 标题 */}
-            <h3 className="text-white font-semibold leading-tight line-clamp-2 text-[13.5px] group-hover:text-white transition-colors" 
-                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4)' }}>
+            <h3 
+              ref={titleRef}
+              className="text-white font-semibold leading-tight line-clamp-2 text-[13.5px] group-hover:text-white transition-colors cursor-default" 
+              style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4)' }}
+              onMouseEnter={(e) => {
+                // 只有标题被截断时才显示 tooltip
+                const el = e.currentTarget;
+                if (el.scrollHeight > el.clientHeight || title.length > 30) {
+                  const rect = el.getBoundingClientRect();
+                  setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top - 8 });
+                  setShowTitleTooltip(true);
+                }
+              }}
+              onMouseLeave={() => setShowTitleTooltip(false)}
+            >
               {title}
             </h3>
 
@@ -539,6 +555,34 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
         title={title}
         onClose={() => setShowEmbeddedPlayer(false)}
       />
+    )}
+
+    {/* 标题 Tooltip */}
+    {showTitleTooltip && createPortal(
+      <>
+        <style>{`
+          @keyframes tooltipFadeIn {
+            from { opacity: 0; transform: translate(-50%, -100%) translateY(4px); }
+            to { opacity: 1; transform: translate(-50%, -100%) translateY(0); }
+          }
+        `}</style>
+        <div 
+          className="fixed z-[99999] max-w-xs px-3 py-2 bg-black/95 border border-white/20 rounded-lg shadow-xl pointer-events-none"
+          style={{
+            left: tooltipPos.x,
+            top: tooltipPos.y,
+            transform: 'translate(-50%, -100%)',
+            animation: 'tooltipFadeIn 0.15s ease-out',
+          }}
+        >
+          <p className="text-white text-xs leading-relaxed">{title}</p>
+          {/* 小三角 */}
+          <div 
+            className="absolute left-1/2 -translate-x-1/2 -bottom-1.5 w-3 h-3 bg-black/95 border-r border-b border-white/20 rotate-45"
+          />
+        </div>
+      </>,
+      document.body
     )}
     </>
   );

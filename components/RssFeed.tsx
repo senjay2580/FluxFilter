@@ -357,7 +357,7 @@ const RssFeed: React.FC<RssFeedProps> = ({ timeFilter = 'all' as FilterType }) =
 
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-6xl mx-auto">
       {/* 顶部标题 */}
       <div className="mb-6">
         <div className="flex items-center justify-between">
@@ -458,7 +458,7 @@ const RssFeed: React.FC<RssFeedProps> = ({ timeFilter = 'all' as FilterType }) =
 
       {/* 文章列表 */}
       {!loading && !error && filteredArticles.length > 0 && (
-        <div className="space-y-2.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 lg:gap-5">
           {displayedArticles.map((article) => (
             <article key={article.id} onClick={() => article.link && window.open(article.link, '_blank')}
               className="group relative cursor-pointer p-3.5 rounded-xl bg-gradient-to-br from-white/[0.08] to-white/[0.04] border border-white/[0.15] hover:border-cyber-lime/50 transition-colors hover:shadow-[0_0_40px_rgba(163,230,53,0.15)]">
@@ -492,20 +492,21 @@ const RssFeed: React.FC<RssFeedProps> = ({ timeFilter = 'all' as FilterType }) =
             </article>
           ))}
           
-          {/* 加载更多按钮 */}
-          {hasMore && (
-            <button onClick={loadMore}
-              className="w-full py-3 mt-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-400 hover:text-white text-sm transition-colors flex items-center justify-center gap-2">
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
-              加载更多 ({filteredArticles.length - displayCount} 篇)
-            </button>
-          )}
-          
-          {/* 已加载全部提示 */}
-          {!hasMore && filteredArticles.length > PAGE_SIZE && (
-            <div className="text-center py-4 text-gray-500 text-xs">已加载全部 {filteredArticles.length} 篇文章</div>
-          )}
         </div>
+      )}
+      
+      {/* 加载更多按钮 - 在网格外面 */}
+      {!loading && !error && filteredArticles.length > 0 && hasMore && (
+        <button onClick={loadMore}
+          className="w-full py-3 mt-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-gray-400 hover:text-white text-sm transition-colors flex items-center justify-center gap-2">
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+          加载更多 ({filteredArticles.length - displayCount} 篇)
+        </button>
+      )}
+      
+      {/* 已加载全部提示 */}
+      {!loading && !error && filteredArticles.length > 0 && !hasMore && filteredArticles.length > PAGE_SIZE && (
+        <div className="text-center py-4 text-gray-500 text-xs">已加载全部 {filteredArticles.length} 篇文章</div>
       )}
 
 

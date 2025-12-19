@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase, isSupabaseConfigured, getLearningLogs, createLearningLog, updateLearningLog, deleteLearningLog } from '../lib/supabase';
+import { isSupabaseConfigured, getLearningLogs, createLearningLog, updateLearningLog, deleteLearningLog } from '../lib/supabase';
 import { getStoredUserId } from '../lib/auth';
 import type { LearningLog as LearningLogType } from '../lib/database.types';
 
@@ -54,24 +54,46 @@ const LearningLog: React.FC<LearningLogProps> = ({
     }
   }, [isOpen, loadEntries]);
 
-  // 初始化时添加新条目
-  useEffect(() => {
-    if (isOpen && initialVideoUrl && !loading) {
-      const userId = getStoredUserId();
-      if (!userId || !isSupabaseConfigured) return;
+  // 初始化时添加新条目 - 使用 ref 避免重复创建
+  const creatingRef = React.useRef(false);
+  const createdUrlRef = React.useRef<string | null>(null);
 
-      const existingEntry = entries.find(e => e.video_url === initialVideoUrl);
-      if (!existingEntry) {
-        createLearningLog(userId, {
-          video_url: initialVideoUrl,
-          video_title: initialVideoTitle,
-        }).then((newEntry) => {
-          setEntries(prev => [newEntry, ...prev]);
-        }).catch(err => {
-          console.error('创建日志失败:', err);
-        });
-      }
+  useEffect(() => {
+    // 条件检查
+    if (!isOpen || !initialVideoUrl || loading) return;
+    
+    // 防止重复创建：同一个 URL 只创建一次
+    if (creatingRef.current || createdUrlRef.current === initialVideoUrl) return;
+    
+    // 检查是否已存在于列表中
+    if (entries.some(e => e.video_url === initialVideoUrl)) {
+      createdUrlRef.current = initialVideoUrl;
+      return;
     }
+
+    const userId = getStoredUserId();
+    if (!userId || !isSupabaseConfigured) return;
+
+    // 标记正在创建
+    creatingRef.current = true;
+
+    createLearningLog(userId, {
+      video_url: initialVideoUrl,
+      video_title: initialVideoTitle,
+    }).then((newEntry) => {
+      createdUrlRef.current = initialVideoUrl;
+      setEntries(prev => {
+        // 再次检查避免重复
+        if (prev.some(e => e.id === newEntry.id || e.video_url === initialVideoUrl)) {
+          return prev;
+        }
+        return [newEntry, ...prev];
+      });
+    }).catch(err => {
+      console.error('创建日志失败:', err);
+    }).finally(() => {
+      creatingRef.current = false;
+    });
   }, [isOpen, initialVideoUrl, initialVideoTitle, loading, entries]);
 
   // 确认删除条目
