@@ -261,10 +261,13 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
                   const delta = json.choices?.[0]?.delta?.content || '';
                   fullContent += delta;
 
-                  // 节流更新：每 60ms 更新一次 UI
+                  // 使用原生 requestAnimationFrame 确保 UI 更新与屏幕刷新同步，缓解移动端频闪
                   const now = Date.now();
-                  if (now - lastUpdate > 60) {
-                    setResult({ title: 'AI 实时分析中...', date: new Date().toISOString(), summary: fullContent });
+                  if (now - lastUpdate > 80) {
+                    setResult(prev => ({
+                      ...(prev || { title: 'AI 实时分析中...', date: new Date().toISOString(), summary: '' }),
+                      summary: fullContent
+                    }));
                     lastUpdate = now;
                   }
                 } catch (e) {
@@ -401,9 +404,8 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
                   const delta = json.choices?.[0]?.delta?.content || '';
                   fullContent += delta;
 
-                  // 节流更新 UI
                   const now = Date.now();
-                  if (now - lastUpdate > 60) {
+                  if (now - lastUpdate > 80) {
                     setTaskResult(fullContent);
                     lastUpdate = now;
                   }

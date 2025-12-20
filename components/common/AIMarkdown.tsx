@@ -310,17 +310,23 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
           </div>
         </div>
 
-        {/* 可折叠的内容区域 - 流式传输时禁用过渡动画以防止闪烁 */}
+        {/* 可折叠的内容区域 - 引入流式输出专用的 CSS 容器优化 */}
         <div
-          className={`overflow-hidden ${isStreaming ? '' : 'transition-all duration-300 ease-in-out'} ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[8000px] opacity-100'
+          className={`relative transform-gpu ${isStreaming ? 'pointer-events-none' : 'transition-all duration-300 ease-in-out'} ${isCollapsed ? 'max-h-0 opacity-0 overflow-hidden' : 'max-h-none opacity-100'
             }`}
+          style={{
+            contain: isStreaming ? 'paint layout' : 'none',
+            contentVisibility: 'auto'
+          }}
         >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={markdownComponents}
-          >
-            {content}
-          </ReactMarkdown>
+          <div className={`${isStreaming ? 'will-change-contents' : ''}`}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={markdownComponents}
+            >
+              {content}
+            </ReactMarkdown>
+          </div>
         </div>
 
         {/* 折叠时显示的摘要提示 */}
