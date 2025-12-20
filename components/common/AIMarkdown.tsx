@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { marked } from 'marked';
+import { supabase } from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
 
 interface AIMarkdownProps {
   content: string;
@@ -13,7 +16,7 @@ interface AIMarkdownProps {
  * 统一的 AI 输出 Markdown 渲染组件
  * 支持完整的 GFM (GitHub Flavored Markdown) 语法
  * 包括表格、分割线、标题、列表、代码块等
- * 内置复制、导出和折叠功能
+ * 内置复制、导出、折叠以及智能存为笔记功能
  */
 export const AIMarkdown: React.FC<AIMarkdownProps> = ({
   content,
@@ -23,6 +26,7 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
 }) => {
   const [copySuccess, setCopySuccess] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [saveNoteStatus, setSaveNoteStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
 
   // 根据变体选择颜色主题
@@ -77,16 +81,63 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
     }
   };
 
+  // 智能存为笔记
+  const handleSaveAsNote = async () => {
+    setSaveNoteStatus('saving');
+    try {
+      const userId = getStoredUserId();
+      if (!userId) {
+        alert('请先登录以保存笔记');
+        setSaveNoteStatus('error');
+        return;
+      }
+
+      // 智能提取标题：优先寻找第一个 # 或 ## 标题
+      let extractedTitle = title;
+      const titleMatch = content.match(/^#+\s+(.+)$/m);
+      if (titleMatch && titleMatch[1]) {
+        extractedTitle = titleMatch[1].trim();
+      }
+
+      // 将 Markdown 转换为适合笔记存储的 HTML 格式
+      // 提取前 100 个字符作为预览（清理掉 MD 字符）
+      const previewText = content.replace(/[#*`\n]/g, ' ').slice(0, 100);
+
+      // 使用 marked 将 Markdown 源码转换成 HTML
+      const htmlContent = marked.parse(content);
+
+      const { error } = await supabase.from('notes').insert({
+        user_id: userId,
+        title: extractedTitle,
+        content: htmlContent, // 保存转换后的 HTML 代码
+        preview: previewText,
+        color: 'default',
+        category: null,
+        is_pinned: false,
+        created_at: new Date().toISOString()
+      });
+
+      if (error) throw error;
+
+      setSaveNoteStatus('success');
+      setTimeout(() => setSaveNoteStatus('idle'), 2000);
+    } catch (err) {
+      console.error('保存笔记失败:', err);
+      setSaveNoteStatus('error');
+      setTimeout(() => setSaveNoteStatus('idle'), 3000);
+    }
+  };
+
   return (
     <div className="relative">
       {/* Markdown 内容 */}
       <div className="markdown-content">
         {/* 操作按钮条 */}
-        <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-white/10">
-          {/* 折叠按钮 */}
+        <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-white/10 overflow-x-auto no-scrollbar">
+          {/* 左侧：折叠按钮 */}
           <button
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white border border-white/10 shrink-0"
           >
             <svg
               className={`w-3.5 h-3.5 transition-transform duration-200 ${isCollapsed ? '' : 'rotate-90'}`}
@@ -99,8 +150,39 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
             </svg>
           </button>
 
-          {/* 右侧操作按钮 */}
-          <div className="flex items-center gap-2">
+          {/* 右侧：操作按钮组 */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* 存为笔记按钮 */}
+            <button
+              onClick={handleSaveAsNote}
+              disabled={saveNoteStatus === 'saving'}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${saveNoteStatus === 'success'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                : saveNoteStatus === 'error'
+                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                  : 'bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/20'
+                }`}
+            >
+              {saveNoteStatus === 'saving' ? (
+                <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+              ) : saveNoteStatus === 'success' ? (
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              ) : (
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                </svg>
+              )}
+              <span>
+                {saveNoteStatus === 'saving' ? '保存中...' :
+                  saveNoteStatus === 'success' ? '已存为笔记' :
+                    saveNoteStatus === 'error' ? '保存失败' : '存为笔记'}
+              </span>
+            </button>
+
+            {/* 复制按钮 */}
             <button
               onClick={handleCopy}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${copySuccess
@@ -124,6 +206,7 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
               )}
             </button>
 
+            {/* 导出按钮 */}
             <button
               onClick={handleExport}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${downloadSuccess

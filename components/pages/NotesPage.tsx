@@ -10,6 +10,7 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
+import DeleteConfirmModal from '../shared/DeleteConfirmModal';
 
 // Apple 风格浅色颜色配置
 const lightColorConfig: Record<NoteColor, { bg: string; border: string; card: string; text: string }> = {
@@ -148,7 +149,7 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
 
           {/* 标题选择 */}
           <div className="relative shrink-0" ref={headingMenuRef}>
-            <button 
+            <button
               onClick={() => { setShowHeadingMenu(!showHeadingMenu); setShowColorMenu(false); }}
               className="px-2 sm:px-3 py-1 sm:py-1.5 bg-white border border-[#C7C7CC] rounded-lg text-xs sm:text-sm text-[#1C1C1E] hover:bg-[#E5E5EA] transition-colors flex items-center gap-0.5 sm:gap-1 font-medium"
             >
@@ -158,39 +159,39 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
               </svg>
             </button>
             {showHeadingMenu && createPortal(
-              <div 
-                className="fixed inset-0 z-[99999999]" 
+              <div
+                className="fixed inset-0 z-[99999999]"
                 onMouseDown={(e) => {
                   if (e.target === e.currentTarget) {
                     setShowHeadingMenu(false);
                   }
                 }}
               >
-                <div 
+                <div
                   className="absolute bg-white border border-[#E5E5EA] rounded-xl shadow-lg min-w-[110px] sm:min-w-[130px] py-1 overflow-hidden"
-                  style={{ 
+                  style={{
                     top: (headingMenuRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
                     left: headingMenuRef.current?.getBoundingClientRect().left ?? 0
                   }}
                 >
-                  <button 
+                  <button
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().setParagraph().run(); }} 
+                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().setParagraph().run(); }}
                     className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-left text-sm text-[#1C1C1E] hover:bg-[#F2F2F7] transition-colors"
                   >正文</button>
-                  <button 
+                  <button
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().toggleHeading({ level: 1 }).run(); }} 
+                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().toggleHeading({ level: 1 }).run(); }}
                     className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-left text-lg sm:text-xl font-bold text-[#1C1C1E] hover:bg-[#F2F2F7] transition-colors"
                   >标题</button>
-                  <button 
+                  <button
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().toggleHeading({ level: 2 }).run(); }} 
+                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().toggleHeading({ level: 2 }).run(); }}
                     className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-left text-base sm:text-lg font-semibold text-[#1C1C1E] hover:bg-[#F2F2F7] transition-colors"
                   >副标题</button>
-                  <button 
+                  <button
                     onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().toggleHeading({ level: 3 }).run(); }} 
+                    onClick={() => { setShowHeadingMenu(false); editor.chain().focus().toggleHeading({ level: 3 }).run(); }}
                     className="w-full px-3 sm:px-4 py-2 sm:py-2.5 text-left text-sm sm:text-base font-medium text-[#1C1C1E] hover:bg-[#F2F2F7] transition-colors"
                   >小标题</button>
                 </div>
@@ -219,9 +220,9 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
 
           {/* 颜色选择 */}
           <div className="relative shrink-0" ref={colorMenuRef}>
-            <button 
+            <button
               onClick={() => { setShowColorMenu(!showColorMenu); setShowHeadingMenu(false); }}
-              className="shrink-0 p-1.5 sm:p-2 rounded-lg hover:bg-black/5 transition-colors flex items-center" 
+              className="shrink-0 p-1.5 sm:p-2 rounded-lg hover:bg-black/5 transition-colors flex items-center"
               title="文字颜色"
             >
               <svg className="w-4 h-4 sm:w-5 sm:h-5 text-[#1C1C1E]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -232,28 +233,28 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
               </svg>
             </button>
             {showColorMenu && createPortal(
-              <div 
-                className="fixed inset-0 z-[99999999]" 
+              <div
+                className="fixed inset-0 z-[99999999]"
                 onMouseDown={(e) => {
                   if (e.target === e.currentTarget) {
                     setShowColorMenu(false);
                   }
                 }}
               >
-                <div 
+                <div
                   className="absolute p-2 sm:p-3 bg-white border border-[#E5E5EA] rounded-xl shadow-lg grid grid-cols-4 gap-1.5 sm:gap-2"
-                  style={{ 
+                  style={{
                     top: (colorMenuRef.current?.getBoundingClientRect().bottom ?? 0) + 4,
                     left: colorMenuRef.current?.getBoundingClientRect().left ?? 0
                   }}
                 >
                   {['#1C1C1E', '#FF3B30', '#FF9500', '#FFCC00', '#34C759', '#007AFF', '#AF52DE', '#FF2D55'].map(c => (
-                    <button 
-                      key={c} 
+                    <button
+                      key={c}
                       onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => { setShowColorMenu(false); editor.chain().focus().setColor(c).run(); }} 
-                      className="w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 border-white shadow-md hover:scale-110 transition-transform" 
-                      style={{ backgroundColor: c }} 
+                      onClick={() => { setShowColorMenu(false); editor.chain().focus().setColor(c).run(); }}
+                      className="w-6 h-6 sm:w-8 sm:h-8 rounded-full border-2 border-white shadow-md hover:scale-110 transition-transform"
+                      style={{ backgroundColor: c }}
                     />
                   ))}
                 </div>
@@ -273,7 +274,7 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
           </button>
 
           {/* 展开/收起更多工具 */}
-          <button 
+          <button
             onClick={() => setToolbarExpanded(!toolbarExpanded)}
             className="shrink-0 p-1.5 sm:p-2 rounded-lg hover:bg-black/5 transition-colors ml-auto"
             title={toolbarExpanded ? '收起' : '更多'}
@@ -344,7 +345,7 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
       <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
 
       {/* 编辑区域 - Tiptap EditorContent */}
-      <div 
+      <div
         className="flex-1 overflow-y-auto bg-white"
         onClick={() => { setShowHeadingMenu(false); setShowColorMenu(false); }}
       >
@@ -403,25 +404,25 @@ interface NoteCardProps {
   isDeleting?: boolean;
 }
 
-const NoteCard: React.FC<NoteCardProps> = ({ 
-  note, onClick, onLongPress, isDark = false, 
+const NoteCard: React.FC<NoteCardProps> = ({
+  note, onClick, onLongPress, isDark = false,
   selectionMode = false, isSelected = false, onToggleSelect,
   animationIndex = 0, isDeleting = false
 }) => {
   const colorConfig = isDark ? darkColorConfig : lightColorConfig;
   const config = colorConfig[note.color];
-  
+
   // 从 content (HTML) 提取纯文本计算实际字数
   const getTextFromHtml = (html: string): string => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
     return tempDiv.textContent || '';
   };
-  
+
   // 使用 content 字段计算实际字数
   const actualText = note.content ? getTextFromHtml(note.content) : '';
   const contentLength = actualText.length;
-  
+
   // 根据实际内容长度动态设置行数 (0-100, 100-300, 300-500, 500-1000, 1000+)
   const getLineClamp = () => {
     if (contentLength === 0) return 2;
@@ -431,7 +432,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
     if (contentLength < 1000) return 12;
     return 18; // 1000+ 字显示更多
   };
-  
+
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // 长按开始
@@ -459,7 +460,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
       onClick();
     }
   };
-  
+
   return (
     <div
       onTouchStart={handleTouchStart}
@@ -470,13 +471,13 @@ const NoteCard: React.FC<NoteCardProps> = ({
       onMouseLeave={handleTouchEnd}
       onClick={handleClick}
       className={`relative p-4 rounded-2xl cursor-pointer transition-all duration-300 ${note.is_pinned ? 'z-10' : ''} ${isDeleting ? 'note-card-delete' : 'note-card-enter'}`}
-      style={{ 
+      style={{
         backgroundColor: config.card,
         border: `1px solid ${config.border}`,
-        boxShadow: isSelected 
+        boxShadow: isSelected
           ? '0 0 0 3px rgba(0,122,255,0.3), 0 4px 12px rgba(0,0,0,0.1)'
-          : note.is_pinned 
-            ? '0 10px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)' 
+          : note.is_pinned
+            ? '0 10px 40px rgba(0,0,0,0.15), 0 4px 12px rgba(0,0,0,0.1)'
             : '0 2px 8px rgba(0,0,0,0.06)',
         transform: isSelected ? 'scale(0.98)' : note.is_pinned ? 'translateY(-4px) scale(1.02)' : 'none',
         opacity: isSelected ? 0.9 : 1,
@@ -488,9 +489,9 @@ const NoteCard: React.FC<NoteCardProps> = ({
     >
       {/* 选择槽位 - 选择模式下显示，放在卡片内部 */}
       {selectionMode && (
-        <div 
+        <div
           className="absolute top-3 right-3 w-5 h-5 rounded-full flex items-center justify-center z-20 transition-all"
-          style={{ 
+          style={{
             backgroundColor: isSelected ? '#007AFF' : 'transparent',
             border: isSelected ? 'none' : `2px solid ${isDark ? '#48484A' : '#C7C7CC'}`,
           }}
@@ -507,14 +508,14 @@ const NoteCard: React.FC<NoteCardProps> = ({
       {note.is_pinned && !selectionMode && (
         <div className="absolute top-3 right-3 z-20">
           <svg className="w-4 h-4" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z"/>
+            <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z" />
           </svg>
         </div>
       )}
 
       {/* 标题 */}
       {note.title && (
-        <h3 
+        <h3
           className={`text-sm mb-2 line-clamp-1 ${note.is_pinned ? 'font-bold' : 'font-semibold'}`}
           style={{ color: isDark ? '#FFFFFF' : '#1C1C1E' }}
         >
@@ -523,9 +524,9 @@ const NoteCard: React.FC<NoteCardProps> = ({
       )}
 
       {/* 内容预览 - 直接从 content 动态生成，根据实际内容长度显示 */}
-      <p 
+      <p
         className="text-xs leading-relaxed"
-        style={{ 
+        style={{
           color: isDark ? '#98989D' : '#8E8E93',
           display: '-webkit-box',
           WebkitBoxOrient: 'vertical',
@@ -544,7 +545,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
             {contentLength > 0 ? `${contentLength}字` : ''}
           </span>
           {note.category && (
-            <span 
+            <span
               className="text-[10px] px-2 py-0.5 rounded-full font-medium"
               style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', color: config.text }}
             >
@@ -556,7 +557,7 @@ const NoteCard: React.FC<NoteCardProps> = ({
           {new Date(note.updated_at).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
         </span>
       </div>
-      
+
       {/* 卡片动画样式 */}
       <style>{`
         .note-card-enter {
@@ -648,15 +649,15 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
               style={{ backgroundColor: showMenu ? 'rgba(0,0,0,0.05)' : 'transparent' }}
             >
               <svg className="w-5 h-5" style={{ color: '#007AFF' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="6" r="1.5" fill="currentColor"/><circle cx="12" cy="18" r="1.5" fill="currentColor"/>
+                <circle cx="12" cy="12" r="1.5" fill="currentColor" /><circle cx="12" cy="6" r="1.5" fill="currentColor" /><circle cx="12" cy="18" r="1.5" fill="currentColor" />
               </svg>
             </button>
           </div>
 
           {/* 下拉菜单 - Portal到body */}
           {showMenu && createPortal(
-            <div 
-              className="fixed inset-0 z-[99999999]" 
+            <div
+              className="fixed inset-0 z-[99999999]"
               onMouseDown={(e) => {
                 // 只有点击背景才关闭
                 if (e.target === e.currentTarget) {
@@ -664,9 +665,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
                 }
               }}
             >
-              <div 
+              <div
                 className="absolute right-4 top-14 w-[260px] overflow-visible"
-                style={{ 
+                style={{
                   backgroundColor: 'rgba(255,255,255,0.98)',
                   backdropFilter: 'blur(20px)',
                   borderRadius: '14px',
@@ -729,7 +730,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
                           key={c}
                           onClick={() => setColor(c)}
                           className="w-7 h-7 rounded-full transition-transform hover:scale-110"
-                          style={{ 
+                          style={{
                             backgroundColor: displayColors[c],
                             border: color === c ? '2.5px solid #007AFF' : '1px solid rgba(0,0,0,0.15)',
                             boxShadow: color === c ? '0 0 0 2px rgba(0,122,255,0.3)' : '0 1px 3px rgba(0,0,0,0.1)'
@@ -747,8 +748,8 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
                   style={{ color: '#1C1C1E' }}
                 >
                   <svg className="w-5 h-5" style={{ color: '#007AFF' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3"/>
-                    <path d="M8 21V11a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v10"/>
+                    <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3" />
+                    <path d="M8 21V11a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v10" />
                   </svg>
                   管理分类
                 </button>
@@ -781,7 +782,7 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
         {/* 显示当前分类标签 */}
         {categoryId && (
           <div className="mt-2 flex items-center gap-2">
-            <span 
+            <span
               className="text-xs px-2.5 py-1 rounded-full font-medium"
               style={{ backgroundColor: 'rgba(0,122,255,0.1)', color: '#007AFF' }}
             >
@@ -814,42 +815,43 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
   const [categories, setCategories] = useState<NoteCategory[]>([]);
   const [editingNote, setEditingNote] = useState<Note | null | 'new'>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<Note | null>(null);
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
-  
+
   // 主题状态
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('notes-theme-mode');
     return (saved as ThemeMode) || 'auto';
   });
-  
+
   // 简洁模式状态
   const [compactMode, setCompactMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('notes-compact-mode');
     return saved === 'true';
   });
-  
+
   // 选择模式状态
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedNotes, setSelectedNotes] = useState<Set<number>>(new Set());
-  
+
   // 删除动画状态
   const [deletingNotes, setDeletingNotes] = useState<Set<number>>(new Set());
-  
+
   // 计算实际主题
   const isDark = getActualTheme(themeMode) === 'dark';
   const theme = getThemeColors(isDark);
-  
+
   // 保存主题设置
   useEffect(() => {
     localStorage.setItem('notes-theme-mode', themeMode);
   }, [themeMode]);
-  
+
   // 保存简洁模式设置
   useEffect(() => {
     localStorage.setItem('notes-compact-mode', String(compactMode));
   }, [compactMode]);
-  
+
   // 自动模式下定时检查时间
   useEffect(() => {
     if (themeMode !== 'auto') return;
@@ -859,7 +861,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
     }, 60000); // 每分钟检查一次
     return () => clearInterval(interval);
   }, [themeMode]);
-  
+
   // 切换主题
   const cycleTheme = () => {
     setThemeMode(prev => {
@@ -949,8 +951,8 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
       if (selectedCategory && note.category !== selectedCategory) return false;
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        return note.title.toLowerCase().includes(term) || 
-               (note.preview?.toLowerCase().includes(term));
+        return note.title.toLowerCase().includes(term) ||
+          (note.preview?.toLowerCase().includes(term));
       }
       return true;
     });
@@ -973,15 +975,15 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
         // 新建
         const { data: newNote, error } = await supabase
           .from('notes')
-          .insert({ 
-            ...data, 
+          .insert({
+            ...data,
             user_id: userId,
             is_pinned: false,
             pin_order: 0
           })
           .select()
           .single();
-        
+
         if (error) {
           console.error('创建笔记失败:', error);
           return;
@@ -993,7 +995,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
           .from('notes')
           .update({ ...data, updated_at: new Date().toISOString() })
           .eq('id', editingNote.id);
-        
+
         if (error) {
           console.error('更新笔记失败:', error);
           return;
@@ -1011,16 +1013,16 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
   const handleTogglePin = async (note: Note) => {
     const newPinned = !note.is_pinned;
     const newPinOrder = newPinned ? Math.floor(Date.now() / 1000) % 2147483647 : 0;
-    
+
     // 乐观更新 - 立即更新本地状态
-    setNotes(prev => prev.map(n => 
+    setNotes(prev => prev.map(n =>
       n.id === note.id ? { ...n, is_pinned: newPinned, pin_order: newPinOrder } : n
     ).sort((a, b) => {
       if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
       if (a.is_pinned && b.is_pinned) return (b.pin_order || 0) - (a.pin_order || 0);
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     }));
-    
+
     // 后台同步到数据库
     const { error } = await supabase
       .from('notes')
@@ -1032,11 +1034,32 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  // 删除笔记
+  // 删除单个笔记
   const handleDelete = async () => {
     if (!deleteConfirm) return;
     await supabase.from('notes').delete().eq('id', deleteConfirm.id);
     setDeleteConfirm(null);
+    loadNotes();
+  };
+
+  // 批量删除笔记
+  const handleBatchDelete = async () => {
+    if (selectedNotes.size === 0) return;
+
+    // 先播放删除动画
+    setDeletingNotes(new Set(selectedNotes));
+    // 等待动画完成
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // 删除数据
+    for (const noteId of selectedNotes) {
+      await supabase.from('notes').delete().eq('id', noteId);
+    }
+
+    setDeletingNotes(new Set());
+    setSelectionMode(false);
+    setSelectedNotes(new Set());
+    setBatchDeleteConfirm(false);
     loadNotes();
   };
 
@@ -1049,19 +1072,19 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
         <div className="absolute -top-40 right-20 w-80 h-80 rounded-full blur-3xl notes-blob" style={{ background: isDark ? 'rgba(0,122,255,0.08)' : 'rgba(0,122,255,0.05)' }} />
         <div className="absolute bottom-20 -left-40 w-80 h-80 rounded-full blur-3xl notes-blob notes-blob-delay" style={{ background: isDark ? 'rgba(175,82,222,0.08)' : 'rgba(175,82,222,0.05)' }} />
       </div>
-      
+
       {/* 顶部导航 - Apple 风格 */}
       <div className="sticky top-0 z-10 notes-header-enter" style={{ backgroundColor: theme.headerBg, backdropFilter: 'blur(20px)', borderBottom: `0.5px solid ${theme.border}` }}>
         {/* 选择模式工具栏 */}
         {selectionMode ? (
           <div className="flex items-center gap-3 px-4 py-3">
-            <button 
-              onClick={() => { setSelectionMode(false); setSelectedNotes(new Set()); }} 
+            <button
+              onClick={() => { setSelectionMode(false); setSelectedNotes(new Set()); }}
               className="p-2 -ml-2 rounded-xl hover:bg-black/5 transition-colors"
             >
               <span style={{ color: theme.accent }} className="text-base font-medium">取消</span>
             </button>
-            
+
             <div className="flex-1 text-center">
               <span className="font-semibold" style={{ color: theme.text }}>
                 已选择 {selectedNotes.size} 项
@@ -1089,11 +1112,11 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                 title="复制"
               >
                 <svg className="w-5 h-5" style={{ color: theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
               </button>
-              
+
               {/* 置顶 */}
               <button
                 onClick={async () => {
@@ -1110,33 +1133,19 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                 title="置顶"
               >
                 <svg className="w-5 h-5" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z"/>
+                  <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z" />
                 </svg>
               </button>
-              
-              {/* 删除 */}
+
               <button
-                onClick={async () => {
-                  // 先播放删除动画
-                  setDeletingNotes(new Set(selectedNotes));
-                  // 等待动画完成
-                  await new Promise(resolve => setTimeout(resolve, 300));
-                  // 删除数据
-                  for (const noteId of selectedNotes) {
-                    await supabase.from('notes').delete().eq('id', noteId);
-                  }
-                  setDeletingNotes(new Set());
-                  setSelectionMode(false);
-                  setSelectedNotes(new Set());
-                  loadNotes();
-                }}
+                onClick={() => setBatchDeleteConfirm(true)}
                 disabled={selectedNotes.size === 0}
                 className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105 disabled:opacity-30"
                 style={{ backgroundColor: 'rgba(255,59,48,0.1)' }}
                 title="删除"
               >
                 <svg className="w-5 h-5" style={{ color: '#FF3B30' }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/>
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z" />
                 </svg>
               </button>
             </div>
@@ -1148,7 +1157,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                 <path d="M15 18l-6-6 6-6" />
               </svg>
             </button>
-            
+
             <div className="flex-1">
               <h1 className="font-bold text-xl" style={{ color: theme.text }}>笔记</h1>
               <p className="text-xs" style={{ color: theme.textSecondary }}>{notes.length} 条笔记</p>
@@ -1166,58 +1175,58 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
               </svg>
             </button>
 
-          {/* 主题切换按钮 - 显示当前实际主题图标 */}
-          <button
-            onClick={cycleTheme}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
-            style={{ backgroundColor: theme.inputBg }}
-            title={themeMode === 'auto' ? `自动 (${isDark ? '深色' : '浅色'})` : themeMode === 'light' ? '浅色' : '深色'}
-          >
-            {/* 根据实际显示的主题显示图标，自动模式显示 A 标记 */}
-            {isDark ? (
-              <div className="relative">
-                <svg className="w-5 h-5" style={{ color: '#FFD60A' }} viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
-                {themeMode === 'auto' && (
-                  <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#007AFF] rounded-full text-[8px] text-white flex items-center justify-center font-bold">A</span>
-                )}
-              </div>
-            ) : (
-              <div className="relative">
-                <svg className="w-5 h-5" style={{ color: '#FF9500' }} viewBox="0 0 24 24" fill="currentColor">
-                  <circle cx="12" cy="12" r="5" />
-                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" fill="none" />
-                </svg>
-                {themeMode === 'auto' && (
-                  <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#007AFF] rounded-full text-[8px] text-white flex items-center justify-center font-bold">A</span>
-                )}
-              </div>
-            )}
-          </button>
+            {/* 主题切换按钮 - 显示当前实际主题图标 */}
+            <button
+              onClick={cycleTheme}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
+              style={{ backgroundColor: theme.inputBg }}
+              title={themeMode === 'auto' ? `自动 (${isDark ? '深色' : '浅色'})` : themeMode === 'light' ? '浅色' : '深色'}
+            >
+              {/* 根据实际显示的主题显示图标，自动模式显示 A 标记 */}
+              {isDark ? (
+                <div className="relative">
+                  <svg className="w-5 h-5" style={{ color: '#FFD60A' }} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                  {themeMode === 'auto' && (
+                    <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#007AFF] rounded-full text-[8px] text-white flex items-center justify-center font-bold">A</span>
+                  )}
+                </div>
+              ) : (
+                <div className="relative">
+                  <svg className="w-5 h-5" style={{ color: '#FF9500' }} viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="5" />
+                    <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" strokeWidth="2" fill="none" />
+                  </svg>
+                  {themeMode === 'auto' && (
+                    <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#007AFF] rounded-full text-[8px] text-white flex items-center justify-center font-bold">A</span>
+                  )}
+                </div>
+              )}
+            </button>
 
-          {/* 管理分类按钮 */}
-          <button
-            onClick={() => setShowCategoryManager(true)}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
-            style={{ backgroundColor: theme.inputBg }}
-            title="管理分类"
-          >
-            <svg className="w-5 h-5" style={{ color: theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            </svg>
-          </button>
+            {/* 管理分类按钮 */}
+            <button
+              onClick={() => setShowCategoryManager(true)}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
+              style={{ backgroundColor: theme.inputBg }}
+              title="管理分类"
+            >
+              <svg className="w-5 h-5" style={{ color: theme.accent }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
 
-          {/* 新建按钮 */}
-          <button
-            onClick={() => setEditingNote('new')}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
-            style={{ backgroundColor: '#007AFF' }}
-          >
-            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-          </button>
+            {/* 新建按钮 */}
+            <button
+              onClick={() => setEditingNote('new')}
+              className="w-10 h-10 rounded-full flex items-center justify-center transition-all hover:scale-105"
+              style={{ backgroundColor: '#007AFF' }}
+            >
+              <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+            </button>
           </div>
         )}
 
@@ -1244,7 +1253,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
           <button
             onClick={() => setSelectedCategory(null)}
             className="shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all"
-            style={{ 
+            style={{
               backgroundColor: !selectedCategory ? theme.accent : theme.inputBg,
               color: !selectedCategory ? 'white' : theme.text
             }}
@@ -1256,7 +1265,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
               key={cat.id}
               onClick={() => setSelectedCategory(cat.name)}
               className="shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all"
-              style={{ 
+              style={{
                 backgroundColor: selectedCategory === cat.name ? theme.accent : theme.inputBg,
                 color: selectedCategory === cat.name ? 'white' : theme.text
               }}
@@ -1272,11 +1281,11 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
         {loading ? (
           <div style={{ columnCount: 2, columnGap: '12px' }}>
             {[...Array(6)].map((_, i) => (
-              <div 
-                key={i} 
+              <div
+                key={i}
                 className="skeleton-card"
-                style={{ 
-                  breakInside: 'avoid', 
+                style={{
+                  breakInside: 'avoid',
                   marginBottom: '12px',
                   backgroundColor: theme.cardBg,
                   borderRadius: '16px',
@@ -1342,7 +1351,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                   <div className="mb-4">
                     <h3 className="text-xs font-semibold mb-2 flex items-center gap-1.5 uppercase tracking-wide" style={{ color: theme.textSecondary }}>
                       <svg className="w-3.5 h-3.5" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z"/>
+                        <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z" />
                       </svg>
                       置顶
                     </h3>
@@ -1396,7 +1405,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                   <div>
                     <h3 className="text-xs font-semibold mb-3 flex items-center gap-1.5 uppercase tracking-wide" style={{ color: theme.textSecondary }}>
                       <svg className="w-3.5 h-3.5" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z"/>
+                        <path d="M16 4v8l2 2v2h-6v6l-1 1-1-1v-6H4v-2l2-2V4c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2z" />
                       </svg>
                       置顶
                     </h3>
@@ -1482,7 +1491,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
       {showCategoryManager && createPortal(
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4" onClick={() => setShowCategoryManager(false)}>
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div 
+          <div
             className="relative w-full max-w-sm overflow-hidden"
             style={{ backgroundColor: theme.cardBg, borderRadius: '14px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
             onClick={e => e.stopPropagation()}
@@ -1550,38 +1559,24 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
         document.body
       )}
 
-      {/* 删除确认 - Apple 风格 */}
-      {deleteConfirm && createPortal(
-        <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-          <div 
-            className="relative w-full max-w-xs text-center overflow-hidden"
-            style={{ backgroundColor: isDark ? 'rgba(44,44,46,0.95)' : 'rgba(255,255,255,0.95)', backdropFilter: 'blur(20px)', borderRadius: '14px', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="p-5 pb-4">
-              <h3 className="font-semibold text-lg mb-1" style={{ color: theme.text }}>删除笔记？</h3>
-              <p className="text-sm" style={{ color: theme.textSecondary }}>"{deleteConfirm.title || '无标题'}" 将被永久删除</p>
-            </div>
-            <div style={{ borderTop: `0.5px solid ${theme.border}` }}>
-              <button 
-                onClick={() => setDeleteConfirm(null)} 
-                className="w-full py-3 text-base font-normal transition-colors hover:bg-black/5"
-                style={{ color: theme.accent, borderBottom: `0.5px solid ${theme.border}` }}
-              >
-                取消
-              </button>
-              <button 
-                onClick={handleDelete} 
-                className="w-full py-3 text-base font-semibold transition-colors hover:bg-black/5"
-                style={{ color: '#FF3B30' }}
-              >
-                删除
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {/* 单个删除确认 */}
+      {deleteConfirm && (
+        <DeleteConfirmModal
+          title="删除笔记？"
+          itemName={deleteConfirm.title || '无标题'}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteConfirm(null)}
+        />
+      )}
+
+      {/* 批量删除确认 */}
+      {batchDeleteConfirm && (
+        <DeleteConfirmModal
+          title="批量删除"
+          message={`确定要删除选中的 ${selectedNotes.size} 篇笔记吗？此操作无法撤销。`}
+          onConfirm={handleBatchDelete}
+          onCancel={() => setBatchDeleteConfirm(false)}
+        />
       )}
 
       {/* 页面动画样式 */}
