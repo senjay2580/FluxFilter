@@ -171,8 +171,6 @@ const App = () => {
   const [visibleCount, setVisibleCount] = useState(20); // 初始加载更多一点，减少首屏后的立即加载
   const mainRef = React.useRef<HTMLDivElement>(null);
 
-  // 滚动时显示固定功能栏
-  const [showStickyToolbar, setShowStickyToolbar] = useState(false);
 
   // 筛选条件变化时重置 visibleCount
   useEffect(() => {
@@ -613,10 +611,6 @@ const App = () => {
               return Math.min(prev + 12, filteredVideos.length); // 每次追加 12 个，减少触发频率
             });
           }
-          // 滚动超过 200px 时显示固定功能栏
-          if (scrollTop > 200 !== showStickyToolbar) {
-            setShowStickyToolbar(scrollTop > 200);
-          }
           ticking = false;
         });
         ticking = true;
@@ -930,110 +924,6 @@ const App = () => {
             )}
           </header>
 
-          {/* 固定毛玻璃功能栏 - 滚动时显示，带过渡动画 */}
-          {activeTab === 'home' && !searchTerm && (
-            <div
-              className={`sticky top-0 z-30 bg-white/10 backdrop-blur-xl backdrop-saturate-150 border-b border-white/10 px-4 transition-all duration-300 ease-out ${showStickyToolbar
-                ? 'py-3 opacity-100'
-                : 'max-h-0 py-0 opacity-0 border-transparent overflow-hidden'
-                }`}
-            >
-              <div className="flex justify-center gap-6 overflow-x-auto no-scrollbar">
-                {/* 收藏夹 */}
-                <button
-                  onClick={() => { setSettingsInitialView('collector'); setActiveTab('settings'); }}
-                  className="relative flex items-center justify-center p-2 hover:bg-white/10 rounded-lg transition-all active:scale-95 shrink-0"
-                >
-                  <svg className="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                  </svg>
-                  {collectedCount > 0 && (
-                    <span className="absolute top-0 right-0 min-w-[16px] h-[16px] px-1 bg-cyber-lime rounded-full text-[9px] font-bold text-black flex items-center justify-center">
-                      {collectedCount > 99 ? '99+' : collectedCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* 提醒 */}
-                <button
-                  onClick={() => { setSettingsInitialView('reminder'); setActiveTab('settings'); }}
-                  className="relative flex items-center justify-center p-2 hover:bg-white/10 rounded-lg transition-all active:scale-95 shrink-0"
-                >
-                  <svg className="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <polyline points="12 6 12 12 16 14" />
-                  </svg>
-                  {reminderCount > 0 && (
-                    <span className="absolute top-0 right-0 min-w-[16px] h-[16px] px-1 bg-cyber-lime rounded-full text-[9px] font-bold text-black flex items-center justify-center">
-                      {reminderCount > 99 ? '99+' : reminderCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* TODO */}
-                <button
-                  onClick={() => { setSettingsInitialView('todo'); setActiveTab('settings'); }}
-                  className="relative flex items-center justify-center p-2 hover:bg-white/10 rounded-lg transition-all active:scale-95 shrink-0"
-                >
-                  <svg className="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 11l3 3L22 4" />
-                    <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                  </svg>
-                  {todoCount > 0 && (
-                    <span className="absolute top-0 right-0 min-w-[16px] h-[16px] px-1 bg-cyber-lime rounded-full text-[9px] font-bold text-black flex items-center justify-center">
-                      {todoCount > 99 ? '99+' : todoCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* 笔记 */}
-                <button
-                  onClick={() => setIsNotesOpen(true)}
-                  className="relative flex items-center justify-center p-2 hover:bg-white/10 rounded-lg transition-all active:scale-95 shrink-0"
-                >
-                  <svg className="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                  </svg>
-                  {notesCount > 0 && (
-                    <span className="absolute top-0 right-0 min-w-[16px] h-[16px] px-1 bg-cyber-lime rounded-full text-[9px] font-bold text-black flex items-center justify-center">
-                      {notesCount > 99 ? '99+' : notesCount}
-                    </span>
-                  )}
-                </button>
-
-                {/* 转写 */}
-                <button
-                  onClick={() => {
-                    const transcriptSystemUrl = import.meta.env.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
-                    window.open(transcriptSystemUrl, '_blank');
-                  }}
-                  className="relative flex items-center justify-center p-2 hover:bg-white/10 rounded-lg transition-all active:scale-95 shrink-0"
-                >
-                  <svg className="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 19l7-7 3 3-7 7-3-3z" />
-                    <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
-                    <circle cx="11" cy="11" r="2" />
-                  </svg>
-                </button>
-
-                {/* 应用 */}
-                <button
-                  onClick={() => setIsAppsModalOpen(true)}
-                  className="relative flex items-center justify-center p-2 hover:bg-white/10 rounded-lg transition-all active:scale-95 shrink-0"
-                >
-                  <svg className="w-6 h-6 text-gray-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="3" y="3" width="7" height="7" rx="1" />
-                    <rect x="14" y="3" width="7" height="7" rx="1" />
-                    <rect x="3" y="14" width="7" height="7" rx="1" />
-                    <rect x="14" y="14" width="7" height="7" rx="1" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Main Content Feed */}
           <main

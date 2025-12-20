@@ -261,7 +261,7 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
                   const delta = json.choices?.[0]?.delta?.content || '';
                   fullContent += delta;
 
-                  // 节流更新：每 60ms 更新一次 UI，或在结束时强制更新
+                  // 节流更新：每 60ms 更新一次 UI
                   const now = Date.now();
                   if (now - lastUpdate > 60) {
                     setResult({ title: 'AI 实时分析中...', date: new Date().toISOString(), summary: fullContent });
@@ -273,6 +273,7 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
               }
             }
           }
+          // 分析结束，强制更新最终结果
           const finalResult = { title: '视频内容分析报告', date: new Date().toISOString(), summary: fullContent };
           setResult(finalResult);
           localStorage.setItem(VIDEO_ANALYSIS_STORAGE_KEY, JSON.stringify(finalResult));
@@ -410,6 +411,8 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
               }
             }
           }
+          // 确保最后一次更新
+          setTaskResult(fullContent);
           localStorage.setItem(TASK_ANALYSIS_STORAGE_KEY, fullContent);
         }
       } catch (err) {

@@ -139,8 +139,8 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
     }
   };
 
-  // 渲染配置 - 提取为常量以避免某些环境下内联定义的 ReferenceError 问题
-  const markdownComponents = {
+  // 渲染配置 - 使用 useMemo 缓存以防止在流式输出过程中重新创建组件实例（这是导致闪烁的主要原因）
+  const markdownComponents = React.useMemo(() => ({
     h1: ({ ...props }) => (
       <h1 className={`text-2xl font-bold text-white mt-6 mb-4 border-l-4 border-${colorScheme.accent} pl-3`} {...props} />
     ),
@@ -203,7 +203,7 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
     blockquote: ({ ...props }) => (
       <blockquote className={`border-l-4 border-${colorScheme.accent}/30 bg-white/5 pl-4 py-2 my-3 italic text-gray-400`} {...props} />
     ),
-  };
+  }), [colorScheme.accent, colorScheme.secondary, colorScheme.secondaryRgb]);
 
   return (
     <div className="relative">
@@ -314,7 +314,6 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
         <div
           className={`overflow-hidden ${isStreaming ? '' : 'transition-all duration-300 ease-in-out'} ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[8000px] opacity-100'
             }`}
-          style={{ contain: 'content' }}
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
