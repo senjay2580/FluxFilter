@@ -128,6 +128,72 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
     }
   };
 
+  // 渲染配置 - 提取为常量以避免某些环境下内联定义的 ReferenceError 问题
+  const markdownComponents = {
+    h1: ({ ...props }) => (
+      <h1 className={`text-2xl font-bold text-white mt-6 mb-4 border-l-4 border-${colorScheme.accent} pl-3`} {...props} />
+    ),
+    h2: ({ ...props }) => (
+      <h2 className={`text-xl font-bold text-white mt-5 mb-3 border-l-4 border-${colorScheme.accent} pl-3`} {...props} />
+    ),
+    h3: ({ ...props }) => (
+      <h3 className={`text-lg font-bold text-white mt-4 mb-2 border-l-4 border-${colorScheme.secondary} pl-3`} {...props} />
+    ),
+    h4: ({ ...props }) => (
+      <h4 className={`text-base font-bold text-white mt-3 mb-2 border-l-4 border-${colorScheme.secondary} pl-3`} {...props} />
+    ),
+    p: ({ ...props }) => (
+      <p className="text-sm text-gray-300 leading-relaxed my-2" {...props} />
+    ),
+    ul: ({ ...props }) => (
+      <ul className="space-y-2 my-3" {...props} />
+    ),
+    ol: ({ ...props }) => (
+      <ol className="space-y-2 my-3 list-decimal list-inside" {...props} />
+    ),
+    li: ({ ...props }) => (
+      <li className="flex gap-2 pl-2 text-sm text-gray-300">
+        <span className={`text-${colorScheme.secondary} flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-${colorScheme.secondary}/50`} style={{ boxShadow: `0 0 8px rgba(${colorScheme.secondaryRgb}, 0.5)` }} />
+        <span className="flex-1" {...props} />
+      </li>
+    ),
+    strong: ({ ...props }) => (
+      <strong className={`text-${colorScheme.secondary} font-bold bg-${colorScheme.secondary}/20 border border-${colorScheme.secondary}/20 px-1.5 py-0.5 rounded mx-0.5`} style={{ boxShadow: `0 0 10px rgba(${colorScheme.secondaryRgb}, 0.1)` }} {...props} />
+    ),
+    hr: ({ ...props }) => (
+      <hr className="my-4 border-t border-white/10" {...props} />
+    ),
+    table: ({ ...props }) => (
+      <div className="overflow-x-auto my-4">
+        <table className="w-full border-collapse border border-white/10 rounded-lg" {...props} />
+      </div>
+    ),
+    thead: ({ ...props }) => (
+      <thead className="bg-white/5" {...props} />
+    ),
+    tbody: ({ ...props }) => (
+      <tbody {...props} />
+    ),
+    tr: ({ ...props }) => (
+      <tr className="border-b border-white/10 hover:bg-white/5 transition-colors" {...props} />
+    ),
+    th: ({ ...props }) => (
+      <th className={`px-4 py-2 text-left text-xs font-bold text-${colorScheme.secondary} border-r border-white/10 last:border-r-0`} {...props} />
+    ),
+    td: ({ ...props }) => (
+      <td className="px-4 py-2 text-sm text-gray-300 border-r border-white/10 last:border-r-0" {...props} />
+    ),
+    code: ({ inline, ...props }: any) =>
+      inline ? (
+        <code className={`bg-white/10 px-1.5 py-0.5 rounded text-xs text-${colorScheme.secondary} font-mono`} {...props} />
+      ) : (
+        <code className={`block bg-white/10 p-3 rounded-lg text-xs text-${colorScheme.secondary} font-mono overflow-x-auto`} {...props} />
+      ),
+    blockquote: ({ ...props }) => (
+      <blockquote className={`border-l-4 border-${colorScheme.accent}/30 bg-white/5 pl-4 py-2 my-3 italic text-gray-400`} {...props} />
+    ),
+  };
+
   return (
     <div className="relative">
       {/* Markdown 内容 */}
@@ -240,70 +306,7 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
-            components={{
-              h1: ({ node, ...props }) => (
-                <h1 className={`text-2xl font-bold text-white mt-6 mb-4 border-l-4 border-${colorScheme.accent} pl-3`} {...props} />
-              ),
-              h2: ({ node, ...props }) => (
-                <h2 className={`text-xl font-bold text-white mt-5 mb-3 border-l-4 border-${colorScheme.accent} pl-3`} {...props} />
-              ),
-              h3: ({ node, ...props }) => (
-                <h3 className={`text-lg font-bold text-white mt-4 mb-2 border-l-4 border-${colorScheme.secondary} pl-3`} {...props} />
-              ),
-              h4: ({ node, ...props }) => (
-                <h4 className={`text-base font-bold text-white mt-3 mb-2 border-l-4 border-${colorScheme.secondary} pl-3`} {...props} />
-              ),
-              p: ({ node, ...props }) => (
-                <p className="text-sm text-gray-300 leading-relaxed my-2" {...props} />
-              ),
-              ul: ({ node, ...props }) => (
-                <ul className="space-y-2 my-3" {...props} />
-              ),
-              ol: ({ node, ...props }) => (
-                <ol className="space-y-2 my-3 list-decimal list-inside" {...props} />
-              ),
-              li: ({ node, ...props }) => (
-                <li className="flex gap-2 pl-2 text-sm text-gray-300">
-                  <span className={`text-${colorScheme.secondary} flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full bg-${colorScheme.secondary}/50`} style={{ boxShadow: `0 0 8px rgba(${colorScheme.secondaryRgb}, 0.5)` }} />
-                  <span className="flex-1" {...props} />
-                </li>
-              ),
-              strong: ({ node, ...props }) => (
-                <strong className={`text-${colorScheme.secondary} font-bold bg-${colorScheme.secondary}/20 border border-${colorScheme.secondary}/20 px-1.5 py-0.5 rounded mx-0.5`} style={{ boxShadow: `0 0 10px rgba(${colorScheme.secondaryRgb}, 0.1)` }} {...props} />
-              ),
-              hr: ({ node, ...props }) => (
-                <hr className="my-4 border-t border-white/10" {...props} />
-              ),
-              table: ({ node, ...props }) => (
-                <div className="overflow-x-auto my-4">
-                  <table className="w-full border-collapse border border-white/10 rounded-lg" {...props} />
-                </div>
-              ),
-              thead: ({ node, ...props }) => (
-                <thead className="bg-white/5" {...props} />
-              ),
-              tbody: ({ node, ...props }) => (
-                <tbody {...props} />
-              ),
-              tr: ({ node, ...props }) => (
-                <tr className="border-b border-white/10 hover:bg-white/5 transition-colors" {...props} />
-              ),
-              th: ({ node, ...props }) => (
-                <th className={`px-4 py-2 text-left text-xs font-bold text-${colorScheme.secondary} border-r border-white/10 last:border-r-0`} {...props} />
-              ),
-              td: ({ node, ...props }) => (
-                <td className="px-4 py-2 text-sm text-gray-300 border-r border-white/10 last:border-r-0" {...props} />
-              ),
-              code: ({ node, inline, ...props }: any) =>
-                inline ? (
-                  <code className={`bg-white/10 px-1.5 py-0.5 rounded text-xs text-${colorScheme.secondary} font-mono`} {...props} />
-                ) : (
-                  <code className={`block bg-white/10 p-3 rounded-lg text-xs text-${colorScheme.secondary} font-mono overflow-x-auto`} {...props} />
-                ),
-              blockquote: ({ node, ...props }) => (
-                <blockquote className={`border-l-4 border-${colorScheme.accent}/30 bg-white/5 pl-4 py-2 my-3 italic text-gray-400`} {...props} />
-              ),
-            }}
+            components={markdownComponents}
           >
             {content}
           </ReactMarkdown>

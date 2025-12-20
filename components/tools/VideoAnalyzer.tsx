@@ -174,7 +174,7 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
    - 格式：## 视频N：[视频核心主题] - [一句话洞察]
    - 在每个环节下方，用一段话（20-40字）深入阐述这个视频的核心价值或技术要点
    - 必须用双星号 ** 包裹关键技术词汇或核心概念（如 **React**、**性能优化**）
-   - 结尾：- [视频链接] | [UP主] | [时长] （color: 浅蓝色美观）
+   - 结尾：- [视频链接] | [UP主] | [关键词云] 
 
 3. **输出示例**：
 \`\`\`
@@ -265,7 +265,7 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
               }
             }
           }
-          const finalResult = { title: '分析完成', date: new Date().toISOString(), summary: fullContent };
+          const finalResult = { title: '视频内容分析报告', date: new Date().toISOString(), summary: fullContent };
           setResult(finalResult);
           localStorage.setItem(VIDEO_ANALYSIS_STORAGE_KEY, JSON.stringify(finalResult));
         }
