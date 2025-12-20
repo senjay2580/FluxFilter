@@ -425,3 +425,69 @@ export async function deleteResources(ids: number[]) {
   
   if (error) throw error;
 }
+
+
+// ============================================
+// 音频转写历史操作
+// ============================================
+
+import type { TranscriptHistory, CreateTranscriptParams, UpdateTranscriptParams } from './database.types';
+
+/** 获取转写历史列表 */
+export async function getTranscriptHistory(userId: string, limit = 50) {
+  const { data, error } = await supabase
+    .from('transcript_history')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  
+  if (error) throw error;
+  return data as TranscriptHistory[];
+}
+
+/** 创建转写记录 */
+export async function createTranscript(userId: string, params: CreateTranscriptParams) {
+  const { data, error } = await supabase
+    .from('transcript_history')
+    .insert({
+      user_id: userId,
+      file_name: params.file_name,
+      raw_text: params.raw_text,
+      optimized_text: params.optimized_text || null,
+      ai_model: params.ai_model || null,
+      duration: params.duration || null,
+      file_size: params.file_size || null,
+    })
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as TranscriptHistory;
+}
+
+/** 更新转写记录（主要用于更新AI优化结果） */
+export async function updateTranscript(id: number, params: UpdateTranscriptParams) {
+  const { data, error } = await supabase
+    .from('transcript_history')
+    .update({
+      ...params,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+  
+  if (error) throw error;
+  return data as TranscriptHistory;
+}
+
+/** 删除转写记录 */
+export async function deleteTranscript(id: number) {
+  const { error } = await supabase
+    .from('transcript_history')
+    .delete()
+    .eq('id', id);
+  
+  if (error) throw error;
+}

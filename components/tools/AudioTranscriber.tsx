@@ -1,6 +1,14 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import DeleteConfirmModal from '../shared/DeleteConfirmModal';
+import { 
+  isSupabaseConfigured, 
+  getTranscriptHistory, 
+  createTranscript, 
+  updateTranscript, 
+  deleteTranscript 
+} from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 
@@ -24,16 +32,20 @@ const AI_MODELS: AIModel[] = [
   { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'Google', apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent', keyPrefix: 'AIza' },
 ];
 
+// 本地记录类型（兼容旧数据）
 interface TranscriptRecord {
   id: string;
   fileName: string;
   rawText: string;
   optimizedText?: string;
   createdAt: number;
+  // 数据库记录的额外字段
+  dbId?: number;
 }
 
 interface CompareData {
   id: string;
+  dbId?: number;
   fileName: string;
   rawText: string;
   oldOptimized?: string;
@@ -46,10 +58,11 @@ const AudioTranscriber: React.FC = () => {
   const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem('ai_api_key') || '');
   const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ai_model') || 'deepseek-chat');
   const [file, setFile] = useState<File | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isVideoFile, setIsVideoFile] = useState(false);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [audioDuration, setAudioDuration] = useState(0);
-  const [audioCurrentTime, setAudioCurrentTime] = useState(0);
+  const [mediaDuration, setMediaDuration] = useState(0);
+  const [mediaCurrentTime, setMediaCurrentTime] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
   const [optimizingId, setOptimizingId] = useState<string | null>(null);
@@ -62,44 +75,111 @@ const AudioTranscriber: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewingRecord, setViewingRecord] = useState<TranscriptRecord | null>(null);
   const [compareData, setCompareData] = useState<CompareData | null>(null);
+  const [showCompareModal, setShowCompareModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   // Settings modal temp state
   const [tempGroqKey, setTempGroqKey] = useState('');
   const [tempAiKey, setTempAiKey] = useState('');
   const [tempModel, setTempModel] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const timeUpdateIntervalRef = useRef<number | null>(null);
+  const isPlayingRef = useRef(false);
 
   const currentModel = AI_MODELS.find(m => m.id === selectedModel) || AI_MODELS[0];
 
-  // 加载历史记录
+  // 加载历史记录（优先从 Supabase，降级到 localStorage）
   useEffect(() => {
-    const saved = localStorage.getItem('transcript_history');
-    if (saved) {
-      try {
-        setHistory(JSON.parse(saved));
-      } catch { /* ignore */ }
-    }
+    const loadHistory = async () => {
+      const userId = getStoredUserId();
+      if (isSupabaseConfigured && userId) {
+        try {
+          const data = await getTranscriptHistory(userId);
+          // 转换为本地格式
+          const records: TranscriptRecord[] = data.map(item => ({
+            id: item.id.toString(),
+            dbId: item.id,
+            fileName: item.file_name,
+            rawText: item.raw_text,
+            optimizedText: item.optimized_text || undefined,
+            createdAt: new Date(item.created_at).getTime(),
+          }));
+          setHistory(records);
+        } catch (err) {
+          console.error('加载历史记录失败:', err);
+          // 降级到 localStorage
+          const saved = localStorage.getItem('transcript_history');
+          if (saved) {
+            try { setHistory(JSON.parse(saved)); } catch { /* ignore */ }
+          }
+        }
+      } else {
+        // 未配置 Supabase，使用 localStorage
+        const saved = localStorage.getItem('transcript_history');
+        if (saved) {
+          try { setHistory(JSON.parse(saved)); } catch { /* ignore */ }
+        }
+      }
+    };
+    loadHistory();
   }, []);
 
   // 保存历史记录
-  const saveToHistory = useCallback((record: TranscriptRecord) => {
-    setHistory(prev => {
-      const updated = [record, ...prev].slice(0, 50);
-      localStorage.setItem('transcript_history', JSON.stringify(updated));
-      return updated;
-    });
-  }, []);
+  const saveToHistory = useCallback(async (record: TranscriptRecord) => {
+    const userId = getStoredUserId();
+    if (isSupabaseConfigured && userId) {
+      try {
+        const created = await createTranscript(userId, {
+          file_name: record.fileName,
+          raw_text: record.rawText,
+          optimized_text: record.optimizedText,
+          ai_model: record.optimizedText ? selectedModel : undefined,
+          file_size: file?.size,
+        });
+        // 更新本地状态
+        const newRecord: TranscriptRecord = {
+          ...record,
+          id: created.id.toString(),
+          dbId: created.id,
+        };
+        setHistory(prev => [newRecord, ...prev].slice(0, 50));
+      } catch (err) {
+        console.error('保存到数据库失败:', err);
+        // 降级到 localStorage
+        setHistory(prev => {
+          const updated = [record, ...prev].slice(0, 50);
+          localStorage.setItem('transcript_history', JSON.stringify(updated));
+          return updated;
+        });
+      }
+    } else {
+      // 未配置 Supabase，使用 localStorage
+      setHistory(prev => {
+        const updated = [record, ...prev].slice(0, 50);
+        localStorage.setItem('transcript_history', JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [selectedModel, file]);
 
   // 删除历史记录
-  const deleteFromHistory = useCallback((id: string) => {
+  const deleteFromHistory = useCallback(async (id: string) => {
+    const record = history.find(r => r.id === id);
+    if (isSupabaseConfigured && record?.dbId) {
+      try {
+        await deleteTranscript(record.dbId);
+      } catch (err) {
+        console.error('删除失败:', err);
+      }
+    }
     setHistory(prev => {
       const updated = prev.filter(r => r.id !== id);
       localStorage.setItem('transcript_history', JSON.stringify(updated));
       return updated;
     });
     setDeleteConfirmId(null);
-  }, []);
+  }, [history]);
 
   const confirmDelete = useCallback((confirm: boolean) => {
     if (confirm && deleteConfirmId) {
@@ -108,13 +188,24 @@ const AudioTranscriber: React.FC = () => {
     setDeleteConfirmId(null);
   }, [deleteConfirmId, deleteFromHistory]);
 
-  const updateHistoryRecord = useCallback((id: string, optimizedText: string) => {
+  const updateHistoryRecord = useCallback(async (id: string, optimizedText: string) => {
+    const record = history.find(r => r.id === id);
+    if (isSupabaseConfigured && record?.dbId) {
+      try {
+        await updateTranscript(record.dbId, { 
+          optimized_text: optimizedText,
+          ai_model: selectedModel,
+        });
+      } catch (err) {
+        console.error('更新失败:', err);
+      }
+    }
     setHistory(prev => {
       const updated = prev.map(r => r.id === id ? { ...r, optimizedText } : r);
       localStorage.setItem('transcript_history', JSON.stringify(updated));
       return updated;
     });
-  }, []);
+  }, [history, selectedModel]);
 
   // 流式调用 AI API 进行文本优化
   const callAIApiStream = useCallback(async (
@@ -265,11 +356,13 @@ ${text}
 
     setCompareData({
       id: record.id,
+      dbId: record.dbId,
       fileName: record.fileName,
       rawText: record.rawText,
       oldOptimized: record.optimizedText,
       newOptimized: '',
     });
+    setShowCompareModal(true);
 
     try {
       await callAIApiStream(record.rawText, (chunk) => {
@@ -279,6 +372,7 @@ ${text}
       console.error('AI 优化失败:', err);
       setError(err instanceof Error ? err.message : 'AI 优化失败，请重试');
       setCompareData(null);
+      setShowCompareModal(false);
     } finally {
       setOptimizingId(null);
     }
@@ -289,7 +383,20 @@ ${text}
       updateHistoryRecord(compareData.id, compareData.newOptimized);
     }
     setCompareData(null);
+    setShowCompareModal(false);
   }, [compareData, updateHistoryRecord]);
+
+  // 最小化对照窗口（后台继续优化）
+  const minimizeCompareModal = useCallback(() => {
+    setShowCompareModal(false);
+  }, []);
+
+  // 重新打开对照窗口
+  const reopenCompareModal = useCallback(() => {
+    if (compareData) {
+      setShowCompareModal(true);
+    }
+  }, [compareData]);
 
   // 保存设置
   const saveSettings = useCallback(() => {
@@ -316,67 +423,142 @@ ${text}
     setShowSettingsModal(true);
   }, [groqKey, aiApiKey, selectedModel]);
 
-  // 选择文件
+  // 选择文件（支持音频和视频，Groq 会自动提取音轨）
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/m4a', 'audio/webm', 'audio/mp4', 'video/mp4', 'video/webm'];
-      if (!validTypes.some(type => selectedFile.type.includes(type.split('/')[1]))) {
-        setError('请选择音频文件（MP3、WAV、M4A、WebM）');
+      // Groq Whisper 支持的格式：音频(mp3, mp4, mpeg, mpga, m4a, wav, webm) 和视频(mp4, webm, mpeg)
+      const validExtensions = ['mp3', 'mp4', 'mpeg', 'mpga', 'm4a', 'wav', 'webm', 'ogg', 'flac'];
+      const videoExtensions = ['mp4', 'webm', 'mpeg'];
+      const fileExt = selectedFile.name.split('.').pop()?.toLowerCase();
+      
+      if (!fileExt || !validExtensions.includes(fileExt)) {
+        setError('请选择音频或视频文件（MP3、MP4、WAV、M4A、WebM 等）');
         return;
       }
       if (selectedFile.size > 25 * 1024 * 1024) {
         setError('文件大小不能超过 25MB');
         return;
       }
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
+      if (mediaUrl) {
+        URL.revokeObjectURL(mediaUrl);
       }
+      const isVideo = videoExtensions.includes(fileExt) || selectedFile.type.startsWith('video/');
       setFile(selectedFile);
-      setAudioUrl(URL.createObjectURL(selectedFile));
+      setIsVideoFile(isVideo);
+      setMediaUrl(URL.createObjectURL(selectedFile));
       setIsPlaying(false);
-      setAudioCurrentTime(0);
-      setAudioDuration(0);
+      setMediaCurrentTime(0);
+      setMediaDuration(0);
       setError('');
       setRawResult('');
       setOptimizedResult('');
     }
-  }, [audioUrl]);
+  }, [mediaUrl]);
 
-  // 音频播放控制
+  // 媒体播放控制
   const togglePlay = useCallback(() => {
-    if (audioRef.current) {
-      if (isPlaying) {
-        audioRef.current.pause();
+    const media = isVideoFile ? videoRef.current : audioRef.current;
+    if (media) {
+      if (isPlayingRef.current) {
+        media.pause();
       } else {
-        audioRef.current.play();
+        media.play().catch(err => {
+          console.error('播放失败:', err);
+          setError('播放失败，请重试');
+        });
       }
-      setIsPlaying(!isPlaying);
     }
-  }, [isPlaying]);
+  }, [isVideoFile]);
 
-  const handleTimeUpdate = useCallback(() => {
-    if (audioRef.current) {
-      setAudioCurrentTime(audioRef.current.currentTime);
+  // 每500ms更新一次时间显示，避免频繁渲染
+  const startTimeUpdate = useCallback(() => {
+    if (timeUpdateIntervalRef.current) {
+      clearInterval(timeUpdateIntervalRef.current);
+    }
+    const media = isVideoFile ? videoRef.current : audioRef.current;
+    if (media) {
+      setMediaCurrentTime(media.currentTime);
+    }
+    timeUpdateIntervalRef.current = window.setInterval(() => {
+      const media = isVideoFile ? videoRef.current : audioRef.current;
+      if (media && isPlayingRef.current) {
+        setMediaCurrentTime(media.currentTime);
+      }
+    }, 500);
+  }, [isVideoFile]);
+
+  const stopTimeUpdate = useCallback(() => {
+    if (timeUpdateIntervalRef.current) {
+      clearInterval(timeUpdateIntervalRef.current);
+      timeUpdateIntervalRef.current = null;
+    }
+    // 更新最终时间
+    const media = isVideoFile ? videoRef.current : audioRef.current;
+    if (media) {
+      setMediaCurrentTime(media.currentTime);
+    }
+  }, [isVideoFile]);
+
+  const handleVideoPlay = useCallback(() => {
+    isPlayingRef.current = true;
+    setIsPlaying(true);
+    startTimeUpdate();
+  }, [startTimeUpdate]);
+
+  const handleVideoPause = useCallback(() => {
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    stopTimeUpdate();
+  }, [stopTimeUpdate]);
+
+  const handleAudioPlay = useCallback(() => {
+    isPlayingRef.current = true;
+    setIsPlaying(true);
+    startTimeUpdate();
+  }, [startTimeUpdate]);
+
+  const handleAudioPause = useCallback(() => {
+    isPlayingRef.current = false;
+    setIsPlaying(false);
+    stopTimeUpdate();
+  }, [stopTimeUpdate]);
+
+  const handleVideoLoadedMetadata = useCallback(() => {
+    if (videoRef.current) {
+      setMediaDuration(videoRef.current.duration);
     }
   }, []);
 
-  const handleLoadedMetadata = useCallback(() => {
+  const handleAudioLoadedMetadata = useCallback(() => {
     if (audioRef.current) {
-      setAudioDuration(audioRef.current.duration);
+      setMediaDuration(audioRef.current.duration);
     }
   }, []);
 
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
-    if (audioRef.current) {
-      audioRef.current.currentTime = time;
-      setAudioCurrentTime(time);
+    const media = isVideoFile ? videoRef.current : audioRef.current;
+    if (media) {
+      media.currentTime = time;
+      setMediaCurrentTime(time);
     }
-  }, []);
+  }, [isVideoFile]);
 
-  const handleAudioEnded = useCallback(() => {
+  const handleMediaEnded = useCallback(() => {
+    isPlayingRef.current = false;
     setIsPlaying(false);
+    setMediaCurrentTime(0);
+    stopTimeUpdate();
+  }, [stopTimeUpdate]);
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => {
+      if (timeUpdateIntervalRef.current) {
+        clearInterval(timeUpdateIntervalRef.current);
+      }
+    };
   }, []);
 
   const formatDuration = (seconds: number) => {
@@ -398,7 +580,7 @@ ${text}
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('model', 'whisper-large-v3');
+      formData.append('model', 'whisper-large-v3-turbo');
       formData.append('language', 'zh');
       formData.append('response_format', 'verbose_json');
 
@@ -479,18 +661,21 @@ ${text}
     return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
   };
 
-  const isConfigured = groqKey && aiApiKey;
+  // 配置状态：全部配置=green，部分配置=amber，未配置=red
+  const configStatus = groqKey && aiApiKey ? 'full' : (groqKey || aiApiKey ? 'partial' : 'none');
 
   return (
     <div className="space-y-4 pb-8">
-      {/* 隐藏的 audio 元素 */}
-      {audioUrl && (
+      {/* 隐藏的音频元素 */}
+      {mediaUrl && !isVideoFile && (
         <audio
           ref={audioRef}
-          src={audioUrl}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
-          onEnded={handleAudioEnded}
+          src={mediaUrl}
+          onLoadedMetadata={handleAudioLoadedMetadata}
+          onEnded={handleMediaEnded}
+          onPlay={handleAudioPlay}
+          onPause={handleAudioPause}
+          className="hidden"
         />
       )}
 
@@ -521,11 +706,13 @@ ${text}
         <button
           onClick={openSettingsModal}
           className={`p-2.5 rounded-xl transition-all btn-press ${
-            isConfigured 
-              ? 'bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white' 
-              : 'bg-amber-500/20 text-amber-400 animate-pulse'
+            configStatus === 'full' 
+              ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400' 
+              : configStatus === 'partial'
+                ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400'
+                : 'bg-red-500/20 hover:bg-red-500/30 text-red-400 animate-pulse'
           }`}
-          title="API 配置"
+          title={configStatus === 'full' ? 'API 已配置' : configStatus === 'partial' ? '部分 API 已配置' : '请配置 API'}
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
@@ -542,9 +729,7 @@ ${text}
               <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
               <span>请先点击右上角设置按钮配置 Groq API Key</span>
             </div>
-          )}
-
-          {/* 文件上传区域 */}
+          )}          {/* 文件上传区域 */}
           <div 
             className={`bg-[#1a2634] rounded-2xl p-6 border-2 border-dashed transition-all cursor-pointer ${
               file ? 'border-pink-500/50' : 'border-white/10 hover:border-white/30'
@@ -561,9 +746,15 @@ ${text}
             <div className="text-center">
               {file ? (
                 <>
-                  <svg className="w-10 h-10 text-pink-400 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
-                  </svg>
+                  {file.type.startsWith('video/') ? (
+                    <svg className="w-10 h-10 text-pink-400 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"/><line x1="7" y1="2" x2="7" y2="22"/><line x1="17" y1="2" x2="17" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="2" y1="7" x2="7" y2="7"/><line x1="2" y1="17" x2="7" y2="17"/><line x1="17" y1="17" x2="22" y2="17"/><line x1="17" y1="7" x2="22" y2="7"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-10 h-10 text-pink-400 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
+                    </svg>
+                  )}
                   <p className="text-white font-medium text-sm">{file.name}</p>
                   <p className="text-gray-500 text-xs mt-1">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
                 </>
@@ -572,48 +763,81 @@ ${text}
                   <svg className="w-10 h-10 text-gray-500 mx-auto mb-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
                   </svg>
-                  <p className="text-gray-400 text-sm">点击上传音频文件</p>
-                  <p className="text-gray-600 text-xs mt-1">MP3、WAV、M4A（最大 25MB）</p>
+                  <p className="text-gray-400 text-sm">点击上传音频或视频文件</p>
+                  <p className="text-gray-600 text-xs mt-1">MP3、MP4、WAV、M4A、WebM（最大 25MB）</p>
                 </>
               )}
             </div>
           </div>
 
-          {/* 音频播放器 */}
-          {audioUrl && audioDuration > 0 && (
-            <div className="bg-[#1a2634] rounded-xl p-4 border border-white/10">
-              <div className="flex items-center gap-3">
-                {/* 播放/暂停按钮 */}
-                <button
-                  onClick={togglePlay}
-                  className="w-10 h-10 rounded-full bg-pink-500/20 hover:bg-pink-500/30 text-pink-400 flex items-center justify-center transition-all btn-press"
-                >
-                  {isPlaying ? (
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
-                  ) : (
-                    <svg className="w-5 h-5 ml-0.5" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  )}
-                </button>
-                
-                {/* 进度条 */}
-                <div className="flex-1">
-                  <input
-                    type="range"
-                    min="0"
-                    max={audioDuration || 0}
-                    value={audioCurrentTime}
-                    onChange={handleSeek}
-                    className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-pink-400"
-                    style={{
-                      background: `linear-gradient(to right, rgb(244 114 182) ${(audioCurrentTime / audioDuration) * 100}%, rgba(255,255,255,0.1) ${(audioCurrentTime / audioDuration) * 100}%)`
-                    }}
+          {/* 媒体播放器 */}
+          {mediaUrl && (
+            <div className="bg-[#1a2634] rounded-xl border border-white/10 overflow-hidden">
+              {/* 视频预览 */}
+              {isVideoFile && (
+                <div className="relative aspect-video bg-black">
+                  <video
+                    ref={videoRef}
+                    src={mediaUrl}
+                    className="w-full h-full object-contain"
+                    onLoadedMetadata={handleVideoLoadedMetadata}
+                    onEnded={handleMediaEnded}
+                    onPlay={handleVideoPlay}
+                    onPause={handleVideoPause}
+                    onClick={togglePlay}
+                    playsInline
                   />
+                  {/* 播放按钮覆盖层 - 使用 opacity 过渡避免闪烁 */}
+                  <div 
+                    className={`absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer transition-opacity duration-200 ${isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                    onClick={togglePlay}
+                  >
+                    <div className="w-16 h-16 rounded-full bg-pink-500/80 flex items-center justify-center">
+                      <svg className="w-8 h-8 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                      </svg>
+                    </div>
+                  </div>
                 </div>
-                
-                {/* 时间显示 */}
-                <span className="text-gray-400 text-xs font-mono min-w-[70px] text-right">
-                  {formatDuration(audioCurrentTime)} / {formatDuration(audioDuration)}
-                </span>
+              )}
+              
+              {/* 控制条 */}
+              <div className="p-4">
+                <div className="flex items-center gap-3">
+                  {/* 播放/暂停按钮 */}
+                  <button
+                    onClick={togglePlay}
+                    className="w-10 h-10 rounded-full bg-pink-500/20 hover:bg-pink-500/30 text-pink-400 flex items-center justify-center transition-all btn-press"
+                  >
+                    {isPlaying ? (
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+                    ) : (
+                      <svg className="w-5 h-5 ml-0.5" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                    )}
+                  </button>
+                  
+                  {/* 进度条 */}
+                  <div className="flex-1">
+                    <input
+                      type="range"
+                      min="0"
+                      max={mediaDuration || 100}
+                      value={mediaCurrentTime}
+                      onChange={handleSeek}
+                      className="w-full h-1.5 bg-white/10 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-pink-400"
+                      style={{
+                        background: mediaDuration > 0 
+                          ? `linear-gradient(to right, rgb(244 114 182) ${(mediaCurrentTime / mediaDuration) * 100}%, rgba(255,255,255,0.1) ${(mediaCurrentTime / mediaDuration) * 100}%)`
+                          : 'rgba(255,255,255,0.1)'
+                      }}
+                    />
+                  </div>
+                  
+                  {/* 时间显示 */}
+                  <span className="text-gray-400 text-xs font-mono min-w-[70px] text-right">
+                    {formatDuration(mediaCurrentTime)} / {mediaDuration > 0 ? formatDuration(mediaDuration) : '--:--'}
+                  </span>
+                </div>
               </div>
             </div>
           )}
@@ -765,74 +989,106 @@ ${text}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {history.map((record, index) => (
-                <div 
-                  key={record.id} 
-                  className="bg-[#1a2634] rounded-xl border border-white/10 overflow-hidden animate-list-item card-hover" 
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <div className="p-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1 min-w-0">
+              {history.map((record, index) => {
+                const isOptimizingThis = compareData?.id === record.id && !showCompareModal;
+                const hasBackgroundOptimization = isOptimizingThis && (optimizingId === record.id || compareData?.newOptimized);
+                
+                return (
+                  <div 
+                    key={record.id} 
+                    className={`bg-[#1a2634] rounded-xl border overflow-hidden animate-list-item card-hover ${
+                      hasBackgroundOptimization ? 'border-violet-500/50' : 'border-white/10'
+                    }`}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    {/* 后台优化状态条 */}
+                    {hasBackgroundOptimization && (
+                      <div 
+                        onClick={reopenCompareModal}
+                        className="px-3 py-2 bg-violet-500/10 border-b border-violet-500/30 flex items-center justify-between cursor-pointer hover:bg-violet-500/20 transition-all"
+                      >
                         <div className="flex items-center gap-2">
-                          <p className="text-white text-sm font-medium truncate">{record.fileName}</p>
-                          <span className={`px-1.5 py-0.5 text-xs rounded ${record.optimizedText ? 'bg-violet-500/20 text-violet-400' : 'bg-gray-500/20 text-gray-400'}`}>
-                            {record.optimizedText ? 'AI' : '原文'}
-                          </span>
+                          {optimizingId === record.id ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 animate-spin text-violet-400" viewBox="0 0 24 24" fill="none">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                              </svg>
+                              <span className="text-violet-400 text-xs">AI 优化中...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M20 6L9 17l-5-5"/>
+                              </svg>
+                              <span className="text-green-400 text-xs">优化完成，点击查看</span>
+                            </>
+                          )}
                         </div>
-                        <p className="text-gray-500 text-xs">{formatTime(record.createdAt)}</p>
-                      </div>
-                      <button 
-                        onClick={() => setDeleteConfirmId(record.id)} 
-                        className="p-1.5 hover:bg-red-500/20 rounded-lg text-gray-500 hover:text-red-400 transition-all"
-                      >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        <svg className="w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                          <polyline points="15 3 21 3 21 9"/>
+                          <line x1="10" y1="14" x2="21" y2="3"/>
                         </svg>
-                      </button>
-                    </div>
-                    <div 
-                      onClick={() => setViewingRecord(record)} 
-                      className="cursor-pointer hover:bg-white/5 rounded-lg p-1 -mx-1 transition-all"
-                    >
-                      <p className="text-gray-400 text-xs line-clamp-3">{record.optimizedText || record.rawText}</p>
-                    </div>
-                    <div className="flex gap-2 mt-3">
-                      <button 
-                        onClick={() => copyText(record.optimizedText || record.rawText, record.id)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all btn-press ${
-                          copiedId === record.id ? 'bg-green-500/20 text-green-400' : 'bg-white/5 hover:bg-white/10 text-gray-400'
-                        }`}
-                      >
-                        {copiedId === record.id ? '已复制' : '复制'}
-                      </button>
-                      {aiApiKey && (
+                      </div>
+                    )}
+                    
+                    <div className="p-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-white text-sm font-medium truncate">{record.fileName}</p>
+                            <span className={`px-1.5 py-0.5 text-xs rounded ${record.optimizedText ? 'bg-violet-500/20 text-violet-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                              {record.optimizedText ? 'AI' : '原文'}
+                            </span>
+                          </div>
+                          <p className="text-gray-500 text-xs">{formatTime(record.createdAt)}</p>
+                        </div>
                         <button 
-                          onClick={() => optimizeHistoryRecord(record)}
-                          disabled={optimizingId === record.id}
-                          className={`px-3 py-1.5 rounded-lg text-xs transition-all btn-press flex items-center gap-1 ${
-                            optimizingId === record.id 
-                              ? 'bg-violet-500/10 text-violet-400 cursor-wait' 
-                              : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-400'
+                          onClick={() => setDeleteConfirmId(record.id)} 
+                          className="p-1.5 hover:bg-red-500/20 rounded-lg text-gray-500 hover:text-red-400 transition-all"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                          </svg>
+                        </button>
+                      </div>
+                      <div 
+                        onClick={() => hasBackgroundOptimization ? reopenCompareModal() : setViewingRecord(record)} 
+                        className="cursor-pointer hover:bg-white/5 rounded-lg p-1 -mx-1 transition-all"
+                      >
+                        <p className="text-gray-400 text-xs line-clamp-3">{record.optimizedText || record.rawText}</p>
+                      </div>
+                      <div className="flex gap-2 mt-3">
+                        <button 
+                          onClick={() => copyText(record.optimizedText || record.rawText, record.id)}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-medium transition-all btn-press ${
+                            copiedId === record.id ? 'bg-green-500/20 text-green-400' : 'bg-white/5 hover:bg-white/10 text-gray-400'
                           }`}
                         >
-                          {optimizingId === record.id ? (
-                            <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
-                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-                            </svg>
-                          ) : (
+                          {copiedId === record.id ? '已复制' : '复制'}
+                        </button>
+                        {aiApiKey && !hasBackgroundOptimization && (
+                          <button 
+                            onClick={() => optimizeHistoryRecord(record)}
+                            disabled={!!optimizingId}
+                            className={`px-3 py-1.5 rounded-lg text-xs transition-all btn-press flex items-center gap-1 ${
+                              optimizingId 
+                                ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed' 
+                                : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-400'
+                            }`}
+                          >
                             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
                             </svg>
-                          )}
-                          <span>{record.optimizedText ? '重新优化' : 'AI优化'}</span>
-                        </button>
-                      )}
+                            <span>{record.optimizedText ? '重新优化' : 'AI优化'}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1021,9 +1277,9 @@ ${text}
       )}
 
       {/* AI 优化对照弹窗 */}
-      {compareData && createPortal(
+      {compareData && showCompareModal && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-backdrop-in" onClick={() => !optimizingId && confirmUseOptimized(false)} />
+          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-backdrop-in" onClick={minimizeCompareModal} />
           <div className="relative bg-cyber-dark border border-white/10 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-modal-in">
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -1039,13 +1295,26 @@ ${text}
                   </span>
                 )}
               </div>
-              <button 
-                onClick={() => !optimizingId && confirmUseOptimized(false)} 
-                disabled={!!optimizingId}
-                className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all disabled:opacity-50 flex-shrink-0"
-              >
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* 最小化按钮 */}
+                <button 
+                  onClick={minimizeCompareModal}
+                  className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                  title="最小化到后台"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+                  </svg>
+                </button>
+                {/* 关闭按钮 */}
+                <button 
+                  onClick={() => confirmUseOptimized(false)} 
+                  className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                  title="关闭并放弃"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
             </div>
             
             <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-4 p-4">
@@ -1084,11 +1353,13 @@ ${text}
 
             <div className="px-5 py-4 border-t border-white/10 flex gap-3">
               <button 
-                onClick={() => confirmUseOptimized(false)} 
-                disabled={!!optimizingId}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-medium transition-all btn-press disabled:opacity-50"
+                onClick={minimizeCompareModal}
+                className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-medium transition-all btn-press flex items-center justify-center gap-2"
               >
-                取消
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+                </svg>
+                后台运行
               </button>
               <button 
                 onClick={() => confirmUseOptimized(true)}

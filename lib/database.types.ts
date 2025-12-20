@@ -244,3 +244,34 @@ export interface CreateResourceParams {
   icon?: string;
   folder_id?: number | null;
 }
+
+// ============================================
+// 音频转写历史记录相关类型
+// ============================================
+
+export interface TranscriptHistory {
+  id: number;
+  user_id: string;
+  file_name: string;
+  raw_text: string;
+  optimized_text: string | null;
+  ai_model: string | null;
+  duration: number | null;
+  file_size: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateTranscriptParams {
+  file_name: string;
+  raw_text: string;
+  optimized_text?: string;
+  ai_model?: string;
+  duration?: number;
+  file_size?: number;
+}
+
+export interface UpdateTranscriptParams {
+  optimized_text?: string;
+  ai_model?: string;
+}
