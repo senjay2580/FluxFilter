@@ -42,11 +42,11 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
 
     const handleTouchMove = (e: TouchEvent) => {
       if (!isPulling.current || isRefreshing) return;
-      
+
       const currentY = e.touches[0].clientY;
       const diff = currentY - startY.current;
       const scrollTop = scrollContainerRef?.current?.scrollTop ?? window.scrollY;
-      
+
       if (diff > 0 && scrollTop <= 5) {
         e.preventDefault();
         const distance = Math.min(diff * 0.5, 120);
@@ -59,10 +59,10 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
 
     const handleTouchEnd = async () => {
       if (!isPulling.current) return;
-      
+
       const currentPullDistance = pullDistanceRef.current;
       console.log('📱 TouchEnd, pullDistance:', currentPullDistance, 'threshold:', threshold);
-      
+
       if (currentPullDistance >= threshold && !isRefreshing) {
         isRefreshing = true;
         setRefreshing(true);
@@ -77,7 +77,7 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
           setRefreshing(false);
         }
       }
-      
+
       isPulling.current = false;
       setPullDistance(0);
     };
@@ -99,26 +99,26 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
   return (
     <div
       ref={containerRef}
-      className="relative"
+      className="relative w-full h-full overflow-hidden"
     >
       {/* 刷新指示器 */}
-      <div 
-        className="absolute left-0 right-0 flex items-center justify-center overflow-hidden transition-all duration-300 z-30"
-        style={{ 
+      <div
+        className="absolute left-0 right-0 flex items-center justify-center overflow-hidden transition-all duration-300 z-30 pointer-events-none"
+        style={{
           height: refreshing ? 60 : pullDistance,
           top: 0,
+          willChange: 'height, opacity'
         }}
       >
-        <div 
-          className={`flex flex-col items-center gap-2 transition-all duration-200 ${
-            pullDistance > 0 || refreshing ? 'opacity-100' : 'opacity-0'
-          }`}
+        <div
+          className={`flex flex-col items-center gap-2 transition-all duration-200 ${pullDistance > 0 || refreshing ? 'opacity-100' : 'opacity-0'
+            }`}
           style={{
             transform: `scale(${0.5 + progress * 0.5})`,
           }}
         >
           {/* Logo 动画 */}
-          <div 
+          <div
             className="relative w-10 h-10 flex items-center justify-center"
             style={{ transform: `rotate(${rotation}deg)` }}
           >
@@ -128,13 +128,13 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
             ) : (
               // 下拉指示
               <div className="relative">
-                <span 
+                <span
                   className="text-2xl font-bold bg-gradient-to-br from-cyber-lime to-cyan-400 bg-clip-text text-transparent"
                   style={{ fontFamily: 'Arial, sans-serif' }}
                 >
                   F
                 </span>
-                <span 
+                <span
                   className="absolute -right-1 top-1 text-lg italic text-white/80"
                   style={{ fontFamily: 'Georgia, serif' }}
                 >
@@ -143,23 +143,24 @@ const PullToRefresh: React.FC<PullToRefreshProps> = ({ onRefresh, children, scro
               </div>
             )}
           </div>
-          
+
           {/* 提示文字 */}
           <span className="text-xs text-gray-400">
-            {refreshing 
-              ? '正在刷新...' 
-              : pullDistance >= threshold 
-                ? '松开刷新' 
+            {refreshing
+              ? '正在刷新...'
+              : pullDistance >= threshold
+                ? '松开刷新'
                 : '下拉刷新'}
           </span>
         </div>
       </div>
 
       {/* 主内容 */}
-      <div 
-        className="transition-transform duration-300"
-        style={{ 
-          transform: `translateY(${refreshing ? 60 : pullDistance}px)`,
+      <div
+        className="transition-transform duration-300 ease-out transform-gpu"
+        style={{
+          transform: `translate3d(0, ${refreshing ? 60 : pullDistance}px, 0)`,
+          willChange: 'transform'
         }}
       >
         {children}

@@ -242,6 +242,8 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
           let fullContent = '';
           let buffer = '';
 
+          let lastUpdate = Date.now();
+
           while (reader) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -258,7 +260,13 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
                   const json = JSON.parse(dataStr);
                   const delta = json.choices?.[0]?.delta?.content || '';
                   fullContent += delta;
-                  setResult({ title: 'AI 实时分析中...', date: new Date().toISOString(), summary: fullContent });
+
+                  // 节流更新：每 60ms 更新一次 UI，或在结束时强制更新
+                  const now = Date.now();
+                  if (now - lastUpdate > 60) {
+                    setResult({ title: 'AI 实时分析中...', date: new Date().toISOString(), summary: fullContent });
+                    lastUpdate = now;
+                  }
                 } catch (e) {
                   console.error('解析流数据失败', e, dataStr);
                 }
@@ -375,6 +383,8 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
           let fullContent = '';
           let buffer = '';
 
+          let lastUpdate = Date.now();
+
           while (reader) {
             const { done, value } = await reader.read();
             if (done) break;
@@ -389,7 +399,13 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
                   const json = JSON.parse(dataStr);
                   const delta = json.choices?.[0]?.delta?.content || '';
                   fullContent += delta;
-                  setTaskResult(fullContent);
+
+                  // 节流更新 UI
+                  const now = Date.now();
+                  if (now - lastUpdate > 60) {
+                    setTaskResult(fullContent);
+                    lastUpdate = now;
+                  }
                 } catch (e) { }
               }
             }

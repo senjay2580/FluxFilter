@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { marked } from 'marked';
@@ -28,8 +28,19 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [saveNoteStatus, setSaveNoteStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [isCollapsed, setIsCollapsed] = useState(defaultCollapsed);
+  const prevContentLength = React.useRef(content.length);
+  const [isStreaming, setIsStreaming] = useState(false);
 
-  // 根据变体选择颜色主题
+  // 检测是否处于流式输出中（内容长度在短时间内显著增加）
+  useEffect(() => {
+    if (content.length > prevContentLength.current) {
+      setIsStreaming(true);
+      const timer = setTimeout(() => setIsStreaming(false), 800);
+      prevContentLength.current = content.length;
+      return () => clearTimeout(timer);
+    }
+    prevContentLength.current = content.length;
+  }, [content]);
   const colorScheme = {
     primary: {
       accent: 'cyber-lime',
@@ -299,10 +310,11 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
           </div>
         </div>
 
-        {/* 可折叠的内容区域 */}
+        {/* 可折叠的内容区域 - 流式传输时禁用过渡动画以防止闪烁 */}
         <div
-          className={`overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[5000px] opacity-100'
+          className={`overflow-hidden ${isStreaming ? '' : 'transition-all duration-300 ease-in-out'} ${isCollapsed ? 'max-h-0 opacity-0' : 'max-h-[8000px] opacity-100'
             }`}
+          style={{ contain: 'content' }}
         >
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}

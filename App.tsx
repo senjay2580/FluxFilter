@@ -168,7 +168,7 @@ const App = () => {
   }, [activeTab]);
 
   // Infinite Scroll State
-  const [visibleCount, setVisibleCount] = useState(10);
+  const [visibleCount, setVisibleCount] = useState(20); // 初始加载更多一点，减少首屏后的立即加载
   const mainRef = React.useRef<HTMLDivElement>(null);
 
   // 滚动时显示固定功能栏
@@ -176,7 +176,7 @@ const App = () => {
 
   // 筛选条件变化时重置 visibleCount
   useEffect(() => {
-    setVisibleCount(10);
+    setVisibleCount(20);
   }, [activeFilter, selectedUploader, searchTerm, activeTab]);
 
   // 滑动切换Tab - B站式交互体验
@@ -606,12 +606,17 @@ const App = () => {
       if (!ticking) {
         requestAnimationFrame(() => {
           const { scrollTop, scrollHeight, clientHeight } = mainElement;
-          // 无限滚动加载
-          if (scrollTop + clientHeight >= scrollHeight - 500) {
-            setVisibleCount(prev => Math.min(prev + 5, filteredVideos.length));
+          // 无限滚动加载 - 增加触发距离到 800px，提前加载
+          if (scrollTop + clientHeight >= scrollHeight - 800) {
+            setVisibleCount(prev => {
+              if (prev >= filteredVideos.length) return prev;
+              return Math.min(prev + 12, filteredVideos.length); // 每次追加 12 个，减少触发频率
+            });
           }
           // 滚动超过 200px 时显示固定功能栏
-          setShowStickyToolbar(scrollTop > 200);
+          if (scrollTop > 200 !== showStickyToolbar) {
+            setShowStickyToolbar(scrollTop > 200);
+          }
           ticking = false;
         });
         ticking = true;
@@ -728,9 +733,9 @@ const App = () => {
             {/* 主色调光斑 - 根据Tab变化 */}
             <div
               className={`absolute -top-1/4 -left-1/4 w-[80%] h-[60%] rounded-full blur-[120px] transition-all duration-1000 ${activeTab === 'home' ? 'bg-emerald-600/30' :
-                  activeTab === 'watchLater' ? 'bg-amber-500/25' :
-                    activeTab === 'rss' ? 'bg-blue-500/25' :
-                      'bg-purple-500/25'
+                activeTab === 'watchLater' ? 'bg-amber-500/25' :
+                  activeTab === 'rss' ? 'bg-blue-500/25' :
+                    'bg-purple-500/25'
                 }`}
             />
             {/* 次要光斑 */}
@@ -819,8 +824,8 @@ const App = () => {
                       mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
                     className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${activeFilter === 'all'
-                        ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
-                        : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
+                      ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
+                      : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
                       }`}
                   >
                     All
@@ -837,8 +842,8 @@ const App = () => {
                       setIsTimeFilterOpen(true);
                     }}
                     className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 ${['today', 'week', 'month'].includes(activeFilter)
-                        ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
-                        : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
+                      ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
+                      : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
                       }`}
                   >
                     <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -855,15 +860,15 @@ const App = () => {
 
                   {/* 高级筛选组合按钮 */}
                   <div className={`flex items-center rounded-full border overflow-hidden ${activeFilter === 'custom' || selectedUploader
-                      ? 'border-cyber-lime/50 bg-white/5'
-                      : 'border-white/10 bg-white/5'
+                    ? 'border-cyber-lime/50 bg-white/5'
+                    : 'border-white/10 bg-white/5'
                     }`}>
                     {/* 自定义日期 */}
                     <button
                       onClick={() => setIsFilterOpen(true)}
                       className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${activeFilter === 'custom'
-                          ? 'bg-cyber-lime text-black'
-                          : 'text-gray-400 hover:text-white hover:bg-white/10'
+                        ? 'bg-cyber-lime text-black'
+                        : 'text-gray-400 hover:text-white hover:bg-white/10'
                         }`}
                     >
                       <SlidersIcon className="w-3 h-3" />
@@ -879,8 +884,8 @@ const App = () => {
                     <button
                       onClick={() => setIsUploaderPickerOpen(true)}
                       className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${selectedUploader
-                          ? 'bg-violet-500 text-white'
-                          : 'text-gray-400 hover:text-white hover:bg-white/10'
+                        ? 'bg-violet-500 text-white'
+                        : 'text-gray-400 hover:text-white hover:bg-white/10'
                         }`}
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -929,8 +934,8 @@ const App = () => {
           {activeTab === 'home' && !searchTerm && (
             <div
               className={`sticky top-0 z-30 bg-white/10 backdrop-blur-xl backdrop-saturate-150 border-b border-white/10 px-4 transition-all duration-300 ease-out ${showStickyToolbar
-                  ? 'py-3 opacity-100'
-                  : 'max-h-0 py-0 opacity-0 border-transparent overflow-hidden'
+                ? 'py-3 opacity-100'
+                : 'max-h-0 py-0 opacity-0 border-transparent overflow-hidden'
                 }`}
             >
               <div className="flex justify-center gap-6 overflow-x-auto no-scrollbar">
@@ -1033,7 +1038,8 @@ const App = () => {
           {/* Main Content Feed */}
           <main
             ref={mainRef}
-            className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-3 lg:px-6 xl:px-8 py-4 pb-24 lg:pb-6"
+            className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-3 lg:px-6 xl:px-8 py-4 pb-24 lg:pb-6 transform-gpu"
+            style={{ willChange: 'transform, scroll-position' }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -1687,8 +1693,8 @@ const App = () => {
                         {activeTab === 'watchLater' ? (
                           <button
                             onClick={() => setActiveTab('home')}
-                            className="px-6 py-2.5 bg-gradient-to-r from-cyber-lime to-lime-400  font-medium rounded-full 
-                                 shadow-[0_0_20px_rgba(163,230,53,0.4)] hover:shadow-[0_0_30px_rgba(163,230,53,0.6)]
+                            className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-400 text-white font-medium rounded-full 
+                                 shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:shadow-[0_0_30px_rgba(37,99,235,0.6)]
                                  transition-all hover:scale-105 active:scale-95"
                           >
                             去发现视频
@@ -2063,8 +2069,8 @@ const App = () => {
                           mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                         }}
                         className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${selectedUploader?.mid === uploader.mid
-                            ? 'bg-violet-500/20 border border-violet-500/30'
-                            : 'bg-white/5 border border-transparent hover:bg-white/10'
+                          ? 'bg-violet-500/20 border border-violet-500/30'
+                          : 'bg-white/5 border border-transparent hover:bg-white/10'
                           }`}
                       >
                         {uploader.face ? (
@@ -2136,8 +2142,8 @@ const App = () => {
                     mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                   className={`w-full px-5 py-2.5 text-left text-xs transition-colors flex items-center gap-2 ${activeFilter === item.id
-                      ? 'bg-cyber-lime/20 text-cyber-lime'
-                      : 'text-gray-300 hover:bg-white/10'
+                    ? 'bg-cyber-lime/20 text-cyber-lime'
+                    : 'text-gray-300 hover:bg-white/10'
                     }`}
                 >
                   <span>{item.label}</span>
