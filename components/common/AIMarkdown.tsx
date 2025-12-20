@@ -163,13 +163,13 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
       <ol className="space-y-1 my-3 list-decimal pl-6" {...props} />
     ),
     li: ({ ...props }) => (
-      <li className="relative pl-6 pr-2 py-1.5 text-sm text-gray-300 leading-relaxed group/li">
-        <span className={`absolute left-1 top-[0.7rem] w-1.5 h-1.5 rounded-full bg-${colorScheme.secondary}/50`} />
-        <div className="flex-1" {...props} />
+      <li className="list-none relative pl-5 py-1 text-sm text-gray-300 leading-relaxed">
+        <span className={`absolute left-0 top-3 w-1.5 h-1.5 rounded-full bg-${colorScheme.secondary}/40`} />
+        <span {...props} />
       </li>
     ),
     strong: ({ ...props }) => (
-      <strong className={`text-${colorScheme.secondary} font-bold bg-${colorScheme.secondary}/10 px-1.5 py-0.5 rounded mx-0.5`} {...props} />
+      <strong className={`text-${colorScheme.secondary} font-bold`} {...props} />
     ),
     hr: ({ ...props }) => (
       <hr className="my-4 border-t border-white/10" {...props} />
@@ -312,11 +312,13 @@ export const AIMarkdown: React.FC<AIMarkdownProps> = ({
 
         {/* 可折叠的内容区域 - 优化移动端图层渲染稳定性 */}
         <div
-          className={`relative transform-gpu ${isStreaming ? 'pointer-events-none' : 'transition-all duration-300 ease-in-out'} ${isCollapsed ? 'max-h-0 opacity-0 overflow-hidden' : 'max-h-none opacity-100'
+          className={`relative ${isStreaming ? '' : 'transition-opacity duration-300 ease-in-out'} ${isCollapsed ? 'max-h-0 opacity-0 overflow-hidden' : 'max-h-none opacity-100'
             }`}
           style={{
-            willChange: 'transform, opacity',
-            contentVisibility: 'auto'
+            transform: 'translateZ(0)', // 强制开启独立合成层，解决滑动白块
+            backfaceVisibility: 'hidden',
+            perspective: '1000px',
+            WebkitBackfaceVisibility: 'hidden'
           }}
         >
           <div className="pb-4">
