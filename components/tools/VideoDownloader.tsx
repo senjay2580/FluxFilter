@@ -16,7 +16,11 @@ const DOWNLOAD_SERVICES = [
   { id: 'y2b', name: 'Y2B', url: 'https://y2b.455556.xyz', desc: '备用服务' },
 ];
 
-const VideoDownloader: React.FC = () => {
+interface VideoDownloaderProps {
+  onNavigate?: (page: string) => void;
+}
+
+const VideoDownloader: React.FC<VideoDownloaderProps> = ({ onNavigate }) => {
   const [showModal, setShowModal] = useState(false);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -97,15 +101,33 @@ const VideoDownloader: React.FC = () => {
     <div className="h-[calc(100vh-120px)] -m-4 flex flex-col">
       {/* 顶部工具栏 */}
       <div className="flex items-center justify-between px-4 py-2 bg-cyber-dark border-b border-white/10 relative z-20">
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 px-3 py-2 bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/30 rounded-xl transition-all active:scale-95 btn-press"
-        >
-          <svg className="w-4 h-4 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
-          </svg>
-          <span className="text-pink-400 text-sm font-medium">我的视频</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-pink-500/20 hover:bg-pink-500/30 border border-pink-500/30 rounded-xl transition-all active:scale-95 btn-press"
+          >
+            <svg className="w-4 h-4 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span className="text-pink-400 text-sm font-medium">我的视频</span>
+          </button>
+          
+          {/* 跳转到音频转写 */}
+          {onNavigate && (
+            <button
+              onClick={() => onNavigate('transcriber')}
+              className="flex items-center gap-2 px-3 py-2 bg-violet-500/20 hover:bg-violet-500/30 border border-violet-500/30 rounded-xl transition-all active:scale-95 btn-press"
+            >
+              <svg className="w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+              <span className="text-violet-400 text-sm font-medium">音频转写</span>
+            </button>
+          )}
+        </div>
         
         {/* 服务切换 */}
         <div className="relative">

@@ -9,8 +9,6 @@ import AudioTranscriber from '../tools/AudioTranscriber';
 
 export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber';
 
-const EXTERNAL_TRANSCRIPT_SYSTEM_URL = import.meta.env.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
-
 interface SettingsPageProps {
   isOpen: boolean;
   onClose: () => void;
@@ -18,10 +16,11 @@ interface SettingsPageProps {
   onOpenNotes?: () => void;
   onOpenLearningLog?: () => void;
   onOpenResourceCenter?: () => void;
+  onNavigate?: (page: string) => void;
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ 
-  isOpen, onClose, initialView = 'main', onOpenNotes, onOpenLearningLog, onOpenResourceCenter 
+  isOpen, onClose, initialView = 'main', onOpenNotes, onOpenLearningLog, onOpenResourceCenter, onNavigate 
 }) => {
   const [currentView, setCurrentView] = useState<SettingsView>(initialView);
   const [toast, setToast] = useState<string | null>(null);
@@ -32,11 +31,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     setToast(message);
     setTimeout(() => setToast(null), 3000);
   }, []);
-
-  const handleNavigateToTranscriptSystem = useCallback(async () => {
-    window.open(EXTERNAL_TRANSCRIPT_SYSTEM_URL, '_blank');
-    showToast('正在跳转...');
-  }, [showToast]);
 
   if (!isOpen) return null;
 
@@ -187,12 +181,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 onClick={() => { onOpenLearningLog?.(); onClose(); }}
               />
               <MenuItem
-                icon={<svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><circle cx="11" cy="11" r="2"/></svg>}
-                title="文案转写"
-                desc="跳转到专业转写系统"
-                color="bg-emerald-500/20"
-                onClick={handleNavigateToTranscriptSystem}
-                external
+                icon={<svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
+                title="音频转写"
+                desc="Groq Whisper · AI优化"
+                color="bg-violet-500/20"
+                onClick={() => setCurrentView('transcriber')}
               />
             </div>
 
@@ -225,13 +218,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 color="bg-pink-500/20"
                 onClick={() => setCurrentView('downloader')}
               />
-              <MenuItem
-                icon={<svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>}
-                title="音频转写"
-                desc="Groq Whisper · 语音转文字"
-                color="bg-violet-500/20"
-                onClick={() => setCurrentView('transcriber')}
-              />
             </div>
           </div>
         )}
@@ -240,8 +226,20 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         {currentView === 'reminder' && <div className="p-4"><IntervalReminder /></div>}
         {currentView === 'collector' && <div className="p-4"><VideoCollector /></div>}
         {currentView === 'devcommunity' && <div className="p-4"><DevCommunity /></div>}
-        {currentView === 'downloader' && <div className="p-4"><VideoDownloader /></div>}
-        {currentView === 'transcriber' && <div className="p-4"><AudioTranscriber /></div>}
+        {currentView === 'downloader' && <div className="p-4"><VideoDownloader onNavigate={(page) => {
+          if (page === 'transcriber') {
+            setCurrentView('transcriber');
+          } else if (onNavigate) {
+            onNavigate(page);
+          }
+        }} /></div>}
+        {currentView === 'transcriber' && <div className="p-4"><AudioTranscriber onNavigate={(page) => {
+          if (page === 'video-downloader') {
+            setCurrentView('downloader');
+          } else if (onNavigate) {
+            onNavigate(page);
+          }
+        }} /></div>}
       </div>
 
       {/* Toast */}

@@ -35,7 +35,7 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const folderLongPressTimer = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // 移动端侧边栏状态
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -67,7 +67,7 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
   }, [folders]);
 
   const folderTree = buildFolderTree();
-  
+
   // 递归计算文件夹及其子文件夹中的资源数量
   const countFolderResources = useCallback((folderId: number): number => {
     const getChildFolderIds = (id: number): number[] => {
@@ -102,12 +102,12 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         const children = element.children;
         for (let i = 0; i < children.length; i++) {
           const child = children[i];
-          
+
           if (child.tagName === 'DT') {
             const h3 = child.querySelector(':scope > H3');
             const anchor = child.querySelector(':scope > A');
             const subDl = child.querySelector(':scope > DL');
-            
+
             if (h3) {
               const tempId = `folder_${counter++}`;
               const folderName = h3.textContent?.trim() || '未命名文件夹';
@@ -133,7 +133,7 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         const firstDT = rootDL.querySelector(':scope > DT');
         const firstH3 = firstDT?.querySelector(':scope > H3');
         const firstSubDL = firstDT?.querySelector(':scope > DL');
-        
+
         if (firstH3 && firstSubDL) {
           // 跳过根文件夹，直接解析其子内容
           console.log(`跳过根文件夹: ${firstH3.textContent?.trim()}`);
@@ -151,13 +151,13 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
 
       // 创建文件夹映射
       const createdFolderMap = new Map<string, number>();
-      
+
       for (const folder of allFolders) {
         const parentDbId = folder.parentTempId ? createdFolderMap.get(folder.parentTempId) ?? null : null;
         try {
-          const created = await createResourceFolder(userId, { 
-            name: folder.name, 
-            parent_id: parentDbId 
+          const created = await createResourceFolder(userId, {
+            name: folder.name,
+            parent_id: parentDbId
           });
           createdFolderMap.set(folder.tempId, created.id);
           console.log(`创建文件夹: ${folder.name}, parent_id: ${parentDbId}, id: ${created.id}`);
@@ -169,8 +169,8 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
       // 批量创建资源
       if (allResources.length > 0) {
         const resourcesData = allResources.map(r => ({
-          name: r.name, 
-          url: r.url, 
+          name: r.name,
+          url: r.url,
           icon: getFavicon(r.url),
           folder_id: r.folderTempId ? createdFolderMap.get(r.folderTempId) ?? null : null,
         }));
@@ -180,9 +180,9 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
 
       await loadData();
       showToast(`导入 ${allFolders.length} 个文件夹，${allResources.length} 个书签`);
-    } catch (e) { 
-      console.error('导入失败:', e); 
-      showToast('导入失败'); 
+    } catch (e) {
+      console.error('导入失败:', e);
+      showToast('导入失败');
     }
     setImporting(false);
   };
@@ -257,19 +257,19 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
 
   // 资源长按
   const resourceLongPressTriggered = useRef(false);
-  const startLongPress = (id: number) => { 
+  const startLongPress = (id: number) => {
     resourceLongPressTriggered.current = false;
-    longPressTimer.current = setTimeout(() => { 
+    longPressTimer.current = setTimeout(() => {
       resourceLongPressTriggered.current = true;
-      setSelectMode(true); 
-      setSelectedIds(new Set([id])); 
-    }, 500); 
+      setSelectMode(true);
+      setSelectedIds(new Set([id]));
+    }, 500);
   };
-  const endLongPress = () => { 
-    if (longPressTimer.current) { 
-      clearTimeout(longPressTimer.current); 
-      longPressTimer.current = null; 
-    } 
+  const endLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   };
   const cancelLongPress = () => {
     if (longPressTimer.current) {
@@ -314,13 +314,13 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
       { stroke: '#a78bfa', fill: 'rgba(167, 139, 250, 0.15)' }, // 第4层: violet
     ];
     const color = colors[depth % colors.length];
-    
+
     if (depth === 0) {
       // 根文件夹 - 大文件夹图标
       return (
         <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style={{ background: color.fill }}>
           <svg className="w-4 h-4" viewBox="0 0 24 24" fill={color.fill} stroke={color.stroke} strokeWidth="1.5">
-            <path d="M3 7v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-7l-2-2H5a2 2 0 0 0-2 2z"/>
+            <path d="M3 7v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-7l-2-2H5a2 2 0 0 0-2 2z" />
           </svg>
         </div>
       );
@@ -329,11 +329,11 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
       return (
         <div className="w-5 h-5 rounded flex items-center justify-center shrink-0" style={{ background: color.fill }}>
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke={color.stroke} strokeWidth="1.5">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
             {isExpanded ? (
-              <path d="M9 14h6" strokeWidth="2"/>
+              <path d="M9 14h6" strokeWidth="2" />
             ) : (
-              <path d="M12 11v6M9 14h6" strokeWidth="2"/>
+              <path d="M12 11v6M9 14h6" strokeWidth="2" />
             )}
           </svg>
         </div>
@@ -342,7 +342,7 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
       // 叶子文件夹 - 简单文件夹
       return (
         <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke={color.stroke} strokeWidth="1.5">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
         </svg>
       );
     }
@@ -353,13 +353,12 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
     const isExpanded = expandedFolders.has(node.id);
     const isSelected = selectedFolderId === node.id;
     const isChecked = folderSelectMode && selectedFolderIds.has(node.id);
-    
+
     return (
       <div key={node.id}>
         <div
-          className={`flex items-center gap-2 py-2.5 px-2 mx-1 my-0.5 rounded-lg transition-all active:bg-white/10 ${
-            isChecked ? 'bg-cyber-lime/20' : isSelected ? 'bg-white/10' : ''
-          }`}
+          className={`flex items-center gap-2 py-2.5 px-2 mx-1 my-0.5 rounded-lg transition-all active:bg-white/10 ${isChecked ? 'bg-cyber-lime/20' : isSelected ? 'bg-white/10' : ''
+            }`}
           style={{ paddingLeft: `${8 + depth * 14}px` }}
           onTouchStart={() => {
             folderLongPressTriggered.current = false;
@@ -388,10 +387,10 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
             }
             if (folderSelectMode) { toggleFolderSelect(node.id); return; }
             if (node.children.length > 0) {
-              setExpandedFolders(p => { 
-                const s = new Set(p); 
-                s.has(node.id) ? s.delete(node.id) : s.add(node.id); 
-                return s; 
+              setExpandedFolders(p => {
+                const s = new Set(p);
+                s.has(node.id) ? s.delete(node.id) : s.add(node.id);
+                return s;
               });
             }
             setSelectedFolderId(node.id);
@@ -402,11 +401,11 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         >
           {folderSelectMode && (
             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${isChecked ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'}`}>
-              {isChecked && <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12"/></svg>}
+              {isChecked && <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>}
             </div>
           )}
           {node.children.length > 0 ? (
-            <svg className={`w-3 h-3 shrink-0 transition-transform text-gray-500 ${isExpanded ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6"/></svg>
+            <svg className={`w-3 h-3 shrink-0 transition-transform text-gray-500 ${isExpanded ? 'rotate-90' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M9 18l6-6-6-6" /></svg>
           ) : <div className="w-3" />}
           {getFolderIcon(depth, node.children.length > 0, isExpanded)}
           <span className={`text-sm truncate flex-1 ${isSelected ? 'text-white font-medium' : 'text-gray-400'}`}>{node.name}</span>
@@ -428,12 +427,12 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         <div className="absolute top-20 right-10 w-60 h-60 bg-cyber-lime/5 rounded-full blur-3xl animate-float" />
         <div className="absolute bottom-20 left-10 w-60 h-60 bg-blue-500/5 rounded-full blur-3xl animate-float animation-delay-2000" />
       </div>
-      
+
       {/* 移动端文件夹抽屉遮罩 */}
       {sidebarOpen && (
         <div className="fixed inset-0 bg-black/60 z-10 sm:hidden animate-fade-in" onClick={() => setSidebarOpen(false)} />
       )}
-      
+
       {/* 左侧文件夹侧边栏 */}
       <div className={`
         fixed inset-y-0 left-0 z-20
@@ -446,10 +445,10 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         <div className="p-3 border-b border-white/10 flex items-center justify-between">
           <span className="text-white text-sm font-medium">文件夹</span>
           <button onClick={() => setSidebarOpen(false)} className="sm:hidden p-1 rounded-lg active:bg-white/10">
-            <svg className="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <svg className="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
           </button>
         </div>
-        
+
         {/* 文件夹操作栏 */}
         {folderSelectMode && (
           <div className="flex items-center gap-2 p-2 border-b border-white/10 bg-black/50">
@@ -458,7 +457,7 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
             <button onClick={() => { setFolderSelectMode(false); setSelectedFolderIds(new Set()); }} className="text-xs text-gray-400 px-2 py-1.5 rounded-lg">取消</button>
           </div>
         )}
-        
+
         {/* 文件夹列表 */}
         <div className="flex-1 overflow-y-auto py-1">
           {renderFolderTree(folderTree)}
@@ -472,14 +471,14 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
           <div className="flex items-center gap-2">
             {/* 移动端菜单按钮 */}
             <button onClick={() => setSidebarOpen(true)} className="sm:hidden p-2 -ml-1 rounded-xl active:bg-white/10">
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12h18M3 6h18M3 18h18" /></svg>
             </button>
             <button onClick={onClose} className="p-2 -ml-1 sm:ml-0 rounded-xl active:bg-white/10">
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
             </button>
             <div className="flex-1 relative">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜索..." className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"/>
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
+              <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜索..." className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50" />
             </div>
             {selectMode ? (
               <>
@@ -489,9 +488,9 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
               </>
             ) : (
               <>
-                <button onClick={handleExport} className="hidden sm:block p-2.5 rounded-xl bg-white/5 border border-white/10 active:bg-white/10"><svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
-                <button onClick={() => setShowImportModal(true)} className="p-2.5 rounded-xl bg-white/5 border border-white/10 active:bg-white/10"><svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
-                <button onClick={() => setShowAddModal(true)} className="p-2.5 rounded-xl bg-cyber-lime text-black active:bg-cyber-lime/80"><svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+                <button onClick={handleExport} className="hidden sm:block p-2.5 rounded-xl bg-white/5 border border-white/10 active:bg-white/10"><svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg></button>
+                <button onClick={() => setShowImportModal(true)} className="p-2.5 rounded-xl bg-white/5 border border-white/10 active:bg-white/10"><svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg></button>
+                <button onClick={() => setShowAddModal(true)} className="p-2.5 rounded-xl bg-cyber-lime text-black active:bg-cyber-lime/80"><svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg></button>
               </>
             )}
           </div>
@@ -501,13 +500,13 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         <div className="flex-1 overflow-y-auto p-3">
           {loading || importing ? (
             <div className="flex flex-col items-center justify-center py-20">
-              <div className="w-10 h-10 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin mb-3"/>
+              <div className="w-10 h-10 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin mb-3" />
               <p className="text-gray-400 text-sm">{importing ? '正在导入...' : '加载中...'}</p>
             </div>
           ) : filteredResources.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center mb-3">
-                <svg className="w-7 h-7 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                <svg className="w-7 h-7 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 8v13H3V8" /><path d="M1 3h22v5H1z" /><path d="M10 12h4" /></svg>
               </div>
               <p className="text-gray-500 text-sm">暂无资源</p>
             </div>
@@ -521,22 +520,22 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
                   onTouchStart={() => startLongPress(r.id)}
                   onTouchEnd={endLongPress}
                   onTouchMove={cancelLongPress}
-                  onClick={() => { 
+                  onClick={() => {
                     if (resourceLongPressTriggered.current) {
                       resourceLongPressTriggered.current = false;
                       return;
                     }
-                    if (selectMode) toggleSelect(r.id); 
-                    else window.open(r.url, '_blank'); 
+                    if (selectMode) toggleSelect(r.id);
+                    else window.open(r.url, '_blank');
                   }}
                 >
                   {selectMode && (
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedIds.has(r.id) ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'}`}>
-                      {selectedIds.has(r.id) && <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                      {selectedIds.has(r.id) && <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
                     </div>
                   )}
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center shrink-0 shadow-lg shadow-black/20">
-                    {r.icon ? <img src={r.icon} alt="" className="w-6 h-6" onError={e => (e.target as HTMLImageElement).style.display = 'none'}/> : null}
+                    {r.icon ? <img src={r.icon} alt="" className="w-6 h-6" onError={e => (e.target as HTMLImageElement).style.display = 'none'} /> : null}
                     <span className={`text-sm font-bold text-cyber-lime ${r.icon ? 'hidden' : ''}`}>{r.name[0]?.toUpperCase()}</span>
                   </div>
                   <div className="flex-1 min-w-0">
@@ -545,7 +544,7 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
                   </div>
                   {!selectMode && (
                     <button onClick={e => { e.stopPropagation(); setDeleteConfirmId(r.id); }} className="p-2 rounded-lg active:bg-red-500/20">
-                      <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                      <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
                     </button>
                   )}
                 </div>
@@ -554,7 +553,7 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
           )}
         </div>
       </div>
-      
+
 
       {/* Toast */}
       {toast && <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/90 border border-white/20 rounded-full text-white text-sm z-[999999]">{toast}</div>}
@@ -562,13 +561,13 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
       {/* 添加弹窗 */}
       {showAddModal && (
         <div className="fixed inset-0 z-[999999] flex items-end sm:items-center justify-center" onClick={() => setShowAddModal(false)}>
-          <div className="absolute inset-0 bg-black/80"/>
+          <div className="absolute inset-0 bg-black/80" />
           <div className="relative bg-[#1a1a1f] rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm border-t sm:border border-white/10 safe-area-bottom" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowAddModal(false)} className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"><svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            <button onClick={() => setShowAddModal(false)} className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"><svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
             <h3 className="text-white text-lg font-bold mb-4">添加资源</h3>
             <div className="space-y-3">
-              <input value={newResource.name} onChange={e => setNewResource({...newResource, name: e.target.value})} placeholder="名称" className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"/>
-              <input value={newResource.url} onChange={e => setNewResource({...newResource, url: e.target.value})} placeholder="链接" className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"/>
+              <input value={newResource.name} onChange={e => setNewResource({ ...newResource, name: e.target.value })} placeholder="名称" className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50" />
+              <input value={newResource.url} onChange={e => setNewResource({ ...newResource, url: e.target.value })} placeholder="链接" className="w-full px-4 py-3 rounded-xl bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50" />
               <button onClick={handleAddResource} className="w-full py-3 bg-cyber-lime text-black font-medium rounded-xl active:bg-cyber-lime/80">添加</button>
             </div>
           </div>
@@ -578,13 +577,13 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
       {/* 导入弹窗 */}
       {showImportModal && (
         <div className="fixed inset-0 z-[999999] flex items-end sm:items-center justify-center" onClick={() => setShowImportModal(false)}>
-          <div className="absolute inset-0 bg-black/80"/>
+          <div className="absolute inset-0 bg-black/80" />
           <div className="relative bg-[#1a1a1f] rounded-t-3xl sm:rounded-2xl p-5 w-full sm:max-w-sm border-t sm:border border-white/10 safe-area-bottom" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowImportModal(false)} className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"><svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            <button onClick={() => setShowImportModal(false)} className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"><svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
             <h3 className="text-white text-lg font-bold mb-4">导入书签</h3>
-            <input ref={fileInputRef} type="file" accept=".json,.html" onChange={handleFileImport} className="hidden"/>
+            <input ref={fileInputRef} type="file" accept=".json,.html" onChange={handleFileImport} className="hidden" />
             <button onClick={() => fileInputRef.current?.click()} className="w-full py-8 bg-white/5 border border-dashed border-white/20 rounded-xl text-gray-400 active:bg-white/10">
-              <svg className="w-10 h-10 mx-auto mb-2 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <svg className="w-10 h-10 mx-auto mb-2 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
               <p className="text-sm">点击选择文件</p>
               <p className="text-xs text-gray-600 mt-1">支持浏览器书签HTML或JSON</p>
             </button>
@@ -595,9 +594,9 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
       {/* 删除确认 */}
       {deleteConfirmId && (
         <div className="fixed inset-0 z-[999999] flex items-center justify-center p-6" onClick={() => setDeleteConfirmId(null)}>
-          <div className="absolute inset-0 bg-black/80"/>
+          <div className="absolute inset-0 bg-black/80" />
           <div className="relative bg-[#1a1a1f] rounded-2xl p-5 max-w-xs w-full border border-white/10" onClick={e => e.stopPropagation()}>
-            <button onClick={() => setDeleteConfirmId(null)} className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"><svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+            <button onClick={() => setDeleteConfirmId(null)} className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center"><svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 6L6 18M6 6l12 12" /></svg></button>
             <h3 className="text-white text-lg font-bold text-center mb-2">删除资源</h3>
             <p className="text-gray-400 text-sm text-center mb-5">确定要删除吗？</p>
             <button onClick={() => handleDelete(deleteConfirmId)} className="w-full py-3 bg-red-500 active:bg-red-600 rounded-xl text-white font-medium">确认删除</button>

@@ -14,7 +14,7 @@ if (!isSupabaseConfigured) {
 }
 
 // 创建 Supabase 客户端（如果未配置则使用占位符避免报错）
-export const supabase: SupabaseClient = isSupabaseConfigured 
+export const supabase: SupabaseClient = isSupabaseConfigured
   ? createClient(supabaseUrl, supabaseAnonKey)
   : createClient('https://placeholder.supabase.co', 'placeholder-key');
 
@@ -67,7 +67,7 @@ export async function getVideosByDate(date: Date) {
   startOfDay.setHours(0, 0, 0, 0);
   const endOfDay = new Date(date);
   endOfDay.setHours(23, 59, 59, 999);
-  
+
   return getVideos({ startDate: startOfDay, endDate: endOfDay });
 }
 
@@ -77,9 +77,9 @@ export async function getVideoCountByDate(userId: string) {
     .from('video')
     .select('pubdate')
     .eq('user_id', userId);
-  
+
   if (error) throw error;
-  
+
   // 按日期分组统计
   const countMap: Record<string, number> = {};
   data?.forEach(v => {
@@ -88,7 +88,7 @@ export async function getVideoCountByDate(userId: string) {
       countMap[dateKey] = (countMap[dateKey] || 0) + 1;
     }
   });
-  
+
   return countMap;
 }
 
@@ -103,7 +103,7 @@ export async function getActiveUploaders(userId: string) {
     .select('*')
     .eq('user_id', userId)
     .eq('is_active', true);
-  
+
   if (error) throw error;
   return data as Uploader[];
 }
@@ -115,7 +115,7 @@ export async function addUploader(uploader: Omit<Uploader, 'id' | 'created_at' |
     .insert(uploader)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as Uploader;
 }
@@ -128,10 +128,7 @@ export async function addUploader(uploader: Omit<Uploader, 'id' | 'created_at' |
 export async function getWatchlist(userId?: string) {
   let query = supabase
     .from('watchlist')
-    .select(`
-      *,
-      video:bvid (*)
-    `)
+    .select('*')
     .order('created_at', { ascending: false });
 
   if (userId) {
@@ -154,7 +151,7 @@ export async function addToWatchlist(bvid: string, userId: string, note?: string
     })
     .select()
     .single();
-  
+
   if (error) {
     if (error.code === '23505') {
       throw new Error('视频已在待看列表中');
@@ -170,7 +167,7 @@ export async function removeFromWatchlist(id: number) {
     .from('watchlist')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -180,7 +177,7 @@ export async function removeFromWatchlistByBvid(bvid: string, userId?: string) {
     .from('watchlist')
     .delete()
     .eq('bvid', bvid);
-  
+
   if (userId) {
     query = query.eq('user_id', userId);
   }
@@ -197,7 +194,7 @@ export async function updateWatchlistItem(id: number, updates: Partial<Pick<Watc
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as WatchlistItem;
 }
@@ -213,7 +210,7 @@ export async function isInWatchlist(bvid: string, userId?: string) {
     .from('watchlist')
     .select('id')
     .eq('bvid', bvid);
-  
+
   if (userId) {
     query = query.eq('user_id', userId);
   }
@@ -221,6 +218,26 @@ export async function isInWatchlist(bvid: string, userId?: string) {
   const { data, error } = await query;
   if (error) throw error;
   return data && data.length > 0;
+}
+
+// ============================================
+// 收藏视频操作
+// ============================================
+
+/** 获取收藏视频列表 */
+export async function getCollectedVideos(userId?: string) {
+  let query = supabase
+    .from('collected_video')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (userId) {
+    query = query.eq('user_id', userId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
 }
 
 
@@ -237,7 +254,7 @@ export async function getLearningLogs(userId: string) {
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  
+
   if (error) throw error;
   return data as LearningLog[];
 }
@@ -254,7 +271,7 @@ export async function createLearningLog(userId: string, params: CreateLearningLo
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as LearningLog;
 }
@@ -270,7 +287,7 @@ export async function updateLearningLog(id: number, params: UpdateLearningLogPar
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as LearningLog;
 }
@@ -281,7 +298,7 @@ export async function deleteLearningLog(id: number) {
     .from('learning_log')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -298,7 +315,7 @@ export async function getResourceFolders(userId: string) {
     .select('*')
     .eq('user_id', userId)
     .order('sort_order', { ascending: true });
-  
+
   if (error) throw error;
   return data as ResourceFolder[];
 }
@@ -315,7 +332,7 @@ export async function createResourceFolder(userId: string, params: CreateResourc
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as ResourceFolder;
 }
@@ -333,7 +350,7 @@ export async function createResourceFolders(userId: string, folders: CreateResou
       }))
     )
     .select();
-  
+
   if (error) throw error;
   return data as ResourceFolder[];
 }
@@ -344,7 +361,7 @@ export async function deleteResourceFolder(id: number) {
     .from('resource_folder')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -355,7 +372,7 @@ export async function getResources(userId: string, folderId?: number | null) {
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  
+
   if (folderId !== undefined) {
     if (folderId === null) {
       query = query.is('folder_id', null);
@@ -363,7 +380,7 @@ export async function getResources(userId: string, folderId?: number | null) {
       query = query.eq('folder_id', folderId);
     }
   }
-  
+
   const { data, error } = await query;
   if (error) throw error;
   return data as Resource[];
@@ -382,7 +399,7 @@ export async function createResource(userId: string, params: CreateResourceParam
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as Resource;
 }
@@ -401,7 +418,7 @@ export async function createResources(userId: string, resources: CreateResourceP
       }))
     )
     .select();
-  
+
   if (error) throw error;
   return data as Resource[];
 }
@@ -412,7 +429,7 @@ export async function deleteResource(id: number) {
     .from('resource')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }
 
@@ -422,7 +439,7 @@ export async function deleteResources(ids: number[]) {
     .from('resource')
     .delete()
     .in('id', ids);
-  
+
   if (error) throw error;
 }
 
@@ -441,7 +458,7 @@ export async function getTranscriptHistory(userId: string, limit = 50) {
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
-  
+
   if (error) throw error;
   return data as TranscriptHistory[];
 }
@@ -455,13 +472,14 @@ export async function createTranscript(userId: string, params: CreateTranscriptP
       file_name: params.file_name,
       raw_text: params.raw_text,
       optimized_text: params.optimized_text || null,
+      optimized_title: params.optimized_title || null,
       ai_model: params.ai_model || null,
       duration: params.duration || null,
       file_size: params.file_size || null,
     })
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as TranscriptHistory;
 }
@@ -477,7 +495,7 @@ export async function updateTranscript(id: number, params: UpdateTranscriptParam
     .eq('id', id)
     .select()
     .single();
-  
+
   if (error) throw error;
   return data as TranscriptHistory;
 }
@@ -488,6 +506,6 @@ export async function deleteTranscript(id: number) {
     .from('transcript_history')
     .delete()
     .eq('id', id);
-  
+
   if (error) throw error;
 }

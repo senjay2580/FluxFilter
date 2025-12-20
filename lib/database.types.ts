@@ -255,6 +255,7 @@ export interface TranscriptHistory {
   file_name: string;
   raw_text: string;
   optimized_text: string | null;
+  optimized_title: string | null;
   ai_model: string | null;
   duration: number | null;
   file_size: number | null;
@@ -266,6 +267,7 @@ export interface CreateTranscriptParams {
   file_name: string;
   raw_text: string;
   optimized_text?: string;
+  optimized_title?: string;
   ai_model?: string;
   duration?: number;
   file_size?: number;
@@ -273,5 +275,6 @@ export interface CreateTranscriptParams {
 
 export interface UpdateTranscriptParams {
   optimized_text?: string;
+  optimized_title?: string;
   ai_model?: string;
 }

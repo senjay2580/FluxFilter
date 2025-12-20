@@ -367,42 +367,35 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                 </div>
               </button>
 
-              {/* 转写文案 - 跳转外部系统 */}
+              {/* 视频下载 - 跳转到下载页面并复制链接 */}
               {onTranscript && (
                 <button
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation();
                     const videoUrl = `https://www.bilibili.com/video/${bvid}`;
-                    // 跳转到外部转写系统，携带视频元数据
-                    const transcriptSystemUrl = (import.meta as any).env?.VITE_TRANSCRIPT_SYSTEM_URL || 'http://localhost:3001';
-                    const params = new URLSearchParams({
-                      url: videoUrl,
-                      title: title,
-                      author: author,
-                      bvid: bvid,
-                    });
-                    window.open(`${transcriptSystemUrl}?${params.toString()}`, '_blank');
+                    // 复制链接到剪贴板
+                    try {
+                      await navigator.clipboard.writeText(videoUrl);
+                    } catch { /* ignore */ }
+                    // 调用回调跳转到视频下载页面
+                    onTranscript(videoUrl);
                     onMenuToggle?.(null);
                   }}
                   className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
                 >
-                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex items-center justify-center">
-                    <svg className="w-5 h-5 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                      <polyline points="10 9 9 9 8 9"/>
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-500/20 to-rose-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-pink-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="7 10 12 15 17 10"/>
+                      <line x1="12" y1="15" x2="12" y2="3"/>
                     </svg>
                   </div>
                   <div className="flex-1 text-left">
-                    <span className="text-[15px] text-white font-medium">转写文案</span>
-                    <p className="text-xs text-gray-500 mt-0.5">跳转到转写系统处理</p>
+                    <span className="text-[15px] text-white font-medium">下载视频</span>
+                    <p className="text-xs text-gray-500 mt-0.5">跳转下载页面，链接已复制</p>
                   </div>
                   <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                    <polyline points="15 3 21 3 21 9"/>
-                    <line x1="10" y1="14" x2="21" y2="3"/>
+                    <polyline points="9 18 15 12 9 6"/>
                   </svg>
                 </button>
               )}
