@@ -3,10 +3,10 @@ import { createPortal } from 'react-dom';
 import { formatLastSyncTime, triggerSyncWithUploaders } from '../../lib/autoSync';
 import { supabase } from '../../lib/supabase';
 import { getStoredUserId, getStoredUsername } from '../../lib/auth';
-import { 
-  waitForSyncLock, 
-  releaseSyncLock, 
-  checkSyncThrottle, 
+import {
+  waitForSyncLock,
+  releaseSyncLock,
+  checkSyncThrottle,
   recordSyncComplete
 } from '../../lib/syncQueue';
 import { cachedFetch, invalidateCache, CACHE_KEYS, CACHE_TTL } from '../../lib/cache';
@@ -46,17 +46,17 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const [uploaders, setUploaders] = useState<Uploader[]>([]);
   const [selectedMids, setSelectedMids] = useState<Set<number>>(new Set());
   const [loadingUploaders, setLoadingUploaders] = useState(false);
-  
+
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState(formatLastSyncTime());
   const [progress, setProgress] = useState(0);
   const [currentUploader, setCurrentUploader] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
-  const [newVideos, setNewVideos] = useState<Array<{bvid: string; title: string; pic: string; uploader_name: string}>>([]);
+  const [newVideos, setNewVideos] = useState<Array<{ bvid: string; title: string; pic: string; uploader_name: string }>>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false); // 后台同步完成后显示成功弹窗
-  const [backgroundResult, setBackgroundResult] = useState<{message: string; newVideos: any[]}>({ message: '', newVideos: [] });
-  
+  const [backgroundResult, setBackgroundResult] = useState<{ message: string; newVideos: any[] }>({ message: '', newVideos: [] });
+
   const cancelRef = useRef(false);
   const isBackgroundRef = useRef(false); // 使用 ref 追踪是否为后台同步
 
@@ -68,7 +68,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         setUploaders([]);
         return;
       }
-      
+
       // 使用缓存获取UP主列表
       const list = await cachedFetch<Uploader[]>(
         CACHE_KEYS.UPLOADERS(userId),
@@ -87,7 +87,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
           forceRefresh,
         }
       );
-      
+
       setUploaders(list);
       setSelectedMids(new Set(list.map(u => u.mid)));
     } catch (err) {
@@ -141,12 +141,12 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
 
   const handleStartSync = async () => {
     if (selectedMids.size === 0) return;
-    
+
     // 0. 节流检查 - 防止频繁同步（白名单用户跳过）
     const WHITELIST_USERS = ['senjay']; // 白名单用户，跳过限流
     const username = getStoredUsername();
     const isWhitelisted = username && WHITELIST_USERS.includes(username.toLowerCase());
-    
+
     if (!isWhitelisted) {
       const throttleCheck = checkSyncThrottle();
       if (!throttleCheck.canSync) {
@@ -156,7 +156,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         return;
       }
     }
-    
+
     // 重置状态
     cancelRef.current = false;
     isBackgroundRef.current = false; // 重置后台同步标记
@@ -172,7 +172,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
       // 1. 等待获取同步锁（小任务直接跳过队列）
       const selectedUploaders = uploaders.filter(u => selectedMids.has(u.mid));
       const taskCount = selectedUploaders.length;
-      
+
       const lockResult = await waitForSyncLock(
         (position) => {
           if (cancelRef.current) return;
@@ -203,12 +203,12 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
 
       // 2. 执行同步（selectedUploaders 已在上面定义）
       const result = await triggerSyncWithUploaders(
-        selectedUploaders as any, 
+        selectedUploaders as any,
         (progressMsg) => {
           if (cancelRef.current) return;
-          
+
           setMessage(progressMsg);
-          
+
           const match = progressMsg.match(/\[(\d+)\/(\d+)\]\s*(.+)/);
           if (match) {
             const current = parseInt(match[1]);
@@ -219,7 +219,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         },
         () => cancelRef.current  // 传入取消检查函数
       );
-      
+
       if (result.cancelled || cancelRef.current) {
         setSyncStatus('idle');
         setMessage('已取消同步');
@@ -270,7 +270,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
         const errorMsg = '同步失败: ' + String(error);
         setMessage(errorMsg);
         setSyncStatus('error');
-        
+
         // 后台同步失败也显示结果
         if (isBackgroundRef.current) {
           setBackgroundResult({
@@ -294,15 +294,17 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     if (!showModal) return null;
 
     return createPortal(
-      <div 
+      <div
         className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
         onClick={handleCloseModal}
       >
-        <div 
-          className="w-full max-w-md bg-[#0c0c14] border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl h-[70vh] flex flex-col overflow-hidden relative"
+        <div
+          className="w-full max-w-md bg-cyber-card border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl h-[70vh] flex flex-col overflow-hidden relative"
           onClick={e => e.stopPropagation()}
           style={{ animation: 'slideUp 0.3s ease-out' }}
         >
+          {/* 顶部光晕背景 - 全宽渐变 */}
+          <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-cyber-lime/20 to-transparent pointer-events-none" />
           {/* 同步进度覆盖层 */}
           {syncing && (
             <div className="absolute inset-0 z-10 bg-[#0c0c14] flex flex-col items-center justify-center p-8">
@@ -310,10 +312,10 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
               <div className="relative w-32 h-32 mb-6">
                 <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
                   <circle cx="50" cy="50" r="42" fill="none" stroke="#1f2937" strokeWidth="8" />
-                  <circle 
-                    cx="50" cy="50" r="42" 
-                    fill="none" 
-                    stroke="url(#progressGradient)" 
+                  <circle
+                    cx="50" cy="50" r="42"
+                    fill="none"
+                    stroke="url(#progressGradient)"
                     strokeWidth="8"
                     strokeLinecap="round"
                     strokeDasharray={`${progress * 2.64} 264`}
@@ -330,10 +332,10 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                   <span className="text-3xl font-bold text-white">{progress}%</span>
                 </div>
               </div>
-              
+
               <p className="text-white font-medium mb-2">{currentUploader || '正在同步...'}</p>
               <p className="text-gray-400 text-sm text-center">{message}</p>
-              
+
               <button
                 onClick={handleCancelSync}
                 className="mt-6 px-6 py-2 bg-white/10 text-white rounded-xl hover:bg-white/20 transition-colors"
@@ -346,9 +348,8 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
           {/* 完成状态覆盖层 */}
           {(syncStatus === 'success' || syncStatus === 'error') && !syncing && (
             <div className="absolute inset-0 z-10 bg-[#0c0c14] flex flex-col items-center justify-center p-6 pt-12 overflow-hidden">
-              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
-                syncStatus === 'success' ? 'bg-green-500/20' : 'bg-red-500/20'
-              }`}>
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-6 ${syncStatus === 'success' ? 'bg-green-500/20' : 'bg-red-500/20'
+                }`}>
                 {syncStatus === 'success' ? (
                   <svg className="w-10 h-10 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                     <path d="M20 6L9 17l-5-5" />
@@ -389,7 +390,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                             <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M8 5v14l11-7z"/>
+                              <path d="M8 5v14l11-7z" />
                             </svg>
                           </div>
                         </div>
@@ -436,18 +437,17 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                 </svg>
               </button>
             </div>
-            
+
             <button
               onClick={toggleSelectAll}
               disabled={syncing}
               className="mt-3 w-full py-2 bg-white/5 rounded-xl text-sm text-gray-300 hover:bg-white/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
-                selectedMids.size === uploaders.length && uploaders.length > 0 ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
-              }`}>
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedMids.size === uploaders.length && uploaders.length > 0 ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
+                }`}>
                 {selectedMids.size === uploaders.length && uploaders.length > 0 && (
                   <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                   </svg>
                 )}
               </div>
@@ -470,18 +470,16 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                   key={uploader.id}
                   onClick={() => toggleSelect(uploader.mid)}
                   disabled={syncing}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors disabled:opacity-50 ${
-                    selectedMids.has(uploader.mid)
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors disabled:opacity-50 ${selectedMids.has(uploader.mid)
                       ? 'bg-cyber-lime/10 border border-cyber-lime/30'
                       : 'bg-white/5 border border-transparent hover:bg-white/10'
-                  }`}
+                    }`}
                 >
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
-                    selectedMids.has(uploader.mid) ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
-                  }`}>
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${selectedMids.has(uploader.mid) ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
+                    }`}>
                     {selectedMids.has(uploader.mid) && (
                       <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                       </svg>
                     )}
                   </div>
@@ -508,17 +506,16 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
             <button
               onClick={handleStartSync}
               disabled={selectedMids.size === 0 || syncing}
-              className={`w-full py-3 rounded-xl text-sm font-medium transition-all ${
-                selectedMids.size === 0 || syncing
+              className={`w-full py-3 rounded-xl text-sm font-medium transition-all ${selectedMids.size === 0 || syncing
                   ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
                   : 'bg-cyber-lime text-black hover:bg-lime-400'
-              }`}
+                }`}
             >
               开始同步 ({selectedMids.size} 个UP主)
             </button>
           </div>
         </div>
-        
+
         <style>{`
           @keyframes slideUp {
             from { transform: translateY(100%); opacity: 0; }
@@ -537,20 +534,19 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     const isSuccess = !backgroundResult.message.includes('失败');
 
     return createPortal(
-      <div 
+      <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
         onClick={() => setShowSuccessModal(false)}
       >
-        <div 
+        <div
           className="w-full max-w-md mx-4 bg-[#0c0c14] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
           onClick={e => e.stopPropagation()}
           style={{ animation: 'scaleIn 0.25s ease-out' }}
         >
           {/* 头部 */}
           <div className="p-6 text-center">
-            <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${
-              isSuccess ? 'bg-green-500/20' : 'bg-red-500/20'
-            }`}>
+            <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4 ${isSuccess ? 'bg-green-500/20' : 'bg-red-500/20'
+              }`}>
               {isSuccess ? (
                 <svg className="w-8 h-8 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                   <path d="M20 6L9 17l-5-5" />
@@ -611,7 +607,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
             </button>
           </div>
         </div>
-        
+
         <style>{`
           @keyframes scaleIn {
             from { transform: scale(0.9); opacity: 0; }
@@ -630,19 +626,18 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     <>
       <button
         onClick={handleOpenModal}
-        className={`${compact ? 'w-8 h-8 rounded-full' : 'px-4 py-2 rounded-xl'} flex items-center justify-center gap-2 transition-all ${
-          isBackgroundSyncing 
-            ? 'bg-cyber-lime/20 border border-cyber-lime/50' 
+        className={`${compact ? 'w-8 h-8 rounded-full' : 'px-4 py-2 rounded-xl'} flex items-center justify-center gap-2 transition-all ${isBackgroundSyncing
+            ? 'bg-cyber-lime/20 border border-cyber-lime/50'
             : 'bg-white/5 border border-white/10 hover:border-cyber-lime/50'
-        }`}
+          }`}
         title={isBackgroundSyncing ? '正在后台同步...' : `同步视频 (${lastSync})`}
       >
-        <svg 
+        <svg
           className={`w-4 h-4 ${isBackgroundSyncing ? 'text-cyber-lime' : 'text-gray-400'}`}
           style={isBackgroundSyncing ? { animation: 'spin 1s linear infinite' } : undefined}
-          viewBox="0 0 24 24" 
-          fill="none" 
-          stroke="currentColor" 
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
           strokeWidth="2"
         >
           <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />

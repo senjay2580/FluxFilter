@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { isSupabaseConfigured, getLearningLogs, createLearningLog, updateLearningLog, deleteLearningLog } from '../../lib/supabase';
+import { isSupabaseConfigured, getLearningLogs, createLearningLog, updateLearningLog, deleteLearningLog, createNote } from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
 import type { LearningLog as LearningLogType } from '../../lib/database.types';
+import CustomDatePicker from '../layout/CustomDatePicker';
+import { DateFilter } from '../../types';
 
 interface LearningLogProps {
   isOpen: boolean;
@@ -11,11 +13,11 @@ interface LearningLogProps {
   initialVideoTitle?: string;
 }
 
-const LearningLog: React.FC<LearningLogProps> = ({ 
-  isOpen, 
-  onClose, 
-  initialVideoUrl = '', 
-  initialVideoTitle = '' 
+const LearningLog: React.FC<LearningLogProps> = ({
+  isOpen,
+  onClose,
+  initialVideoUrl = '',
+  initialVideoTitle = ''
 }) => {
   const [entries, setEntries] = useState<LearningLogType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,6 +26,12 @@ const LearningLog: React.FC<LearningLogProps> = ({
   const [editContent, setEditContent] = useState('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null); // 新增日期筛选
+  const [selectionMode, setSelectionMode] = useState(false); // 批量选择模式
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set()); // 选中的 ID
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [dateFilter, setDateFilter] = useState<DateFilter>({});
+  const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -61,10 +69,10 @@ const LearningLog: React.FC<LearningLogProps> = ({
   useEffect(() => {
     // 条件检查
     if (!isOpen || !initialVideoUrl || loading) return;
-    
+
     // 防止重复创建：同一个 URL 只创建一次
     if (creatingRef.current || createdUrlRef.current === initialVideoUrl) return;
-    
+
     // 检查是否已存在于列表中
     if (entries.some(e => e.video_url === initialVideoUrl)) {
       createdUrlRef.current = initialVideoUrl;
@@ -140,6 +148,66 @@ const LearningLog: React.FC<LearningLogProps> = ({
     setEditContent(entry.summary);
   };
 
+  // 批量删除
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`确定要删除选中的 ${selectedIds.size} 条记录吗？`)) return;
+
+    try {
+      showToast('正在删除...');
+      const idsToDelete = Array.from(selectedIds);
+      await Promise.all(idsToDelete.map(id => deleteLearningLog(id)));
+
+      setEntries(prev => prev.filter(e => !selectedIds.has(e.id)));
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+      showToast(`已成功删除 ${idsToDelete.length} 条记录`);
+    } catch (err) {
+      console.error('批量删除失败:', err);
+      showToast('删除过程中出错');
+    }
+  };
+
+  const handleToggleSelect = (id: number) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSelectAll = (records: LearningLogType[]) => {
+    const allVisibleIds = records.map(r => r.id);
+    const areAllSelected = allVisibleIds.every(id => selectedIds.has(id));
+
+    const newSelected = new Set(selectedIds);
+    if (areAllSelected) {
+      allVisibleIds.forEach(id => newSelected.delete(id));
+    } else {
+      allVisibleIds.forEach(id => newSelected.add(id));
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleLongPress = (id: number) => {
+    if (selectionMode) return;
+    setSelectionMode(true);
+    setSelectedIds(new Set([id]));
+  };
+
+  const startLongPressTimer = (id: number) => {
+    longPressTimer.current = setTimeout(() => handleLongPress(id), 600);
+  };
+
+  const clearLongPressTimer = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
   // 导出 JSON
   const handleExport = () => {
     const exportData = entries.map(e => ({
@@ -148,7 +216,7 @@ const LearningLog: React.FC<LearningLogProps> = ({
       summary: e.summary,
       created_at: e.created_at,
     }));
-    
+
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -159,12 +227,87 @@ const LearningLog: React.FC<LearningLogProps> = ({
     showToast('导出成功');
   };
 
+  // 一键归档至笔记
+  const handleArchiveToNote = useCallback(async (date: string, records: LearningLogType[]) => {
+    const userId = getStoredUserId();
+    if (!userId || !isSupabaseConfigured) return;
+
+    try {
+      showToast('正在归档...');
+      const title = `【${date}】今日学习足迹汇总`;
+
+      // 构建 HTML 内容
+      let htmlContent = `<div style="font-family: sans-serif; line-height: 1.6; color: #333;">`;
+      records.forEach((record, idx) => {
+        const titleText = record.summary || record.video_title || '未命名记录';
+        htmlContent += `
+          <div style="margin-bottom: 24px; padding: 16px; border-radius: 12px; background: rgba(0,0,0,0.02); border: 1px solid rgba(0,0,0,0.05);">
+            <p style="margin: 0 0 10px 0; font-size: 17px; color: #1a1a1a;"><strong>${idx + 1}. ${titleText}</strong></p>
+            <div style="margin: 0; padding: 10px; background: #fff; border-radius: 8px; border: 1px solid #eee;">
+              <p style="margin: 0; font-size: 13px; color: #666; margin-bottom: 4px;">视频地址：</p>
+              <a href="${record.video_url}" target="_blank" style="color: #007AFF; background: #eef7ff; padding: 2px 6px; border-radius: 4px; text-decoration: none; font-size: 14px; font-weight: 500; word-break: break-all; border: 1px solid #d0e8ff;">${record.video_url}</a>
+            </div>
+          </div>
+        `;
+      });
+      htmlContent += `</div>`;
+
+      // 提取预览
+      const preview = records.map(r => r.video_title || '学习记录').join(' | ').slice(0, 150);
+
+      await createNote(userId, {
+        title,
+        content: htmlContent,
+        preview,
+        color: 'green',
+        category: '学习日志'
+      });
+
+      showToast('已同步至笔记中心');
+    } catch (err) {
+      console.error('归档失败:', err);
+      showToast('归档失败');
+    }
+  }, []);
+
+  // 应用日期筛选
+  const handleDateApply = (filter: DateFilter) => {
+    setDateFilter(filter);
+    if (filter.year !== undefined && filter.month !== undefined && filter.day !== undefined) {
+      const d = new Date(filter.year, filter.month, filter.day);
+      setSelectedDate(d.toLocaleDateString());
+    }
+  };
+
   // 筛选条目
-  const filteredEntries = entries.filter(e => 
-    e.video_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    e.video_url.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredEntries = entries.filter(e => {
+    const matchesSearch =
+      e.video_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.video_url.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const entryDate = new Date(e.created_at).toLocaleDateString();
+    const matchesDate = !selectedDate || entryDate === selectedDate;
+
+    return matchesSearch && matchesDate;
+  });
+
+  // 按日期分组
+  const groupedEntries = filteredEntries.reduce((groups: Record<string, LearningLogType[]>, entry) => {
+    const date = new Date(entry.created_at).toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(entry);
+    return groups;
+  }, {});
+
+  // 获取所有唯一日期用于筛选
+  const allDates = Array.from(new Set(entries.map(e =>
+    new Date(e.created_at).toLocaleDateString()
+  ))).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
   if (!isOpen) return null;
 
@@ -175,7 +318,7 @@ const LearningLog: React.FC<LearningLogProps> = ({
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-cyber-lime/5 rounded-full blur-3xl animate-blob" />
         <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl animate-blob animation-delay-2000" />
       </div>
-      
+
       {/* 顶部导航 */}
       <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-xl border-b border-white/10 animate-slide-down">
         <div className="flex items-center gap-3 px-4 py-3">
@@ -195,9 +338,9 @@ const LearningLog: React.FC<LearningLogProps> = ({
             title="导出 JSON"
           >
             <svg className="w-5 h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
             </svg>
           </button>
         </div>
@@ -220,13 +363,81 @@ const LearningLog: React.FC<LearningLogProps> = ({
         </div>
       </div>
 
-      {/* 日志列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* 批量操作工具栏 */}
+      {selectionMode && (
+        <div className="mx-4 mb-3 p-2 bg-cyber-lime/10 border border-cyber-lime/30 rounded-xl flex items-center justify-between animate-slide-down">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setSelectionMode(false);
+                setSelectedIds(new Set());
+              }}
+              className="px-3 py-1 text-xs text-gray-400 hover:text-white transition-colors"
+            >
+              取消
+            </button>
+            <span className="text-xs font-mono text-cyber-lime">已选中 {selectedIds.size}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleSelectAll(filteredEntries)}
+              className="px-3 py-1 text-xs bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors border border-white/10"
+            >
+              全选
+            </button>
+            <button
+              onClick={handleBatchDelete}
+              disabled={selectedIds.size === 0}
+              className="px-3 py-1 text-xs bg-red-500/80 hover:bg-red-500 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_10px_rgba(239,68,68,0.2)]"
+            >
+              批量删除
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 日期筛选工具栏 */}
+      <div className="px-4 pb-3 pt-2 flex items-center gap-2">
+        <button
+          onClick={() => setIsDatePickerOpen(true)}
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all ${selectedDate
+            ? 'bg-cyber-lime text-black shadow-[0_0_15px_rgba(186,255,41,0.3)]'
+            : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10'
+            }`}
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          {selectedDate ? selectedDate : '按日期筛选'}
+        </button>
+
+        {selectedDate && (
+          <button
+            onClick={() => {
+              setSelectedDate(null);
+              setDateFilter({});
+            }}
+            className="p-2 rounded-xl bg-white/5 text-gray-400 hover:text-white hover:bg-white/10 border border-white/10 transition-colors"
+            title="清除筛选"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {/* 日志列表 (时间轴模式) */}
+      <div className="flex-1 overflow-y-auto p-4 relative custom-scrollbar">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : filteredEntries.length === 0 ? (
+        ) : Object.keys(groupedEntries).length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
               <svg className="w-8 h-8 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -236,69 +447,178 @@ const LearningLog: React.FC<LearningLogProps> = ({
             <p className="text-gray-500">暂无学习记录</p>
           </div>
         ) : (
-          filteredEntries.map((entry, index) => (
-            <div 
-              key={entry.id}
-              className="bg-white/5 border border-white/10 rounded-xl p-3 hover:border-cyber-lime/30 transition-colors animate-list-item"
-              style={{ animationDelay: `${index * 50}ms` }}
-            >
-              <div className="flex gap-3">
-                <div className="shrink-0 flex flex-col items-center gap-1">
-                  <a 
-                    href={entry.video_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-full bg-cyber-lime/10 border border-cyber-lime/30 flex items-center justify-center hover:bg-cyber-lime/20 transition-colors"
-                    title={entry.video_url}
-                  >
-                    <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
-                  </a>
-                  <p className="text-[10px] text-gray-600 text-center">
-                    {new Date(entry.created_at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
-                  </p>
+          <div className="relative pl-8">
+            {/* 时间轴中间线 */}
+            <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-cyber-lime/50 via-cyber-lime/20 to-transparent" />
+
+            {Object.entries(groupedEntries).map(([date, dateEntries], groupIndex) => (
+              <div key={date} className="mb-10 last:mb-4">
+                {/* 日期标题 */}
+                <div className="py-2 mb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-5 h-5 rounded-full bg-black border-2 border-cyber-lime flex items-center justify-center">
+                        <div className="w-1 h-1 rounded-full bg-cyber-lime animate-pulse" />
+                      </div>
+                      <span className="text-xs font-bold text-cyber-lime bg-cyber-dark/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-cyber-lime/20">
+                        {date}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleArchiveToNote(date, dateEntries)}
+                      className="text-[10px] px-2 py-1 bg-cyber-lime/10 hover:bg-cyber-lime/20 text-cyber-lime border border-cyber-lime/20 rounded-lg transition-all flex items-center gap-1 group/btn"
+                    >
+                      <svg className="w-3 h-3 group-hover/btn:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      归档至笔记
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex-1">
-                  <p className="text-[10px] text-gray-500 mb-1 uppercase tracking-wide">学习总结</p>
-                  {editingId === entry.id ? (
-                    <div className="space-y-2">
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value.slice(0, 200))}
-                        placeholder={entry.video_title || '输入总结...'}
-                        className="w-full h-20 px-3 py-2 bg-black/30 border border-cyber-lime/30 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none resize-none"
-                        maxLength={200}
-                        autoFocus
-                      />
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-gray-500">{editContent.length}/200</span>
-                        <div className="flex gap-2">
-                          <button onClick={() => setEditingId(null)} className="px-3 py-1 text-xs text-gray-400 hover:text-white transition-colors">取消</button>
-                          <button onClick={() => handleSaveEdit(entry.id)} className="px-3 py-1 text-xs bg-cyber-lime text-black rounded-lg hover:bg-cyber-lime/90 transition-colors">保存</button>
+                {/* 条目列表 */}
+                <div className="space-y-4">
+                  {dateEntries.map((entry, index) => (
+                    <div
+                      key={entry.id}
+                      className={`relative group transition-all duration-300 ${selectionMode ? 'pl-2' : ''}`}
+                      style={{ animationDelay: `${(groupIndex * 3 + index) * 50}ms` }}
+                      onMouseDown={() => startLongPressTimer(entry.id)}
+                      onMouseUp={clearLongPressTimer}
+                      onMouseLeave={clearLongPressTimer}
+                      onTouchStart={() => startLongPressTimer(entry.id)}
+                      onTouchEnd={clearLongPressTimer}
+                    >
+                      {/* 选择框 */}
+                      {selectionMode && (
+                        <div
+                          className="absolute -left-[5px] top-1/2 -translate-y-1/2 z-10 cursor-pointer p-2"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleSelect(entry.id);
+                          }}
+                        >
+                          <div className={`w-5 h-5 rounded-full border-2 transition-all flex items-center justify-center ${selectedIds.has(entry.id)
+                            ? 'bg-cyber-lime border-cyber-lime shadow-[0_0_10px_rgba(186,255,41,0.4)]'
+                            : 'bg-black/40 border-gray-600 hover:border-cyber-lime/50'
+                            }`}>
+                            {selectedIds.has(entry.id) && (
+                              <svg className="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 连接点 */}
+                      <div className={`absolute top-6 w-4 h-[2px] bg-cyber-lime/20 group-hover:bg-cyber-lime/50 transition-colors ${selectionMode ? '-left-[15px]' : '-left-[25px]'
+                        }`} />
+
+                      <div
+                        onClick={() => selectionMode && handleToggleSelect(entry.id)}
+                        className={`bg-[#151921] border rounded-xl p-2.5 transition-all animate-list-item cursor-pointer ${selectionMode && selectedIds.has(entry.id)
+                          ? 'border-cyber-lime/60 bg-cyber-lime/[0.03] shadow-[0_0_15px_rgba(186,255,41,0.05)]'
+                          : 'border-white/5 hover:border-cyber-lime/30'
+                          }`}
+                      >
+                        <div className="flex gap-4">
+                          <div className="shrink-0 flex flex-col items-center">
+                            <div className="w-8 h-8 rounded-lg bg-cyber-lime/10 border border-cyber-lime/20 flex items-center justify-center hover:bg-cyber-lime/20 transition-all hover:scale-110 active:scale-95 shadow-inner cursor-pointer"
+                              title={entry.video_url}
+                              onClick={(e) => {
+                                if (selectionMode) {
+                                  e.stopPropagation();
+                                  handleToggleSelect(entry.id);
+                                } else {
+                                  window.open(entry.video_url, '_blank');
+                                }
+                              }}
+                            >
+                              <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
+                              </svg>
+                            </div>
+                            <span className="mt-1.5 text-[9px] text-gray-600 font-mono">
+                              {new Date(entry.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-[10px] text-cyber-lime/60 font-medium uppercase tracking-widest">Focused Study</p>
+                              {!selectionMode && (
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleClearSummary(entry.id); }}
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 transition-all text-[10px]"
+                                    title="清空"
+                                  >
+                                    清空
+                                  </button>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(entry.id); }}
+                                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all text-[10px]"
+                                    title="删除"
+                                  >
+                                    删除
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+
+                            {editingId === entry.id ? (
+                              <div className="space-y-3" onClick={e => e.stopPropagation()}>
+                                <textarea
+                                  value={editContent}
+                                  onChange={(e) => setEditContent(e.target.value.slice(0, 500))}
+                                  placeholder={entry.video_title || '输入学习心得...'}
+                                  className="w-full h-28 px-4 py-3 bg-black/40 border border-cyber-lime/30 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 ring-cyber-lime/50 transition-all resize-none shadow-inner"
+                                  autoFocus
+                                />
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-mono text-gray-600">{editContent.length}/500</span>
+                                  <div className="flex gap-3">
+                                    <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-xs text-gray-500 hover:text-white transition-colors">放弃</button>
+                                    <button onClick={() => handleSaveEdit(entry.id)} className="px-5 py-1.5 text-xs bg-cyber-lime text-black font-bold rounded-lg hover:shadow-[0_0_15px_rgba(186,255,41,0.4)] transition-all">保存更变</button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div
+                                onClick={(e) => {
+                                  if (selectionMode) {
+                                    e.stopPropagation();
+                                    handleToggleSelect(entry.id);
+                                  } else {
+                                    startEdit(entry);
+                                  }
+                                }}
+                                className={`group/text relative text-sm rounded-xl p-3 border border-transparent hover:border-white/5 hover:bg-white/[0.02] transition-all cursor-pointer ${entry.summary ? 'text-gray-200' : 'text-gray-500 italic'
+                                  }`}
+                              >
+                                {entry.summary || entry.video_title || '点击此处记录今日所学...'}
+                                {!selectionMode && (
+                                  <div className="absolute right-2 bottom-2 opacity-0 group-hover/text:opacity-100 transition-opacity">
+                                    <svg className="w-3.5 h-3.5 text-cyber-lime/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <p 
-                      onClick={() => startEdit(entry)}
-                      className={`text-sm cursor-pointer hover:bg-white/5 rounded-lg p-2 -m-2 transition-colors ${entry.summary ? 'text-white' : 'text-gray-500 italic'}`}
-                    >
-                      {entry.summary || entry.video_title || '点击添加总结...'}
-                    </p>
-                  )}
+                  ))}
                 </div>
               </div>
-
-              <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-white/5">
-                <button onClick={() => handleClearSummary(entry.id)} className="px-3 py-1.5 text-xs text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors">清空总结</button>
-                <button onClick={() => setDeleteConfirmId(entry.id)} className="px-3 py-1.5 text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors">删除</button>
-              </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
       </div>
 
@@ -343,12 +663,20 @@ const LearningLog: React.FC<LearningLogProps> = ({
           33% { transform: translate(30px, -30px) scale(1.1); }
           66% { transform: translate(-20px, 20px) scale(0.9); }
         }
-        .animate-page-enter { animation: page-enter 0.3s ease-out; }
-        .animate-slide-down { animation: slide-down 0.4s ease-out; }
-        .animate-list-item { animation: list-item 0.4s ease-out both; }
-        .animate-blob { animation: blob 8s ease-in-out infinite; }
-        .animation-delay-2000 { animation-delay: 2s; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { bg: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.05); border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(186, 255, 41, 0.2); }
       `}</style>
+      <CustomDatePicker
+        isOpen={isDatePickerOpen}
+        onClose={() => setIsDatePickerOpen(false)}
+        onApply={handleDateApply}
+        currentFilter={dateFilter}
+        videos={entries}
+      />
     </div>,
     document.body
   );

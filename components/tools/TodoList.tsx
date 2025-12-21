@@ -21,27 +21,27 @@ interface TodoListProps {
 
 // 优先级配置
 const priorityConfig = {
-  low: { 
-    gradient: 'from-blue-500/20 to-cyan-500/10', 
+  low: {
+    gradient: 'from-blue-500/20 to-cyan-500/10',
     ring: 'ring-blue-500/30',
-    text: 'text-blue-400', 
-    label: '低优先级', 
+    text: 'text-blue-400',
+    label: '低优先级',
     icon: '○',
     bg: 'bg-blue-500/15'
   },
-  medium: { 
-    gradient: 'from-amber-500/20 to-orange-500/10', 
+  medium: {
+    gradient: 'from-amber-500/20 to-orange-500/10',
     ring: 'ring-amber-500/30',
-    text: 'text-amber-400', 
-    label: '中优先级', 
+    text: 'text-amber-400',
+    label: '中优先级',
     icon: '◐',
     bg: 'bg-amber-500/15'
   },
-  high: { 
-    gradient: 'from-rose-500/20 to-pink-500/10', 
+  high: {
+    gradient: 'from-rose-500/20 to-pink-500/10',
     ring: 'ring-rose-500/30',
-    text: 'text-rose-400', 
-    label: '高优先级', 
+    text: 'text-rose-400',
+    label: '高优先级',
     icon: '●',
     bg: 'bg-rose-500/15'
   },
@@ -113,7 +113,7 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ todo, position, onClose, onEdit
       const rect = menuRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      
+
       if (rect.right > viewportWidth) {
         menuRef.current.style.left = `${viewportWidth - rect.width - 16}px`;
       }
@@ -127,13 +127,13 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ todo, position, onClose, onEdit
     <div className="fixed inset-0 z-[99999]" onClick={onClose}>
       {/* 遮罩 */}
       <div className="absolute inset-0 bg-black/60" style={{ animation: 'fadeIn 0.15s ease-out' }} />
-      
+
       {/* 菜单 */}
       <div
         ref={menuRef}
         className="absolute bg-[#1a1a1f] rounded-2xl border border-white/10 shadow-2xl overflow-hidden min-w-[200px]"
-        style={{ 
-          left: position.x, 
+        style={{
+          left: position.x,
           top: position.y,
           animation: 'scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
@@ -171,11 +171,10 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ todo, position, onClose, onEdit
                 <button
                   key={p}
                   onClick={() => { onChangePriority(p); onClose(); }}
-                  className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${
-                    todo.priority === p 
-                      ? `${priorityConfig[p].bg} ${priorityConfig[p].text} ring-1 ${priorityConfig[p].ring}` 
-                      : 'bg-white/5 text-gray-400 hover:bg-white/10'
-                  }`}
+                  className={`flex-1 py-2 rounded-xl text-xs font-medium transition-all ${todo.priority === p
+                    ? `${priorityConfig[p].bg} ${priorityConfig[p].text} ring-1 ${priorityConfig[p].ring}`
+                    : 'bg-white/5 text-gray-400 hover:bg-white/10'
+                    }`}
                 >
                   {priorityConfig[p].icon}
                 </button>
@@ -248,7 +247,7 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
   const [showConfetti, setShowConfetti] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  
+
   // 长按菜单状态
   const [actionMenu, setActionMenu] = useState<{ todo: Todo; position: { x: number; y: number } } | null>(null);
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
@@ -297,7 +296,7 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
   };
 
   const updatePriority = (id: string, newPriority: 'low' | 'medium' | 'high') => {
-    setTodos(prev => prev.map(todo => 
+    setTodos(prev => prev.map(todo =>
       todo.id === id ? { ...todo, priority: newPriority } : todo
     ));
   };
@@ -312,7 +311,7 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
       setEditingId(null);
       return;
     }
-    setTodos(prev => prev.map(todo => 
+    setTodos(prev => prev.map(todo =>
       todo.id === editingId ? { ...todo, text: editText.trim() } : todo
     ));
     setEditingId(null);
@@ -323,12 +322,16 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
     setTodos(prev => prev.filter(todo => !todo.completed));
   };
 
+  const longPressStartPos = useRef<{ x: number; y: number } | null>(null);
+
   // 长按处理
   const handleLongPressStart = useCallback((e: React.TouchEvent | React.MouseEvent, todo: Todo) => {
     longPressTriggered.current = false;
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    
+
+    longPressStartPos.current = { x: clientX, y: clientY };
+
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
       if (navigator.vibrate) navigator.vibrate(30);
@@ -336,11 +339,28 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
     }, 500);
   }, []);
 
+  const handleLongPressMove = useCallback((e: React.TouchEvent) => {
+    if (longPressTimer.current && longPressStartPos.current) {
+      const clientX = e.touches[0].clientX;
+      const clientY = e.touches[0].clientY;
+      const moveX = Math.abs(clientX - longPressStartPos.current.x);
+      const moveY = Math.abs(clientY - longPressStartPos.current.y);
+
+      // 如果移动超过 10px，则取消长按
+      if (moveX > 10 || moveY > 10) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+        longPressStartPos.current = null;
+      }
+    }
+  }, []);
+
   const handleLongPressEnd = useCallback(() => {
     if (longPressTimer.current) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+    longPressStartPos.current = null;
   }, []);
 
   // 拖拽处理
@@ -446,7 +466,7 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
             <span className="text-sm font-bold text-cyber-lime">{progress}%</span>
           </div>
           <div className="h-2 bg-white/5 rounded-full overflow-hidden">
-            <div 
+            <div
               className="h-full bg-gradient-to-r from-cyber-lime via-emerald-400 to-cyan-400 rounded-full transition-all duration-700"
               style={{ width: `${progress}%` }}
             />
@@ -483,33 +503,29 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
         <div className="flex gap-1 p-1 bg-white/5 rounded-2xl overflow-x-auto">
           <button
             onClick={() => setFilter('all')}
-            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-              filter === 'all' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'
-            }`}
+            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${filter === 'all' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
           >
             全部 {totalCount}
           </button>
           <button
             onClick={() => setFilter('high')}
-            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-              filter === 'high' ? `${priorityConfig.high.bg} ${priorityConfig.high.text}` : 'text-gray-500 hover:text-gray-300'
-            }`}
+            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${filter === 'high' ? `${priorityConfig.high.bg} ${priorityConfig.high.text}` : 'text-gray-500 hover:text-gray-300'
+              }`}
           >
             ● 高 {highCount}
           </button>
           <button
             onClick={() => setFilter('medium')}
-            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-              filter === 'medium' ? `${priorityConfig.medium.bg} ${priorityConfig.medium.text}` : 'text-gray-500 hover:text-gray-300'
-            }`}
+            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${filter === 'medium' ? `${priorityConfig.medium.bg} ${priorityConfig.medium.text}` : 'text-gray-500 hover:text-gray-300'
+              }`}
           >
             ◐ 中 {mediumCount}
           </button>
           <button
             onClick={() => setFilter('low')}
-            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-              filter === 'low' ? `${priorityConfig.low.bg} ${priorityConfig.low.text}` : 'text-gray-500 hover:text-gray-300'
-            }`}
+            className={`shrink-0 px-3 py-2 rounded-xl text-xs font-medium transition-all ${filter === 'low' ? `${priorityConfig.low.bg} ${priorityConfig.low.text}` : 'text-gray-500 hover:text-gray-300'
+              }`}
           >
             ○ 低 {lowCount}
           </button>
@@ -537,7 +553,9 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
                 onDragStart={(e) => handleDragStart(e, todo.id)}
                 onDragOver={(e) => handleDragOver(e, todo.id)}
                 onDragEnd={handleDragEnd}
+                onDragEnd={handleDragEnd}
                 onTouchStart={(e) => handleLongPressStart(e, todo)}
+                onTouchMove={handleLongPressMove}
                 onTouchEnd={handleLongPressEnd}
                 onMouseDown={(e) => handleLongPressStart(e, todo)}
                 onMouseUp={handleLongPressEnd}
@@ -546,13 +564,11 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
                   e.preventDefault();
                   setActionMenu({ todo, position: { x: e.clientX - 100, y: e.clientY - 20 } });
                 }}
-                className={`group relative overflow-hidden rounded-2xl transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${
-                  dragOverId === todo.id ? 'ring-2 ring-cyber-lime/50 scale-[1.02]' : ''
-                } ${draggedId === todo.id ? 'opacity-50 scale-95' : ''} ${
-                  todo.completed
+                className={`group relative overflow-hidden rounded-2xl transition-all duration-200 cursor-grab active:cursor-grabbing select-none ${dragOverId === todo.id ? 'ring-2 ring-cyber-lime/50 scale-[1.02]' : ''
+                  } ${draggedId === todo.id ? 'opacity-50 scale-95' : ''} ${todo.completed
                     ? 'bg-gradient-to-r from-white/[0.02] to-transparent'
                     : `bg-gradient-to-r ${priorityConfig[todo.priority].gradient}`
-                }`}
+                  }`}
               >
                 <div className="flex items-center gap-3 p-4">
                   {/* 拖拽手柄 */}
@@ -575,11 +591,10 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
                         toggleTodo(todo.id);
                       }
                     }}
-                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${
-                      todo.completed
-                        ? 'bg-gradient-to-br from-cyber-lime to-emerald-400 border-transparent'
-                        : `border-gray-600 hover:border-cyber-lime hover:bg-cyber-lime/10`
-                    }`}
+                    className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shrink-0 ${todo.completed
+                      ? 'bg-gradient-to-br from-cyber-lime to-emerald-400 border-transparent'
+                      : `border-gray-600 hover:border-cyber-lime hover:bg-cyber-lime/10`
+                      }`}
                   >
                     {todo.completed && (
                       <svg className="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
@@ -672,7 +687,7 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
           onDelete={() => deleteTodo(actionMenu.todo.id)}
         />
       )}
-      <div 
+      <div
         className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
         onClick={onClose}
       >

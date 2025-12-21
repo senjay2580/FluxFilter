@@ -1084,60 +1084,60 @@ const App = () => {
                     {/* 应用网格 */}
                     <div className="px-6 pb-8 grid grid-cols-3 gap-5">
                       {/* Reddit - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group">
+                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.reddit.com', '_blank')}>
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FF4500' }}>
-                          <svg className="w-10 h-10" viewBox="0 0 20 20" fill="white">
-                            <path d="M16.5 8.5c.83 0 1.5.67 1.5 1.5 0 .6-.36 1.12-.87 1.36.02.15.04.3.04.46 0 2.35-2.74 4.26-6.12 4.26s-6.12-1.91-6.12-4.26c0-.16.01-.31.04-.46-.51-.24-.87-.76-.87-1.36 0-.83.67-1.5 1.5-1.5.39 0 .74.15 1.01.39 1-.72 2.37-1.18 3.89-1.24l.74-3.48c.02-.09.07-.16.15-.21.08-.05.17-.06.26-.04l2.45.52c.17-.33.52-.56.92-.56.57 0 1.04.47 1.04 1.04s-.47 1.04-1.04 1.04c-.55 0-1-.43-1.04-.97l-2.2-.46-.66 3.12c1.49.07 2.83.53 3.81 1.24.27-.24.62-.39 1.01-.39zM6.96 11.04c0 .57.47 1.04 1.04 1.04s1.04-.47 1.04-1.04-.47-1.04-1.04-1.04-1.04.47-1.04 1.04zm5.08 2.32c-.36.36-1.04.53-2.04.53s-1.68-.17-2.04-.53c-.12-.12-.12-.31 0-.43.12-.12.31-.12.43 0 .24.24.74.36 1.61.36s1.37-.12 1.61-.36c.12-.12.31-.12.43 0 .12.12.12.31 0 .43zm-.04-1.28c.57 0 1.04-.47 1.04-1.04s-.47-1.04-1.04-1.04-1.04.47-1.04 1.04.47 1.04 1.04 1.04z" />
+                          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
+                            <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.34.34 0 0 1 .414-.261l2.92.615a1.248 1.248 0 0 1 1.057-.177z" />
                           </svg>
                         </div>
                         <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Reddit</span>
                       </button>
 
                       {/* 知乎 - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group">
+                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.zhihu.com', '_blank')}>
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#0066FF' }}>
-                          <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
-                            <path d="M5.721 0C2.251 0 0 2.25 0 5.719V18.28C0 21.751 2.252 24 5.721 24h12.56C21.751 24 24 21.75 24 18.281V5.72C24 2.249 21.75 0 18.281 0zm1.964 4.078h6.789c.164 0 .296.132.296.296v.818c0 .164-.132.296-.296.296H7.685c-.164 0-.296-.132-.296-.296v-.818c0-.164.132-.296.296-.296zm-.296 3.245c0-.164.132-.296.296-.296h3.394c.164 0 .296.132.296.296v7.285c0 .164-.132.296-.296.296H7.685c-.164 0-.296-.132-.296-.296zm5.393 0c0-.164.132-.296.296-.296h3.394c.164 0 .296.132.296.296v7.285c0 .164-.132.296-.296.296h-3.394c-.164 0-.296-.132-.296-.296z" />
+                          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
+                            <path d="M5.378 15.503c.854 0 1.708.068 2.562.138.614.05 1.229.1 1.776.15l1.639 4.743c.273.819.341 1.092.682 1.092.41 0 .615-.41.615-.887 0-.341-.069-.683-.205-1.024l-1.57-4.232c1.432.069 2.865.137 4.298.137 1.706 0 2.593-.683 2.593-2.048V5.326c0-1.843-1.092-2.799-3.208-2.799H5.992C3.809 2.527 2.717 3.483 2.717 5.326v8.125c0 1.365.887 2.052 2.661 2.052zm0-10.72h8.739v8.601H5.378V4.783zm13.109 8.601c0 .41.341.683.751.683.41 0 .683-.341.683-.751V4.783c0-.41.273-.683.682-.683.41 0 .683.273.683.683v8.601c0 1.57-1.161 2.799-2.799 2.799-.41 0-.683-.273-.683-.683v-.068c.205 0 .41-.068.614-.205.069-.068.069-.136.069-.205v-1.638z" />
                           </svg>
                         </div>
                         <span className="text-xs text-gray-400 group-hover:text-white transition-colors">知乎</span>
                       </button>
 
                       {/* 小红书 - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group">
+                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.xiaohongshu.com', '_blank')}>
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FE2C55' }}>
-                          <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z" />
+                          <svg className="w-10 h-10" viewBox="0 0 1024 1024" fill="white">
+                            <path d="M211.5 358.5c0 0 49-65 149-65 59 0 71.5 28.5 71.5 28.5s-5.5-23-45.5-62.5c-44-43.5-31-89-31-89s32-9 66.5 23c22.5 21 39 52 46.5 86.5 6-39.5 26.5-121 82.5-142 66-24.5 96.5 2 96.5 2s-31.5 13-43 64c-11 48.5 1 106 1 106s82-27.5 130 19c62 60 41 155.5 41 155.5s92.5 12 119 72.5c24 55 10 103 10 103s-8.5 17-27 20c-15.5 2.5-19.5-6-27.5-25-10.5-24.5-54-46.5-54-46.5s-23 105.5-64 163c-39 54.5-98.5 72.5-131.5 76-85.5 9-106-44.5-106-44.5s-24 55-108 50.5c-97-5-115.5-70-115.5-70S77 826.5 64 772.5c-7-29.5 18-36.5 36.5-36 19 .5 21.5 13 22 20.5 1.5 29.5 23 75.5 75.5 84.5 48.5 8 72-13.5 76-32.5 3-13.5-10-27-24.5-35-51.5-28.5-88-82.5-89-142.5-.5-30.5 7-60.5 18.5-86.5-30.5 8.5-67 29.5-80.5 67-15 41.5-9.5 54-9.5 54s-26.5 1-35.5-22.5c-5.5-14-3.5-29-3.5-29s-4.5-75.5 48.5-138c41.5-49 112.5-118 112.5-118zm320.5 107c0 0-33-8-47.5 34.5-20.5 60.5 5 137.5 5 137.5s38-16 57.5-65.5c15-38.5-15-106.5-15-106.5z" />
                           </svg>
                         </div>
                         <span className="text-xs text-gray-400 group-hover:text-white transition-colors">小红书</span>
                       </button>
 
                       {/* 百度贴吧 - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group">
+                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://tieba.baidu.com', '_blank')}>
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#4A90E2' }}>
-                          <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
-                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+                          <svg className="w-10 h-10" viewBox="0 0 1024 1024" fill="white">
+                            <path d="M497.6 150.4c-97.6 0-185.6 30.4-230.4 75.2v25.6h52.8c115.2 0 166.4 56 166.4 121.6 0 54.4-44.8 113.6-136 123.2-12.8 1.6-14.4 3.2-14.4 4.8 0 1.6 3.2 4.8 9.6 4.8 24 0 76.8 0 108.8 3.2 44.8 4.8 73.6 20.8 91.2 51.2 12.8 22.4 17.6 51.2 16 86.4h112v-104c0-22.4 17.6-40 40-40h96V193.6c-67.2-27.2-184-43.2-312-43.2zM216 289.6V560h80c75.2 0 120 28.8 120 73.6 0 19.2-9.6 35.2-40 56-27.2 19.2-80 30.4-150.4 30.4H176C78.4 720 0 641.6 0 544V292.8c30.4-14.4 76.8-24 128-24 35.2 0 65.6 3.2 88 20.8z m564.8 0V464h206.4c19.2-25.6 33.6-59.2 33.6-100.8 0-41.6-9.6-76.8-28.8-100.8-27.2-36.8-84.8-59.2-156.8-59.2-19.2 0-36.8 1.6-54.4 4.8V289.6z m-126.4 73.6v96h62.4c65.6 0 104-32 104-81.6 0-33.6-20.8-57.6-67.2-57.6h-59.2c-22.4 0-40 19.2-40 43.2z m206.4 196.8h-72v160h176c12.8 0 25.6-3.2 36.8-8-1.6-38.4-12.8-67.2-32-88-25.6-27.2-64-46.4-108.8-64z" />
                           </svg>
                         </div>
                         <span className="text-xs text-gray-400 group-hover:text-white transition-colors">贴吧</span>
                       </button>
 
                       {/* Obsidian - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group">
+                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://obsidian.md', '_blank')}>
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#7C3AED' }}>
-                          <svg className="w-9 h-9" viewBox="0 0 65 100" fill="white">
-                            <path d="M47.9 0L65 35.5 32.5 100 0 35.5 17.1 0h30.8zM32.5 20L20 45h25L32.5 20z" />
+                          <svg className="w-9 h-9" viewBox="0 0 500 500" fill="white">
+                            <path d="M 218.667 0 C 218.667 0 167.318 64.922 138.646 117.812 C 109.974 170.703 68.646 226.042 35.833 286.979 C 2.99 347.917 0.005 353.125 0.005 353.125 L 75.005 470.833 L 138.026 500 L 297.385 464.583 L 386.411 381.25 L 366.667 186.458 L 294.021 78.646 L 218.667 0 Z" />
                           </svg>
                         </div>
                         <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Obsidian</span>
                       </button>
 
-                      {/* LinuxDo - 使用 Discourse 风格图标 */}
-                      <button className="flex flex-col items-center gap-2 group">
+                      {/* LinuxDo - Linux Penguin 图标 */}
+                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://linux.do', '_blank')}>
                         <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#F1592A' }}>
-                          <svg className="w-9 h-9" viewBox="0 0 24 24" fill="white">
-                            <path d="M12.103 0C5.533 0 0 5.278 0 11.79c0 2.307.674 4.463 1.834 6.287L0 24l6.134-1.758A12.03 12.03 0 0012.103 24c6.57 0 11.897-5.278 11.897-11.79C24 5.698 18.673 0 12.103 0zm.09 4.049c3.467 0 6.283 2.816 6.283 6.283 0 3.467-2.816 6.283-6.283 6.283a6.283 6.283 0 01-6.283-6.283c0-3.467 2.816-6.283 6.283-6.283z" />
+                          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
+                            <path d="M12 0c-4.97 0-9 4.03-9 9 0 2.27.85 4.34 2.25 5.92-.48 2.05-1.57 3.55-3.08 4.35 1.48 2.12 4.19 3.73 7.82 3.73s6.34-1.61 7.82-3.73c-1.51-.8-2.6-2.3-3.08-4.35C19.15 13.34 20 11.27 20 9c0-4.97-4.03-9-9-9zM7.5 7c.83 0 1.5.67 1.5 1.5S8.33 10 7.5 10 6 9.33 6 8.5 6.67 7 7.5 7zm9 0c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5-1.5-.67-1.5-1.5.67-1.5 1.5-1.5z" />
                           </svg>
                         </div>
                         <span className="text-xs text-gray-400 group-hover:text-white transition-colors">LinuxDo</span>
@@ -1185,109 +1185,122 @@ const App = () => {
                       )}
 
                       {/* 快捷入口 - PC端占 30%，网格布局 */}
-                      <div className="flex justify-center gap-3 mt-4 lg:mt-0 lg:flex-1 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start">
-                        {/* 收藏夹 */}
-                        <button
-                          onClick={() => { setSettingsInitialView('collector'); setActiveTab('settings'); }}
-                          className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-cyan-500/30 hover:to-blue-500/30 transition-all active:scale-[0.98]"
-                        >
-                          <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                          </svg>
-                          <span className="hidden lg:block text-sm text-cyan-400 font-medium">收藏夹</span>
-                          {collectedCount > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 lg:top-2 lg:right-2 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-cyan-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
-                              {collectedCount > 99 ? '99+' : collectedCount}
-                            </span>
-                          )}
-                        </button>
-
-                        {/* 提醒 */}
-                        <button
-                          onClick={() => { setSettingsInitialView('reminder'); setActiveTab('settings'); }}
-                          className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-amber-500/30 hover:to-orange-500/30 transition-all active:scale-[0.98]"
-                        >
-                          <svg className="w-5 h-5 lg:w-6 lg:h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <circle cx="12" cy="12" r="10" />
-                            <polyline points="12 6 12 12 16 14" />
-                          </svg>
-                          <span className="hidden lg:block text-sm text-amber-400 font-medium">提醒</span>
-                          {reminderCount > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-amber-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
-                              {reminderCount > 99 ? '99+' : reminderCount}
-                            </span>
-                          )}
-                        </button>
-
-                        {/* TODO */}
-                        <button
-                          onClick={() => { setSettingsInitialView('todo'); setActiveTab('settings'); }}
-                          className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-blue-500/30 hover:to-purple-500/30 transition-all active:scale-[0.98]"
-                        >
-                          <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M9 11l3 3L22 4" />
-                            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                          </svg>
-                          <span className="hidden lg:block text-sm text-blue-400 font-medium">待办</span>
-                          {todoCount > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-blue-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
-                              {todoCount > 99 ? '99+' : todoCount}
-                            </span>
-                          )}
-                        </button>
-
-                        {/* 笔记 */}
-                        <button
-                          onClick={() => setIsNotesOpen(true)}
-                          className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-purple-500/30 hover:to-pink-500/30 transition-all active:scale-[0.98]"
-                          title="笔记"
-                        >
-                          <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                            <line x1="16" y1="13" x2="8" y2="13" />
-                            <line x1="16" y1="17" x2="8" y2="17" />
-                          </svg>
-                          <span className="hidden lg:block text-sm text-purple-300 font-medium">笔记</span>
-                          {notesCount > 0 && (
-                            <span className="absolute -top-1.5 -right-1.5 lg:relative lg:ml-auto min-w-[18px] h-[18px] px-1 bg-purple-500 rounded-full text-[10px] font-bold text-white flex items-center justify-center">
-                              {notesCount > 99 ? '99+' : notesCount}
-                            </span>
-                          )}
-                        </button>
-
-                        {/* 音频转写 */}
-                        <button
-                          onClick={() => {
-                            setSettingsInitialView('transcriber');
-                            setActiveTab('settings');
-                          }}
-                          className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-violet-500/30 hover:to-purple-500/30 transition-all active:scale-[0.98]"
-                          title="音频转写"
-                        >
-                          <svg className="w-5 h-5 lg:w-6 lg:h-6 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                            <line x1="12" y1="19" x2="12" y2="23" />
-                            <line x1="8" y1="23" x2="16" y2="23" />
-                          </svg>
-                          <span className="hidden lg:block text-sm text-violet-400 font-medium">转写</span>
-                        </button>
-
-                        {/* 应用 */}
-                        <button
-                          onClick={() => setIsAppsModalOpen(true)}
-                          className="relative w-11 h-11 lg:w-full lg:h-14 bg-gradient-to-br from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:from-cyber-lime/30 hover:to-emerald-500/30 transition-all active:scale-[0.98]"
-                          title="应用"
-                        >
-                          <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <div className="mt-4 lg:mt-0 lg:flex-1">
+                        {/* 标题 - 仅PC端显示，用于对齐 */}
+                        <div className="hidden lg:flex items-center gap-2 mb-3">
+                          <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <rect x="3" y="3" width="7" height="7" rx="1" />
                             <rect x="14" y="3" width="7" height="7" rx="1" />
                             <rect x="3" y="14" width="7" height="7" rx="1" />
                             <rect x="14" y="14" width="7" height="7" rx="1" />
                           </svg>
-                          <span className="hidden lg:block text-sm text-cyber-lime font-medium">应用</span>
-                        </button>
+                          <span className="text-sm font-semibold text-white">快捷访问</span>
+                        </div>
+
+                        <div className="flex justify-center gap-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start">
+                          {/* 收藏夹 */}
+                          <button
+                            onClick={() => { setSettingsInitialView('collector'); setActiveTab('settings'); }}
+                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1a1c20] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#252830] transition-all active:scale-[0.98]"
+                          >
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                            </svg>
+                            <span className="hidden lg:block text-sm text-cyan-400 font-medium">收藏</span>
+                            {collectedCount > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-cyan-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                {collectedCount > 99 ? '99+' : collectedCount}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* 提醒 */}
+                          <button
+                            onClick={() => { setSettingsInitialView('reminder'); setActiveTab('settings'); }}
+                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1f1b16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#2a241c] transition-all active:scale-[0.98]"
+                          >
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10" />
+                              <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            <span className="hidden lg:block text-sm text-amber-400 font-medium">提醒</span>
+                            {reminderCount > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-amber-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                {reminderCount > 99 ? '99+' : reminderCount}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* TODO */}
+                          <button
+                            onClick={() => { setSettingsInitialView('todo'); setActiveTab('settings'); }}
+                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a22] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e232e] transition-all active:scale-[0.98]"
+                          >
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M9 11l3 3L22 4" />
+                              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                            </svg>
+                            <span className="hidden lg:block text-sm text-blue-400 font-medium">待办</span>
+                            {todoCount > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-blue-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                {todoCount > 99 ? '99+' : todoCount}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* 笔记 */}
+                          <button
+                            onClick={() => setIsNotesOpen(true)}
+                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1d161d] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#271e27] transition-all active:scale-[0.98]"
+                            title="笔记"
+                          >
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                              <line x1="16" y1="13" x2="8" y2="13" />
+                              <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                            <span className="hidden lg:block text-sm text-purple-300 font-medium">笔记</span>
+                            {notesCount > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-purple-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                {notesCount > 99 ? '99+' : notesCount}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* 音频转写 */}
+                          <button
+                            onClick={() => {
+                              setSettingsInitialView('transcriber');
+                              setActiveTab('settings');
+                            }}
+                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#191621] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#211e2b] transition-all active:scale-[0.98]"
+                            title="音频转写"
+                          >
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                              <line x1="12" y1="19" x2="12" y2="23" />
+                              <line x1="8" y1="23" x2="16" y2="23" />
+                            </svg>
+                            <span className="hidden lg:block text-sm text-violet-400 font-medium">转写</span>
+                          </button>
+
+                          {/* 应用 */}
+                          <button
+                            onClick={() => setIsAppsModalOpen(true)}
+                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e231e] transition-all active:scale-[0.98]"
+                            title="应用"
+                          >
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="3" y="3" width="7" height="7" rx="1" />
+                              <rect x="14" y="3" width="7" height="7" rx="1" />
+                              <rect x="3" y="14" width="7" height="7" rx="1" />
+                              <rect x="14" y="14" width="7" height="7" rx="1" />
+                            </svg>
+                            <span className="hidden lg:block text-sm text-cyber-lime font-medium">应用</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1761,7 +1774,7 @@ const App = () => {
         </nav>
 
         {/* 移动端底部导航 - lg 以下显示 */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-black/40 backdrop-blur-2xl border-t border-white/10 pb-safe pt-2 px-4 z-50 h-[80px]">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#0a0a0f] border-t border-white/10 pb-safe pt-2 px-4 z-50 h-[80px]">
           <div className="flex justify-around items-center h-full max-w-lg mx-auto pb-4">
             {/* Discovery */}
             <button
@@ -1908,9 +1921,11 @@ const App = () => {
             onClick={() => { setIsUploaderPickerOpen(false); setUploaderSearchTerm(''); }}
           >
             <div
-              className="w-full max-w-lg bg-[#0c0c0c] rounded-t-3xl border-t border-white/10 max-h-[70vh] flex flex-col animate-slide-up"
+              className="w-full max-w-lg bg-cyber-card rounded-t-3xl border-t border-white/10 max-h-[70vh] flex flex-col animate-slide-up relative overflow-hidden"
               onClick={e => e.stopPropagation()}
             >
+              {/* 顶部光晕背景 - 全宽渐变 */}
+              <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-cyber-lime/20 to-transparent pointer-events-none" />
               {/* 标题栏 */}
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                 <h3 className="text-white font-bold text-lg">选择 UP主</h3>
@@ -1975,9 +1990,16 @@ const App = () => {
                             {uploader.name[0]}
                           </div>
                         )}
-                        <div className="flex-1 text-left">
-                          <p className="text-white font-medium text-sm">{uploader.name}</p>
-                          <p className="text-gray-500 text-xs">{uploader.count} 个视频</p>
+                        <div className="flex-1 text-left min-w-0">
+                          <p className="text-white font-medium text-sm truncate">{uploader.name}</p>
+                          <div className="flex items-center justify-between gap-2 mt-0.5 whitespace-nowrap overflow-hidden">
+                            <p className="text-gray-500 text-[10px] font-mono shrink-0">
+                              MID: {uploader.mid.toString().length > 10
+                                ? `${uploader.mid.toString().slice(0, 10)}...`
+                                : uploader.mid}
+                            </p>
+                            <p className="text-gray-500 text-[10px] shrink-0">{uploader.count} 个视频</p>
+                          </div>
                         </div>
                         {selectedUploader?.mid === uploader.mid && (
                           <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

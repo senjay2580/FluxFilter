@@ -509,3 +509,133 @@ export async function deleteTranscript(id: number) {
 
   if (error) throw error;
 }
+
+// ============================================
+// AI 配置相关操作 (持久化存储)
+// ============================================
+
+import type { AIConfig, UpsertAIConfigParams } from './database.types';
+
+/** 获取用户所有 AI 配置 */
+export async function getAIConfigs(userId: string) {
+  const { data, error } = await supabase
+    .from('ai_config')
+    .select('*')
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('获取 AI 配置失败:', error);
+    return [] as AIConfig[];
+  }
+  return data as AIConfig[];
+}
+
+/** 获取特定模型的 AI 配置 */
+export async function getAIConfigByModel(userId: string, modelId: string) {
+  const { data, error } = await supabase
+    .from('ai_config')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('model_id', modelId)
+    .maybeSingle();
+
+  if (error) {
+    console.error(`获取模型 ${modelId} 配置失败:`, error);
+    return null;
+  }
+  return data as AIConfig | null;
+}
+
+/** 插入或更新 AI 配置 */
+export async function upsertAIConfig(userId: string, params: UpsertAIConfigParams) {
+  const { data, error } = await supabase
+    .from('ai_config')
+    .upsert(
+      {
+        user_id: userId,
+        model_id: params.model_id,
+        api_key: params.api_key,
+        base_url: params.base_url || null,
+        custom_model_name: params.custom_model_name || null,
+        settings: params.settings || null,
+        // updated_at 由数据库触发器自动处理
+      },
+      { onConflict: 'user_id, model_id' }
+    )
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as AIConfig;
+}
+
+/** 删除特定模型的配置 */
+export async function deleteAIConfig(userId: string, modelId: string) {
+  const { error } = await supabase
+    .from('ai_config')
+    .delete()
+    .eq('user_id', userId)
+    .eq('model_id', modelId);
+
+  if (error) {
+    console.error('删除 AI 配置失败:', error);
+    throw error;
+  }
+}
+
+// ============================================
+// 笔记相关操作
+// ============================================
+
+import type { Note, CreateNoteParams, UpdateNoteParams } from "./database.types";
+
+/** 获取所有笔记 */
+export async function getNotes(userId: string) {
+  const { data, error } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("user_id", userId)
+    .order("is_pinned", { ascending: false })
+    .order("pin_order", { ascending: true })
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+  return data as Note[];
+}
+
+/** 创建笔记 */
+export async function createNote(userId: string, params: CreateNoteParams) {
+  const { data, error } = await supabase
+    .from("notes")
+    .insert({
+      user_id: userId,
+      title: params.title,
+      content: params.content,
+      preview: params.preview || null,
+      color: params.color || "default",
+      category: params.category || null,
+      is_pinned: params.is_pinned || false
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Note;
+}
+
+/** 更新笔记 */
+export async function updateNote(id: number, params: UpdateNoteParams) {
+  const { data, error } = await supabase
+    .from("notes")
+    .update({
+      ...params,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Note;
+}
+

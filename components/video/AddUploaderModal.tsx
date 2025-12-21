@@ -2,6 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { supabase } from '../../lib/supabase';
 import { getUploaderInfo } from '../../lib/bilibili';
 import { getStoredUserId } from '../../lib/auth';
+import { invalidateCache, CACHE_KEYS } from '../../lib/cache';
 
 interface AddUploaderModalProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
   // 提交添加
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!uploaderInfo) {
       setError('请先获取UP主信息');
       return;
@@ -87,6 +88,10 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
       // 成功
       setMid('');
       setUploaderInfo(null);
+
+      // 使缓存失效，确保同步按钮列表更新
+      invalidateCache(CACHE_KEYS.UPLOADERS(userId));
+
       onSuccess();
       onClose();
     } catch (err: any) {
@@ -114,11 +119,14 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
       style={{ WebkitFontSmoothing: 'antialiased', textRendering: 'optimizeLegibility' }}
     >
       <div
-        className="w-full max-w-sm mx-4 bg-[#0a0a0a]/95 backdrop-blur-xl border border-white/20 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden"
+        className="w-full max-w-sm mx-4 bg-cyber-card backdrop-blur-xl border border-white/20 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.8)] overflow-hidden relative"
         onClick={e => e.stopPropagation()}
       >
+        {/* 顶部光晕背景 - 全宽渐变 */}
+        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-cyber-lime/20 to-transparent pointer-events-none z-0" />
+
         {/* 头部 */}
-        <div className="px-5 py-4 bg-gradient-to-r from-cyber-lime/10 to-cyan-500/10 border-b border-white/10">
+        <div className="px-5 py-4 border-b border-white/10 relative z-10">
           <h2 className="text-lg font-bold text-white flex items-center gap-2" style={{ WebkitFontSmoothing: 'antialiased' }}>
             <svg className="w-5 h-5 text-cyber-lime drop-shadow-[0_0_8px_rgba(190,242,100,0.5)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
@@ -163,11 +171,10 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
                 type="button"
                 onClick={fetchUploaderInfo}
                 disabled={fetching || !mid.trim()}
-                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
-                  fetching || !mid.trim()
-                    ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/10'
-                    : 'bg-gradient-to-r from-cyan-500/80 to-blue-500/80 text-white hover:from-cyan-400 hover:to-blue-400 border border-cyan-400/30 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] hover:scale-105 active:scale-95'
-                }`}
+                className={`px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${fetching || !mid.trim()
+                  ? 'bg-white/5 text-gray-500 cursor-not-allowed border border-white/10'
+                  : 'bg-gradient-to-r from-cyan-500/80 to-blue-500/80 text-white hover:from-cyan-400 hover:to-blue-400 border border-cyan-400/30 shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] hover:scale-105 active:scale-95'
+                  }`}
                 style={{ WebkitFontSmoothing: 'antialiased' }}
               >
                 {fetching ? (
@@ -184,21 +191,29 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
           {uploaderInfo && (
             <div className="p-4 bg-gradient-to-br from-cyber-lime/10 to-cyan-500/10 border border-cyber-lime/30 rounded-xl shadow-[0_0_20px_rgba(190,242,100,0.1)]">
               <div className="flex items-center gap-3">
-                <img 
-                  src={uploaderInfo.face} 
+                <img
+                  src={uploaderInfo.face}
                   alt={uploaderInfo.name}
                   className="w-14 h-14 rounded-full border-2 border-cyber-lime/50 shadow-[0_0_15px_rgba(190,242,100,0.3)]"
                   referrerPolicy="no-referrer"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-white font-bold truncate" style={{ WebkitFontSmoothing: 'antialiased' }}>{uploaderInfo.name}</p>
-                  <p className="text-xs text-gray-400" style={{ WebkitFontSmoothing: 'antialiased' }}>MID: {uploaderInfo.mid}</p>
+                  <p className="text-white font-bold truncate text-sm" style={{ WebkitFontSmoothing: 'antialiased' }}>{uploaderInfo.name}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-[10px] text-gray-400 font-mono" style={{ WebkitFontSmoothing: 'antialiased' }}>
+                      MID: {uploaderInfo.mid.toString().length > 10
+                        ? `${uploaderInfo.mid.toString().slice(0, 10)}...`
+                        : uploaderInfo.mid}
+                    </p>
+                    <span className="w-1 h-1 rounded-full bg-gray-600"></span>
+                    <p className="text-[10px] text-cyber-lime font-medium" style={{ WebkitFontSmoothing: 'antialiased' }}>上次 0 个视频</p>
+                  </div>
                   {uploaderInfo.sign && (
-                    <p className="text-[10px] text-gray-500 line-clamp-2 mt-1" style={{ WebkitFontSmoothing: 'antialiased' }}>{uploaderInfo.sign}</p>
+                    <p className="text-[10px] text-gray-500 line-clamp-1 mt-1 opacity-80" style={{ WebkitFontSmoothing: 'antialiased' }}>{uploaderInfo.sign}</p>
                   )}
                 </div>
                 <svg className="w-5 h-5 text-cyber-lime shrink-0 drop-shadow-[0_0_8px_rgba(190,242,100,0.5)]" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                 </svg>
               </div>
             </div>
@@ -224,11 +239,10 @@ const AddUploaderModal: React.FC<AddUploaderModalProps> = ({ isOpen, onClose, on
             <button
               type="submit"
               disabled={loading || !uploaderInfo}
-              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${
-                loading || !uploaderInfo
-                  ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30'
-                  : 'bg-gradient-to-r from-cyber-lime to-lime-400 text-black hover:from-lime-400 hover:to-cyber-lime shadow-[0_0_25px_rgba(190,242,100,0.4)] hover:shadow-[0_0_35px_rgba(190,242,100,0.6)] hover:scale-105 active:scale-95 border border-cyber-lime/50'
-              }`}
+              className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all duration-200 ${loading || !uploaderInfo
+                ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed border border-gray-600/30'
+                : 'bg-gradient-to-r from-cyber-lime to-lime-400 text-black hover:from-lime-400 hover:to-cyber-lime shadow-[0_0_25px_rgba(190,242,100,0.4)] hover:shadow-[0_0_35px_rgba(190,242,100,0.6)] hover:scale-105 active:scale-95 border border-cyber-lime/50'
+                }`}
               style={{ WebkitFontSmoothing: 'antialiased' }}
             >
               {loading ? (

@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser, updateBilibiliCookie, logout, type User } from '../../lib/auth';
 import { clearCookieCache } from '../../lib/bilibili';
+import { invalidateCache, CACHE_KEYS } from '../../lib/cache';
 import { ClockIcon } from '../shared/Icons';
+import AIConfigForm from '../shared/AIConfigForm';
 
 interface Uploader {
   id: number;
@@ -52,7 +54,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
     if (!openMenuId) return null;
     return videos.find(v => v.id === openMenuId) || null;
   }, [openMenuId, videos]);
-  
+
   // 用户信息
   const [user, setUser] = useState<User | null>(null);
   const [cookie, setCookie] = useState('');
@@ -67,20 +69,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       setCookie(currentUser?.bilibili_cookie || '');
-      
+
       if (!currentUser?.id) {
         setUploaders([]);
         setVideoCount(0);
         return;
       }
-      
+
       // 获取UP主列表（按用户过滤）
       const { data: uploaderData } = await supabase
         .from('uploader')
         .select('*')
         .eq('user_id', currentUser.id)
         .order('created_at', { ascending: false });
-      
+
       setUploaders(uploaderData || []);
 
       // 获取视频列表（含UP主信息）
@@ -93,7 +95,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
         .eq('user_id', currentUser.id)
         .order('pubdate', { ascending: false })
         .limit(100);
-      
+
       // 处理 uploader 数据（Supabase 返回数组，取第一个）
       const processedVideos = (videoData || []).map((v: any) => ({
         ...v,
@@ -114,29 +116,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       setCookieMessage(null);
     }
   }, [isOpen, fetchData]);
-  
+
   // 保存Cookie
   const handleSaveCookie = async () => {
     if (!cookie.trim()) {
       setCookieMessage({ type: 'error', text: '请输入Cookie' });
       return;
     }
-    
+
     setSavingCookie(true);
     setCookieMessage(null);
-    
+
     const result = await updateBilibiliCookie(cookie.trim());
-    
+
     if (result.success) {
       clearCookieCache();
       setCookieMessage({ type: 'success', text: 'Cookie保存成功！' });
     } else {
       setCookieMessage({ type: 'error', text: result.error || '保存失败' });
     }
-    
+
     setSavingCookie(false);
   };
-  
+
   // 退出登录
   const handleLogout = () => {
     if (confirm('确定要退出登录吗？')) {
@@ -150,11 +152,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   // 删除UP主
   const handleDeleteUploader = async (id: number, name: string) => {
     if (!confirm(`确定要取消关注「${name}」吗？`)) return;
-    
+
     setDeleting(id);
     try {
       await supabase.from('uploader').delete().eq('id', id);
       setUploaders(prev => prev.filter(u => u.id !== id));
+
+      // 使缓存失效，确保同步按钮列表更新
+      if (user?.id) {
+        invalidateCache(CACHE_KEYS.UPLOADERS(user.id));
+      }
     } catch (err) {
       alert('删除失败');
     } finally {
@@ -165,9 +172,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   // 删除单个视频
   const handleDeleteVideo = async (id: number, bvid: string) => {
     if (!confirm('确定要删除这个视频吗？')) return;
-    
+
     if (!user?.id) return;
-    
+
     setDeletingVideo(id);
     try {
       // 先删除待看列表中的引用
@@ -187,14 +194,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   if (!isOpen) return null;
 
   return createPortal(
-    <div 
+    <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div 
-        className="w-full max-w-lg bg-[#0c0c14] border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl h-[75vh] flex flex-col overflow-hidden animate-slide-up"
+      <div
+        className="w-full max-w-lg bg-cyber-card border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl h-[75vh] flex flex-col overflow-hidden animate-slide-up relative"
         onClick={e => e.stopPropagation()}
       >
+        {/* 顶部光晕背景 - 全宽渐变 */}
+        <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-cyber-lime/20 to-transparent pointer-events-none" />
         {/* 头部 */}
         <div className="px-5 py-4 border-b border-white/10 shrink-0">
           <div className="flex items-center justify-between">
@@ -207,7 +216,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 <p className="text-xs text-gray-400">ID: {user?.id?.slice(0, 8) || '-'}</p>
               </div>
             </div>
-            <button 
+            <button
               onClick={onClose}
               className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
             >
@@ -234,31 +243,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
         <div className="flex gap-2 p-2 shrink-0">
           <button
             onClick={() => setActiveTab('account')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-              activeTab === 'account' 
-                ? 'bg-cyber-lime/20 text-cyber-lime' 
-                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
-            }`}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'account'
+              ? 'bg-cyber-lime/20 text-cyber-lime'
+              : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+              }`}
           >
             账户
           </button>
           <button
             onClick={() => setActiveTab('uploaders')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-              activeTab === 'uploaders' 
-                ? 'bg-cyber-lime/20 text-cyber-lime' 
-                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
-            }`}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'uploaders'
+              ? 'bg-cyber-lime/20 text-cyber-lime'
+              : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+              }`}
           >
             关注
           </button>
           <button
             onClick={() => setActiveTab('videos')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${
-              activeTab === 'videos' 
-                ? 'bg-cyber-lime/20 text-cyber-lime' 
-                : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
-            }`}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'videos'
+              ? 'bg-cyber-lime/20 text-cyber-lime'
+              : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+              }`}
           >
             数据
           </button>
@@ -315,6 +321,19 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 </ol>
               </details>
 
+              <div className="h-px bg-white/5 mx-2 my-2" />
+
+              {/* 服务配置 */}
+              <div className="p-4 bg-white/5 rounded-xl space-y-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9" />
+                  </svg>
+                  <p className="text-white font-medium">服务配置</p>
+                </div>
+                <AIConfigForm />
+              </div>
+
               {/* 退出登录 */}
               <button
                 onClick={handleLogout}
@@ -332,28 +351,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 </div>
               ) : (
                 uploaders.map(uploader => (
-                  <div 
+                  <div
                     key={uploader.id}
                     className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
                   >
                     {/* 头像 */}
-                    <img 
-                      src={uploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'} 
+                    <img
+                      src={uploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'}
                       alt={uploader.name}
                       className="w-10 h-10 rounded-full"
                       referrerPolicy="no-referrer"
                     />
-                    
+
                     {/* 信息 */}
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-medium truncate">{uploader.name}</p>
-                      <div className="flex items-center gap-2 text-[10px] text-gray-500">
-                        <span>MID: {uploader.mid}</span>
+                      <div className="flex items-center justify-between gap-2 mt-0.5 whitespace-nowrap overflow-hidden">
+                        <span className="text-[10px] text-gray-500 font-mono shrink-0">
+                          MID: {uploader.mid.toString().length > 10
+                            ? `${uploader.mid.toString().slice(0, 10)}...`
+                            : uploader.mid}
+                        </span>
                         {uploader.last_sync_count !== null && (
-                          <>
-                            <span>•</span>
-                            <span className="text-cyber-lime">上次 {uploader.last_sync_count} 个视频</span>
-                          </>
+                          <span className="text-[10px] text-cyber-lime font-medium shrink-0">上次 {uploader.last_sync_count} 个视频</span>
                         )}
                       </div>
                     </div>
@@ -372,7 +392,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                           <line x1="10" y1="14" x2="21" y2="3" />
                         </svg>
                       </button>
-                      
+
                       {/* 删除 */}
                       <button
                         onClick={() => handleDeleteUploader(uploader.id, uploader.name)}
@@ -413,7 +433,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                   <p className="text-xs mt-1">同步UP主后视频会出现在这里</p>
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {videos.map(video => (
                     <div
                       key={video.id}
@@ -440,34 +460,28 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                       {/* 标题、UP主和时长 */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white truncate">{video.title}</p>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <div className="flex items-center justify-between gap-2 mt-1 min-w-0">
                           {video.uploader && (
-                            <>
-                              <span className="text-xs text-cyber-lime">{video.uploader.name}</span>
-                              <span className="text-xs text-gray-600">•</span>
-                            </>
+                            <span className="text-xs text-cyber-lime truncate shrink mr-auto">{video.uploader.name}</span>
                           )}
-                          <span className="text-xs text-gray-500">
-                            {Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}
-                          </span>
-                          <span className="text-xs text-gray-600">•</span>
-                          <span className="text-xs text-gray-500">
-                            {new Date(video.pubdate).toLocaleDateString()}
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0 text-xs text-gray-500 font-mono whitespace-nowrap">
+                            <span>{Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}</span>
+                            <span className="text-gray-600">•</span>
+                            <span>{new Date(video.pubdate).toLocaleDateString()}</span>
+                          </div>
                         </div>
                       </div>
 
                       {/* 三个点按钮 */}
                       <button
                         onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === video.id ? null : video.id); }}
-                        className={`p-2 rounded-lg transition-all flex-shrink-0 ${
-                          openMenuId === video.id ? 'bg-white/20' : 'opacity-60 hover:opacity-100 hover:bg-white/10'
-                        }`}
+                        className={`p-2 rounded-lg transition-all flex-shrink-0 ${openMenuId === video.id ? 'bg-white/20' : 'opacity-60 hover:opacity-100 hover:bg-white/10'
+                          }`}
                       >
                         <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
-                          <circle cx="5" cy="12" r="2"/>
-                          <circle cx="12" cy="12" r="2"/>
-                          <circle cx="19" cy="12" r="2"/>
+                          <circle cx="5" cy="12" r="2" />
+                          <circle cx="12" cy="12" r="2" />
+                          <circle cx="19" cy="12" r="2" />
                         </svg>
                       </button>
                     </div>
@@ -490,14 +504,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       {menuVideo && (
         <div className="fixed inset-0 z-[99999]" onClick={(e) => e.stopPropagation()}>
           {/* 遮罩层 */}
-          <div 
+          <div
             className="absolute inset-0 bg-black/70"
             onClick={() => setOpenMenuId(null)}
             style={{ animation: 'fadeIn 0.25s ease-out' }}
           />
-          
+
           {/* 抽屉内容 */}
-          <div 
+          <div
             className="absolute bottom-0 left-0 right-0"
             style={{ animation: 'slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}
           >
@@ -506,10 +520,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
               <div className="flex justify-center pt-3 pb-2">
                 <div className="w-10 h-1 bg-white/25 rounded-full" />
               </div>
-              
+
               {/* 视频信息预览 */}
               <div className="px-4 pb-3 pt-1 flex gap-3 items-start border-b border-white/10">
-                <img 
+                <img
                   src={menuVideo.pic?.startsWith('//') ? `https:${menuVideo.pic}` : menuVideo.pic || ''}
                   alt={menuVideo.title}
                   className="w-16 h-10 rounded object-cover bg-gray-800 shrink-0"
@@ -532,14 +546,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                     }}
                     className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
                   >
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
-                      watchLaterIds?.has(menuVideo.bvid) ? 'bg-red-500/15' : 'bg-white/10'
-                    }`}>
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center ${watchLaterIds?.has(menuVideo.bvid) ? 'bg-red-500/15' : 'bg-white/10'
+                      }`}>
                       {watchLaterIds?.has(menuVideo.bvid) ? (
                         <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <circle cx="12" cy="12" r="10"/>
-                          <line x1="15" y1="9" x2="9" y2="15"/>
-                          <line x1="9" y1="9" x2="15" y2="15"/>
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="15" y1="9" x2="9" y2="15" />
+                          <line x1="9" y1="9" x2="15" y2="15" />
                         </svg>
                       ) : (
                         <ClockIcon className="w-5 h-5 text-cyber-lime" />
@@ -572,11 +585,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 >
                   <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
                     <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="18" cy="5" r="3"/>
-                      <circle cx="6" cy="12" r="3"/>
-                      <circle cx="18" cy="19" r="3"/>
-                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+                      <circle cx="18" cy="5" r="3" />
+                      <circle cx="6" cy="12" r="3" />
+                      <circle cx="18" cy="19" r="3" />
+                      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                      <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                     </svg>
                   </div>
                   <div className="flex-1 text-left">
@@ -595,9 +608,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 >
                   <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
                     <svg className="w-5 h-5 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                      <polyline points="15 3 21 3 21 9"/>
-                      <line x1="10" y1="14" x2="21" y2="3"/>
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
                     </svg>
                   </div>
                   <div className="flex-1 text-left">

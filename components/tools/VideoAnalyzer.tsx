@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { AIMarkdown } from '../common/AIMarkdown';
-import { getWatchlist, getCollectedVideos, getLearningLogs, supabase } from '../../lib/supabase';
+import {
+  getWatchlist,
+  getCollectedVideos,
+  getLearningLogs,
+  supabase,
+  isSupabaseConfigured,
+  getAIConfigs,
+  getAIConfigByModel,
+  upsertAIConfig
+} from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
 import type { VideoWithUploader } from '../../lib/database.types';
-import { AI_MODELS, type AIModel } from '../../lib/ai-models';
+import { AI_MODELS, type AIModel, getModelApiKey, setModelApiKey } from '../../lib/ai-models';
 
 interface VideoAnalyzerProps {
   isOpen: boolean;
@@ -24,8 +33,8 @@ interface AnalysisResult {
   modelUsed?: string;
 }
 
-const VIDEO_ANALYSIS_STORAGE_KEY = 'fluxf_video_analysis_cache';
-const TASK_ANALYSIS_STORAGE_KEY = 'fluxf_task_analysis_cache';
+const CACHE_KEY = 'fluxf_video_analysis_cache';
+const TASK_CACHE_KEY = 'fluxf_task_analysis_cache';
 
 // 格式化时长
 const formatDuration = (seconds: number): string => {
@@ -50,24 +59,22 @@ const VideoAnalyzer: React.FC<VideoAnalyzerProps> = ({ isOpen, onClose, videos, 
   const [videoError, setVideoError] = useState<string | null>(null);
   const [taskError, setTaskError] = useState<string | null>(null);
 
-  const [showSettings, setShowSettings] = useState(false);
+  // 全局配置管理 (添加监听逻辑以实时同步)
+  const [configVersion, setConfigVersion] = useState(0);
+  useEffect(() => {
+    const handleStorageChange = () => setConfigVersion(v => v + 1);
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
-  // 使用音频转写的配置开关
-  const [useTranscriberKey, setUseTranscriberKey] = useState(true);
-
-  // 独立配置
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('video-analyzer-model') || 'deepseek-chat');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('video-analyzer-api-key') || '');
-  const [customBaseUrl, setCustomBaseUrl] = useState(() => localStorage.getItem('ai_base_url') || '');
-  const [customModelName, setCustomModelName] = useState(() => localStorage.getItem('ai_custom_model') || '');
-
-  const currentModel = AI_MODELS.find(m => m.id === selectedModel) || AI_MODELS[0];
+  const selectedModelId = localStorage.getItem('ai_model') || 'deepseek-chat';
+  const currentModel = AI_MODELS.find(m => m.id === selectedModelId) || AI_MODELS[0];
 
   // 加载缓存的结果
   useEffect(() => {
     if (isOpen) {
       if (analysisTab === 'video') {
-        const cached = localStorage.getItem(VIDEO_ANALYSIS_STORAGE_KEY);
+        const cached = localStorage.getItem(CACHE_KEY);
         if (cached) {
           try {
             setResult(JSON.parse(cached));
@@ -76,7 +83,7 @@ const VideoAnalyzer: React.FC<VideoAnalyzerProps> = ({ isOpen, onClose, videos, 
           setResult(null);
         }
       } else {
-        const cached = localStorage.getItem(TASK_ANALYSIS_STORAGE_KEY);
+        const cached = localStorage.getItem(TASK_CACHE_KEY);
         if (cached) {
           setTaskResult(cached);
         } else {
@@ -86,77 +93,47 @@ const VideoAnalyzer: React.FC<VideoAnalyzerProps> = ({ isOpen, onClose, videos, 
     }
   }, [isOpen, analysisTab]);
 
-  // 保存配置
-  const saveConfig = useCallback((model: string, key: string, baseUrl?: string, modelName?: string) => {
-    setSelectedModel(model);
-    setApiKey(key);
-    localStorage.setItem('video-analyzer-model', model);
-    localStorage.setItem('video-analyzer-api-key', key);
-    if (baseUrl !== undefined) {
-      setCustomBaseUrl(baseUrl);
-      localStorage.setItem('ai_base_url', baseUrl);
-    }
-    if (modelName !== undefined) {
-      setCustomModelName(modelName);
-      localStorage.setItem('ai_custom_model', modelName);
-    }
-  }, []);
-
-  // 获取实际使用的 API 配置
+  // 获取实际使用的 API 配置 (强制从全局读取)
   const getEffectiveConfig = useCallback((): { apiKey: string; model: AIModel | { id: string, name: string, provider: string, apiUrl: string } } => {
-    if (useTranscriberKey) {
-      // 使用音频转写的配置
-      const transcriberKey = localStorage.getItem('ai_api_key') || '';
-      const transcriberModel = localStorage.getItem('ai_model') || 'deepseek-chat';
+    const modelId = localStorage.getItem('ai_model') || 'deepseek-chat';
+    const key = getModelApiKey(modelId);
 
-      if (transcriberModel === 'custom') {
-        return {
-          apiKey: transcriberKey,
-          model: {
-            id: localStorage.getItem('ai_custom_model') || 'custom-model',
-            name: '自定义模型',
-            provider: 'Custom',
-            apiUrl: localStorage.getItem('ai_base_url') || ''
-          }
-        };
-      }
-
-      const model = AI_MODELS.find(m => m.id === transcriberModel) || AI_MODELS[0];
-      return { apiKey: transcriberKey, model };
-    }
-
-    // 使用独立配置
-    if (selectedModel === 'custom') {
+    if (modelId === 'custom') {
       return {
-        apiKey,
+        apiKey: key,
         model: {
-          id: customModelName || 'custom-model',
+          id: localStorage.getItem('ai_custom_model') || 'custom-model',
           name: '自定义模型',
           provider: 'Custom',
-          apiUrl: customBaseUrl
+          apiUrl: localStorage.getItem('ai_base_url') || ''
         }
       };
     }
-    return { apiKey, model: currentModel };
-  }, [useTranscriberKey, apiKey, currentModel, selectedModel, customBaseUrl, customModelName]);
+
+    const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
+    return { apiKey: key, model };
+  }, []);
 
   // 执行 AI 分析
   const runAnalysis = useCallback(async () => {
     if (analysisTab === 'video') {
+      setVideoLoading(true);
+      setVideoError(null);
+      setResult(null); // 清理旧内容以显示加载动画
+
       if (videos.length === 0) {
         setVideoError('当前筛选条件下没有视频');
+        setVideoLoading(false);
         return;
       }
 
       const { apiKey: effectiveKey, model } = getEffectiveConfig();
+
       if (!effectiveKey) {
-        setVideoError('请先配置 API Key');
-        setShowSettings(true);
+        setVideoError('未配置 AI API Key，请在全局设置中进行配置');
+        setVideoLoading(false);
         return;
       }
-
-      setVideoLoading(true);
-      setVideoError(null);
 
       try {
         const prompt = `你是一个专业的视频内容分析专家。
@@ -174,7 +151,7 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
    - 格式：## 视频N：[视频核心主题] - [一句话洞察]
    - 在每个环节下方，用一段话（20-40字）深入阐述这个视频的核心价值或技术要点
    - 必须用双星号 ** 包裹关键技术词汇或核心概念（如 **React**、**性能优化**）
-   - 结尾：- [视频链接] | [UP主] | [关键词云] 
+   - 结尾：- [UP主] | [关键词云] 
 
 3. **输出示例**：
 \`\`\`
@@ -204,20 +181,54 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
 - 必须分析所有提供的视频。`;
 
         if (model.provider === 'Google') {
-          const res = await fetch(`${model.apiUrl}?key=${effectiveKey}`, {
+          const streamUrl = `${model.apiUrl.replace(':generateContent', ':streamGenerateContent')}?alt=sse&key=${effectiveKey}`;
+          const response = await fetch(streamUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 2000 }
+              generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
             })
           });
-          const data = await res.json();
-          if (data.error) throw new Error(data.error.message);
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          const newResult = { title: '分析报告', date: new Date().toISOString(), summary: text };
-          setResult(newResult);
-          localStorage.setItem(VIDEO_ANALYSIS_STORAGE_KEY, JSON.stringify(newResult));
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `Gemini API 请求失败: ${response.status}`);
+          }
+
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          let fullContent = '';
+          let lastUpdate = Date.now();
+
+          while (reader) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const json = JSON.parse(line.slice(6));
+                  const delta = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                  fullContent += delta;
+
+                  const now = Date.now();
+                  if (now - lastUpdate > 80) {
+                    setResult(prev => ({
+                      ...(prev || { title: 'AI 实时分析中...', date: new Date().toISOString(), summary: '' }),
+                      summary: fullContent
+                    }));
+                    lastUpdate = now;
+                  }
+                } catch (e) { }
+              }
+            }
+          }
+          const finalResult = { title: '视频内容分析报告', date: new Date().toISOString(), summary: fullContent };
+          setResult(finalResult);
+          localStorage.setItem(CACHE_KEY, JSON.stringify(finalResult));
         } else {
           const response = await fetch(model.apiUrl, {
             method: 'POST',
@@ -234,7 +245,11 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
 
           if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
-            throw new Error(errData.error?.message || `API 请求失败: ${response.status}`);
+            let errorMsg = errData.error?.message || `API 请求失败: ${response.status}`;
+            if (response.status === 401) {
+              errorMsg = `身份验证失败：API Key 无效。请检查“设置 -> AI 服务配置”中的 ${model.name} 配置。`;
+            }
+            throw new Error(errorMsg);
           }
 
           const reader = response.body?.getReader();
@@ -279,7 +294,7 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
           // 分析结束，强制更新最终结果
           const finalResult = { title: '视频内容分析报告', date: new Date().toISOString(), summary: fullContent };
           setResult(finalResult);
-          localStorage.setItem(VIDEO_ANALYSIS_STORAGE_KEY, JSON.stringify(finalResult));
+          localStorage.setItem(CACHE_KEY, JSON.stringify(finalResult));
         }
       } catch (err) {
         console.error('视频分析失败:', err);
@@ -289,16 +304,17 @@ ${videos.map((v, i) => `${i + 1}. 标题: ${v.title}\n   描述: ${v.description
       }
     } else {
       // 任务分析模式
-      const { apiKey: effectiveKey, model } = getEffectiveConfig();
-      if (!effectiveKey) {
-        setTaskError('请先配置 API Key');
-        setShowSettings(true);
-        return;
-      }
-
       setTaskLoading(true);
       setTaskError(null);
-      setTaskResult('');
+      setTaskResult(''); // 清理旧内容以显示加载动画
+
+      const { apiKey: effectiveKey, model } = getEffectiveConfig();
+
+      if (!effectiveKey) {
+        setTaskError('未配置 AI API Key，请在全局设置中进行配置');
+        setTaskLoading(false);
+        return;
+      }
 
       try {
         const userId = getStoredUserId();
@@ -357,19 +373,51 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
 - 必须针对以上所有提供的数据源进行综合决策分析。`;
 
         if (model.provider === 'Google') {
-          const res = await fetch(`${model.apiUrl}?key=${effectiveKey}`, {
+          const streamUrl = `${model.apiUrl.replace(':generateContent', ':streamGenerateContent')}?alt=sse&key=${effectiveKey}`;
+          const response = await fetch(streamUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{ parts: [{ text: taskPrompt }] }],
-              generationConfig: { temperature: 0.7, maxOutputTokens: 2000 }
+              generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
             })
           });
-          const data = await res.json();
-          if (data.error) throw new Error(data.error.message);
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          setTaskResult(text);
-          localStorage.setItem(TASK_ANALYSIS_STORAGE_KEY, text);
+
+          if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error?.message || `Gemini API 请求失败: ${response.status}`);
+          }
+
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          let fullContent = '';
+          let lastUpdate = Date.now();
+
+          while (reader) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try {
+                  const json = JSON.parse(line.slice(6));
+                  const delta = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                  fullContent += delta;
+
+                  const now = Date.now();
+                  if (now - lastUpdate > 80) {
+                    setTaskResult(fullContent);
+                    lastUpdate = now;
+                  }
+                } catch (e) { }
+              }
+            }
+          }
+          // 确保最后一次更新
+          setTaskResult(fullContent);
+          localStorage.setItem(TASK_CACHE_KEY, fullContent);
         } else {
           const response = await fetch(model.apiUrl, {
             method: 'POST',
@@ -415,7 +463,7 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
           }
           // 确保最后一次更新
           setTaskResult(fullContent);
-          localStorage.setItem(TASK_ANALYSIS_STORAGE_KEY, fullContent);
+          localStorage.setItem(TASK_CACHE_KEY, fullContent);
         }
       } catch (err) {
         console.error('任务分析失败:', err);
@@ -424,11 +472,13 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
         setTaskLoading(false);
       }
     }
-  }, [videos, filterName, getEffectiveConfig, analysisTab]);
+  }, [videos, filterName, getEffectiveConfig, analysisTab, selectedModelId]);
+
+  // 在初始化时尝试从 Supabase 恢复最近使用的模型配置
 
   const clearCache = useCallback(() => {
-    localStorage.removeItem(VIDEO_ANALYSIS_STORAGE_KEY);
-    localStorage.removeItem(TASK_ANALYSIS_STORAGE_KEY);
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(TASK_CACHE_KEY);
     setResult(null);
     setTaskResult('');
   }, []);
@@ -456,65 +506,12 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
               </svg>
               AI 视频分析
             </h1>
-            <p className="text-gray-500 text-xs">智能分析视频内容，制定观看计划</p>
+            <p className="text-gray-500 text-xs">使用全局统一配置模型进行分析</p>
           </div>
-          <button onClick={() => setShowSettings(!showSettings)} className={`p-2 rounded-xl transition-all ${showSettings ? 'bg-white/15 text-white' : 'hover:bg-white/10 text-gray-400'}`}>
-            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-            </svg>
-          </button>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 pb-20">
-        {showSettings && (
-          <div className="mb-4 p-4 bg-white/5 border border-white/10 rounded-2xl space-y-4">
-            <h3 className="text-white font-medium flex items-center gap-2">
-              <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-              </svg>
-              API 配置
-            </h3>
-            <label className="flex items-center gap-3 cursor-pointer" onClick={() => setUseTranscriberKey(!useTranscriberKey)}>
-              <div className={`relative w-11 h-6 rounded-full transition-colors ${useTranscriberKey ? 'bg-cyber-lime' : 'bg-white/20'}`}>
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${useTranscriberKey ? 'left-6' : 'left-1'}`} />
-              </div>
-              <span className="text-sm text-gray-300">使用音频转写的 API 配置</span>
-            </label>
-            {!useTranscriberKey && (
-              <>
-                <div>
-                  <label className="text-white text-sm font-medium mb-2 block">AI 模型</label>
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => saveConfig(e.target.value, apiKey, customBaseUrl, customModelName)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-white/30"
-                  >
-                    {AI_MODELS.map(model => (
-                      <option key={model.id} value={model.id} className="bg-cyber-dark">{model.name} ({model.provider})</option>
-                    ))}
-                  </select>
-                </div>
-                {selectedModel === 'custom' && (
-                  <>
-                    <div>
-                      <label className="text-white text-sm font-medium mb-2 block">Base URL</label>
-                      <input type="text" value={customBaseUrl} onChange={(e) => saveConfig(selectedModel, apiKey, e.target.value, customModelName)} placeholder="https://api.openai.com/v1/chat/completions" className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500" />
-                    </div>
-                    <div>
-                      <label className="text-white text-sm font-medium mb-2 block">模型名称</label>
-                      <input type="text" value={customModelName} onChange={(e) => saveConfig(selectedModel, apiKey, customBaseUrl, e.target.value)} placeholder="如 gpt-4" className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500" />
-                    </div>
-                  </>
-                )}
-                <div>
-                  <label className="text-white text-sm font-medium mb-2 block">API Key</label>
-                  <input type="password" value={apiKey} onChange={(e) => saveConfig(selectedModel, e.target.value, customBaseUrl, customModelName)} placeholder={currentModel.keyPrefix ? `${currentModel.keyPrefix}xxx...` : 'API Key'} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500" />
-                </div>
-              </>
-            )}
-          </div>
-        )}
 
         {/* 当前筛选信息 - 仅在视频分析模式显示 */}
         {analysisTab === 'video' && (
@@ -549,9 +546,9 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
 
         {/* 结果展示区域 */}
         {analysisTab === 'video' ? (
-          <>
+          <div className="space-y-6">
             {videoError && (
-              <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
@@ -560,7 +557,7 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
             )}
 
             {result ? (
-              <div className="relative group">
+              <div className="relative group animate-fade-in">
                 <div className="absolute inset-0 bg-gradient-to-r from-cyber-lime/5 to-blue-500/5 rounded-2xl blur-xl transition-all group-hover:blur-2xl" />
                 <div className="relative p-6 rounded-2xl bg-white/5 border border-white/10 shadow-2xl overflow-hidden backdrop-blur-sm">
                   <div className="flex items-center justify-between mb-6">
@@ -589,50 +586,63 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
                     </div>
                   </div>
 
+                  {videoLoading && !result.summary && (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                      <div className="w-12 h-12 relative flex items-center justify-center">
+                        <div className="absolute inset-0 border-2 border-cyber-lime/20 rounded-full animate-ping" />
+                        <div className="w-8 h-8 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
+                      </div>
+                      <p className="text-cyber-lime/80 text-xs font-medium tracking-widest animate-pulse uppercase">AI Analyzing...</p>
+                    </div>
+                  )}
+
                   <AIMarkdown content={result.summary} variant="primary" title="视频内容分析" />
 
-                  {videoLoading && (
-                    <div className="mt-4 flex items-center justify-center gap-2 text-xs text-cyber-lime/60 animate-pulse">
-                      <span>AI Analysis in progress</span>
-                      <span className="flex gap-1">
-                        <span className="w-1 h-1 bg-cyber-lime rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                        <span className="w-1 h-1 bg-cyber-lime rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                        <span className="w-1 h-1 bg-cyber-lime rounded-full animate-bounce"></span>
-                      </span>
+                  {videoLoading && result.summary && (
+                    <div className="mt-4 flex items-center gap-2 text-[10px] text-cyber-lime/60 animate-pulse">
+                      <div className="w-1.5 h-1.5 bg-cyber-lime rounded-full animate-bounce" />
+                      <span>正在生成实时深度见解...</span>
                     </div>
                   )}
                 </div>
               </div>
             ) : (
               <div className="text-center py-12 px-6 rounded-2xl bg-white/5 border border-dashed border-white/10">
-                <div className="w-16 h-16 bg-cyber-lime/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-cyber-lime/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 11V3h8" /><path d="M3 3l4.64 4.64" /><path d="M16 5l4.64 4.64" />
-                  </svg>
-                </div>
-                <h3 className="text-white font-medium mb-2">准备好开启内容洞察了吗？</h3>
-                <p className="text-gray-500 text-xs mb-6 max-w-xs mx-auto">点击下方的“执行 AI 智能分析”按钮，我们将为您深度剖析当前筛选出的视频内容趋势。</p>
-                <button
-                  onClick={runAnalysis}
-                  disabled={videoLoading}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-cyber-lime text-black font-bold rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(157,255,0,0.2)]"
-                >
-                  {videoLoading ? (
-                    <div className="w-5 h-5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
-                    </svg>
-                  )}
-                  <span>执行 AI 智能分析</span>
-                </button>
+                {videoLoading ? (
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="w-12 h-12 relative flex items-center justify-center">
+                      <div className="absolute inset-0 border-2 border-cyber-lime/20 rounded-full animate-ping" />
+                      <div className="w-8 h-8 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
+                    </div>
+                    <p className="text-cyber-lime/80 text-xs font-medium tracking-widest animate-pulse uppercase uppercase">Preparing Insights...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-cyber-lime/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-cyber-lime/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M3 11V3h8" /><path d="M3 3l4.64 4.64" /><path d="M16 5l4.64 4.64" />
+                      </svg>
+                    </div>
+                    <h3 className="text-white font-medium mb-2">准备好开启内容洞察了吗？</h3>
+                    <p className="text-gray-500 text-xs mb-6 max-w-xs mx-auto">点击下方的按钮，我们将为您深度剖析当前筛选出的视频内容趋势。</p>
+                    <button
+                      onClick={runAnalysis}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-cyber-lime text-black font-bold rounded-xl hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(157,255,0,0.2)]"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+                      </svg>
+                      <span>执行 AI 智能分析</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
-          </>
+          </div>
         ) : (
-          <>
+          <div className="space-y-6">
             {taskError && (
-              <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
+              <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
                 <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                 </svg>
@@ -641,7 +651,7 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
             )}
 
             {taskResult ? (
-              <div className="relative group">
+              <div className="relative group animate-fade-in">
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 to-teal-500/5 rounded-2xl blur-xl" />
                 <div className="relative p-6 rounded-2xl bg-white/5 border border-white/10 shadow-2xl backdrop-blur-sm">
                   <div className="flex items-center justify-between mb-6">
@@ -670,46 +680,59 @@ ${notes.map((n: any) => `- 标题: ${n.title}\n  预览: ${n.preview || '无'}`)
                     </div>
                   </div>
 
+                  {taskLoading && !taskResult && (
+                    <div className="flex flex-col items-center justify-center py-12 gap-4">
+                      <div className="w-12 h-12 relative flex items-center justify-center">
+                        <div className="absolute inset-0 border-2 border-emerald-500/20 rounded-full animate-ping" />
+                        <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                      </div>
+                      <p className="text-emerald-400/80 text-xs font-medium tracking-widest animate-pulse uppercase">Correlating Entities...</p>
+                    </div>
+                  )}
+
                   <AIMarkdown content={taskResult} variant="success" title="全能任务概览" />
 
-                  {taskLoading && (
-                    <div className="mt-4 flex items-center justify-center gap-2 text-xs text-emerald-400/60 animate-pulse">
-                      <span>AI Analyzing your tasks...</span>
-                      <span className="flex gap-1">
-                        <span className="w-1 h-1 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                        <span className="w-1 h-1 bg-emerald-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                        <span className="w-1 h-1 bg-emerald-400 rounded-full animate-bounce"></span>
-                      </span>
+                  {taskLoading && taskResult && (
+                    <div className="mt-4 flex items-center gap-2 text-[10px] text-emerald-400/60 animate-pulse">
+                      <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce" />
+                      <span>正在跨维度编织您的生产力地图...</span>
                     </div>
                   )}
                 </div>
               </div>
             ) : (
               <div className="text-center py-12 px-6 rounded-2xl bg-white/5 border border-dashed border-white/10">
-                <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-emerald-500/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </svg>
-                </div>
-                <h3 className="text-white font-medium mb-2">生成您的全维任务地图</h3>
-                <p className="text-gray-500 text-xs mb-6 max-w-xs mx-auto">我们将整合您的 Todo、个人笔记、学习日志和视频收藏，为您规划出最清晰的任务和学习路径。</p>
-                <button
-                  onClick={runAnalysis}
-                  disabled={taskLoading}
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-500 hover:scale-105 active:scale-95 transition-all disabled:opacity-50 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-                >
-                  {taskLoading ? (
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5-.3.3-.5.7-.5 1.1v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8c.4 0 .8-.2 1.1-.5.3-.3.5-.7.5-1.1V6.5L15.5 2z" /><path d="M3 7.6v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8" /><path d="M15 2v5h5" />
-                    </svg>
-                  )}
-                  <span>开始全维任务分析</span>
-                </button>
+                {taskLoading ? (
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <div className="w-12 h-12 relative flex items-center justify-center">
+                      <div className="absolute inset-0 border-2 border-emerald-500/20 rounded-full animate-ping" />
+                      <div className="w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                    </div>
+                    <p className="text-emerald-400/80 text-xs font-medium tracking-widest animate-pulse uppercase">Building Your Map...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                      <svg className="w-8 h-8 text-emerald-500/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                      </svg>
+                    </div>
+                    <h3 className="text-white font-medium mb-2">生成您的全维任务地图</h3>
+                    <p className="text-gray-500 text-xs mb-6 max-w-xs mx-auto">我们将整合您的 Todo、笔记、日志和收藏，为您规划最清晰的路径。</p>
+                    <button
+                      onClick={runAnalysis}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-500 hover:scale-105 active:scale-95 transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)]"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5-.3.3-.5.7-.5 1.1v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8c.4 0 .8-.2 1.1-.5.3-.3.5-.7.5-1.1V6.5L15.5 2z" /><path d="M3 7.6v12.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h9.8" /><path d="M15 2v5h5" />
+                      </svg>
+                      <span>开始全视角任务分析</span>
+                    </button>
+                  </>
+                )}
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>,

@@ -1,7 +1,9 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AI_MODELS, type AIModel } from '../../lib/ai-models';
+import { AI_MODELS, type AIModel, getModelApiKey } from '../../lib/ai-models';
 import { AIMarkdown } from '../common/AIMarkdown';
+import { getAIConfigs, isSupabaseConfigured } from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
 
 interface GitHubRepo {
   id: number;
@@ -88,10 +90,19 @@ const DevCommunity: React.FC = () => {
   });
   const [loadLimit, setLoadLimit] = useState<number>(20); // 默认加载 20 项
 
-  // 获取通用 AI 配置
+
+  // 获取全局 AI 配置 (由 SettingsModal 维护)
+  // AI 相关配置 (添加监听逻辑以实时同步)
+  const [configVersion, setConfigVersion] = useState(0);
+  useEffect(() => {
+    const handleStorageChange = () => setConfigVersion(v => v + 1);
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
   const getAIConfig = useCallback(() => {
-    const key = localStorage.getItem('ai_api_key') || '';
     const modelId = localStorage.getItem('ai_model') || 'deepseek-chat';
+    const key = getModelApiKey(modelId);
 
     if (modelId === 'custom') {
       return {
@@ -286,22 +297,25 @@ ${repos.map((r, i) => `${i + 1}. [${r.full_name}] ⭐${r.stargazers_count} �${
 问题列表：
 ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, 得分: ${q.score})`).join('\n')}
 
-你的任务：
-1. **开发者痛点分析**：目前大家在实战中主要卡在哪些技术栈或哪些具体问题上？
-2. **关键知识点提炼**：简要概括这些问题背后涉及的重要技术原理。
-3. **避坑指南**：基于这些讨论，给出一些开发中的防患未然建议。
-
 要求：使用 Markdown 格式，语气干练，增加适当的 Emoji。`;
+    }
+
+    const apiKey = config.apiKey;
+
+    if (!apiKey) {
+      setToast('⚠️ 未能获取到有效的 API Key，请在设置中配置');
+      setIsSummarizing(prev => ({ ...prev, [activeTab]: false }));
+      return;
     }
 
     try {
       if (config.model.provider === 'Google') {
-        const res = await fetch(`${config.model.apiUrl}?key=${config.apiKey}`, {
+        const res = await fetch(`${config.model.apiUrl}?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.7, maxOutputTokens: 2000 }
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
           })
         });
         const data = await res.json();
@@ -312,7 +326,7 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${config.apiKey}`
+            'Authorization': `Bearer ${apiKey}`
           },
           body: JSON.stringify({
             model: config.model.id,
@@ -373,8 +387,8 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const hours = Math.floor(diff / 3600000);
-    if (hours < 24) return `${hours}小时前`;
-    return `${Math.floor(hours / 24)}天前`;
+    if (hours < 24) return `${hours} 小时前`;
+    return `${Math.floor(hours / 24)} 天前`;
   };
 
   const formatGitHubDate = (dateStr: string) => {
@@ -383,8 +397,8 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
     const diff = now.getTime() - date.getTime();
     const days = Math.floor(diff / 86400000);
     if (days < 1) return '今天';
-    if (days < 7) return `${days}天前`;
-    if (days < 30) return `${Math.floor(days / 7)}周前`;
+    if (days < 7) return `${days} 天前`;
+    if (days < 30) return `${Math.floor(days / 7)} 周前`;
     return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
   };
 
@@ -704,7 +718,7 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
                 title: repo.full_name,
                 url: repo.html_url,
                 description: repo.description || '',
-                time: `创建于 ${formatGitHubDate(repo.created_at)}`
+                time: `创建于 ${formatGitHubDate(repo.created_at)} `
               })}
               onMouseUp={handleLongPressEnd}
               onMouseLeave={handleLongPressEnd}
@@ -712,7 +726,7 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
                 title: repo.full_name,
                 url: repo.html_url,
                 description: repo.description || '',
-                time: `创建于 ${formatGitHubDate(repo.created_at)}`
+                time: `创建于 ${formatGitHubDate(repo.created_at)} `
               })}
               onTouchEnd={handleLongPressEnd}
             >
@@ -887,10 +901,10 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
       )}
 
       <style>{`
-        @keyframes fadeInScale {
-          from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
-          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        }
+      @keyframes fadeInScale {
+          from { opacity: 0; transform: translate(-50 %, -50 %) scale(0.9); }
+          to { opacity: 1; transform: translate(-50 %, -50 %) scale(1); }
+      }
       `}</style>
     </div>
   );

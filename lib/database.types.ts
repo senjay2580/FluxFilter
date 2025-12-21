@@ -278,3 +278,27 @@ export interface UpdateTranscriptParams {
   optimized_title?: string;
   ai_model?: string;
 }
+
+// ============================================
+// AI 配置相关类型
+// ============================================
+
+export interface AIConfig {
+  id: number;
+  user_id: string;
+  model_id: string;
+  api_key: string;
+  base_url: string | null;
+  custom_model_name: string | null;
+  settings: any | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface UpsertAIConfigParams {
+  model_id: string;
+  api_key: string;
+  base_url?: string | null;
+  custom_model_name?: string | null;
+  settings?: any | null;
+}

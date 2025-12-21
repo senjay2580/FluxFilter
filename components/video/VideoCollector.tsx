@@ -64,24 +64,24 @@ const fetchVideoInfo = async (bvid: string) => {
   const url = import.meta.env.DEV
     ? `/bili-api${apiPath}`
     : `/api/bilibili?path=${encodeURIComponent(apiPath)}`;
-  
+
   const headers: Record<string, string> = {
     'Accept': 'application/json, text/plain, */*',
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
     'Referer': 'https://www.bilibili.com',
   };
-  
+
   const response = await fetch(url, { headers });
   const data = await response.json();
-  
+
   if (data.code !== 0) {
     // 常见错误码处理
-    const errorMsg = data.code === -400 ? '视频不存在或已删除' 
-      : data.code === -404 ? '视频不存在' 
-      : data.message || '未知错误';
+    const errorMsg = data.code === -400 ? '视频不存在或已删除'
+      : data.code === -404 ? '视频不存在'
+        : data.message || '未知错误';
     throw new Error(errorMsg);
   }
-  
+
   return data.data;
 };
 
@@ -97,15 +97,15 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [results, setResults] = useState<{ bvid: string; success: boolean; title?: string; error?: string }[]>([]);
   const [showResults, setShowResults] = useState(false);
-  
+
   // 收藏视频列表
   const [videos, setVideos] = useState<CollectedVideo[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // 删除确认
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; title: string } | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
-  
+
   // 剪贴板内容
   const [clipboardContent, setClipboardContent] = useState<string>('');
 
@@ -113,14 +113,14 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
   const loadVideos = useCallback(async () => {
     const userId = getStoredUserId();
     if (!userId) return;
-    
+
     setLoading(true);
     const { data, error } = await supabase
       .from('collected_video')
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
-    
+
     if (!error && data) {
       setVideos(data);
     }
@@ -175,7 +175,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       .from('collected_video')
       .delete()
       .eq('id', deleteConfirm.id);
-    
+
     if (!error) {
       setVideos(prev => prev.filter(v => v.id !== deleteConfirm.id));
     }
@@ -189,7 +189,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       .from('collected_video')
       .delete()
       .eq('id', deleteConfirm.id);
-    
+
     if (!error) {
       setVideos(prev => prev.filter(v => v.id !== deleteConfirm.id));
       setShowConfetti(true);
@@ -222,7 +222,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
   // 开始导入
   const handleImport = async () => {
     if (parsedBvids.length === 0) return;
-    
+
     const userId = getStoredUserId();
     if (!userId) {
       alert('请先登录');
@@ -243,7 +243,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       try {
         // 获取视频信息
         const info = await fetchVideoInfo(bvid);
-        
+
         // 处理封面URL
         let picUrl = info.pic || '';
         if (picUrl.startsWith('//')) {
@@ -288,7 +288,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       }
 
       setResults([...newResults]);
-      
+
       // 请求间隔，避免触发限流
       if (i < parsedBvids.length - 1) {
         await new Promise(r => setTimeout(r, 500));
@@ -320,8 +320,8 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-cyber-lime/30 flex items-center justify-center">
             <svg className="w-6 h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/>
-              <line x1="5" y1="12" x2="19" y2="12"/>
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
           </div>
           <div className="flex-1 text-left">
@@ -343,8 +343,8 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
               className="text-gray-500 hover:text-white"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18"/>
-                <line x1="6" y1="6" x2="18" y2="18"/>
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
           </div>
@@ -353,12 +353,12 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
               <div key={i} className="flex items-center gap-2 text-sm">
                 {r.success ? (
                   <svg className="w-4 h-4 text-green-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 6L9 17l-5-5"/>
+                    <path d="M20 6L9 17l-5-5" />
                   </svg>
                 ) : (
                   <svg className="w-4 h-4 text-red-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="18" y1="6" x2="6" y2="18"/>
-                    <line x1="6" y1="6" x2="18" y2="18"/>
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 )}
                 <span className={r.success ? 'text-gray-300' : 'text-red-400'}>
@@ -374,23 +374,23 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       <div className="mt-6">
         <h3 className="text-white font-medium mb-3 flex items-center gap-2">
           <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
           我的收藏 ({videos.length})
         </h3>
-        
+
         {loading ? (
           <div className="text-center py-8 text-gray-500">加载中...</div>
         ) : videos.length === 0 ? (
           <div className="text-center py-8 text-gray-500">
             <svg className="w-12 h-12 mx-auto mb-2 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
             <p>暂无收藏视频</p>
             <p className="text-xs mt-1">点击上方按钮导入</p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 sm:gap-4">
             {videos.map((video, index) => (
               <div
                 key={video.id}
@@ -398,12 +398,12 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 {/* 封面 */}
-                <div 
+                <div
                   className="relative aspect-video cursor-pointer"
                   onClick={() => handleVideoClick(video.bvid)}
                 >
-                  <img 
-                    src={video.pic} 
+                  <img
+                    src={video.pic}
                     alt={video.title}
                     className="w-full h-full object-cover"
                     referrerPolicy="no-referrer"
@@ -417,15 +417,15 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                     className="absolute top-1.5 right-1.5 p-1.5 bg-black/60 hover:bg-red-500/80 rounded-lg text-white/70 hover:text-white transition-colors"
                   >
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="18" y1="6" x2="6" y2="18"/>
-                      <line x1="6" y1="6" x2="18" y2="18"/>
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
                   </button>
                 </div>
-                
+
                 {/* 信息 */}
                 <div className="p-2.5">
-                  <h4 
+                  <h4
                     className="text-white text-xs font-medium line-clamp-2 leading-tight cursor-pointer hover:text-cyber-lime"
                     onClick={() => handleVideoClick(video.bvid)}
                   >
@@ -447,7 +447,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       {isDrawerOpen && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-end justify-center" onClick={() => !importing && setIsDrawerOpen(false)}>
           <div className="absolute inset-0 bg-black/70" />
-          <div 
+          <div
             className="relative w-full max-w-lg bg-[#0c0c0c] rounded-t-3xl border-t border-white/10 animate-drawer-slide-up"
             onClick={e => e.stopPropagation()}
           >
@@ -473,8 +473,8 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                 >
                   <div className="flex items-center gap-2 mb-1.5">
                     <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>
-                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>
+                      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+                      <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
                     </svg>
                     <span className="text-cyber-lime text-xs font-medium">点击粘贴</span>
                   </div>
@@ -569,7 +569,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                     </span>
                   </div>
                   <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                    <div 
+                    <div
                       className="h-full bg-cyber-lime transition-all duration-300"
                       style={{ width: `${(progress.current / progress.total) * 100}%` }}
                     />
@@ -621,21 +621,21 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       {deleteConfirm && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
           <div className="absolute inset-0 bg-black/70" />
-          <div 
+          <div
             className="relative w-full max-w-sm bg-[#0c0c0c] rounded-3xl border border-white/10 p-6 animate-scale-in"
             onClick={e => e.stopPropagation()}
           >
             <div className="text-center mb-6">
               <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-500/20 flex items-center justify-center">
                 <svg className="w-8 h-8 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                  <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
               <h3 className="text-white font-bold text-lg mb-2">确认移除</h3>
               <p className="text-gray-400 text-sm line-clamp-2 mb-1">{deleteConfirm.title}</p>
               <p className="text-amber-400 text-sm">这个视频看完了吗？</p>
             </div>
-            
+
             <div className="space-y-2">
               <button
                 onClick={markAsWatched}
@@ -674,9 +674,9 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
       {showConfetti && createPortal(
         <div className="fixed inset-0 pointer-events-none z-[100000] flex items-center justify-center">
           {/* 中心闪光 */}
-          <div className="absolute w-32 h-32 bg-cyber-lime/30 rounded-full animate-pulse-flash" 
-               style={{ animation: 'pulse-flash 0.5s ease-out forwards' }} />
-          
+          <div className="absolute w-32 h-32 bg-cyber-lime/30 rounded-full animate-pulse-flash"
+            style={{ animation: 'pulse-flash 0.5s ease-out forwards' }} />
+
           {/* 玻璃碎片 */}
           {Array.from({ length: 20 }).map((_, i) => {
             const angleRad = ((i / 20) * 360 + Math.random() * 30) * (Math.PI / 180);
@@ -685,7 +685,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
             const endY = Math.sin(angleRad) * distance;
             const size = 20 + Math.random() * 30;
             const delay = Math.random() * 0.08;
-            
+
             return (
               <div
                 key={i}
@@ -711,7 +711,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
               />
             );
           })}
-          
+
           {/* 小钻石碎片 */}
           {Array.from({ length: 30 }).map((_, i) => {
             const angleRad = (Math.random() * 360) * (Math.PI / 180);
@@ -722,7 +722,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
             const delay = Math.random() * 0.12;
             const colors = ['#a3e635', '#22d3ee', '#ffffff', '#facc15', '#f472b6'];
             const color = colors[Math.floor(Math.random() * colors.length)];
-            
+
             return (
               <div
                 key={`diamond-${i}`}
@@ -738,7 +738,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
               />
             );
           })}
-          
+
           <style>{`
             @keyframes pulse-flash {
               0% { transform: scale(0); opacity: 1; filter: blur(0); }
@@ -746,35 +746,35 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
               100% { transform: scale(2.5); opacity: 0; filter: blur(8px); }
             }
             ${Array.from({ length: 20 }).map((_, i) => {
-              const angleRad = ((i / 20) * 360 + Math.random() * 30) * (Math.PI / 180);
-              const distance = 25 + Math.random() * 45;
-              const endX = Math.cos(angleRad) * distance;
-              const endY = Math.sin(angleRad) * distance;
-              const midX = endX * 0.4;
-              const midY = endY * 0.4;
-              const rot = 90 + Math.random() * 180;
-              return `
+            const angleRad = ((i / 20) * 360 + Math.random() * 30) * (Math.PI / 180);
+            const distance = 25 + Math.random() * 45;
+            const endX = Math.cos(angleRad) * distance;
+            const endY = Math.sin(angleRad) * distance;
+            const midX = endX * 0.4;
+            const midY = endY * 0.4;
+            const rot = 90 + Math.random() * 180;
+            return `
                 @keyframes shard-fly-${i} {
                   0% { transform: translate(0, 0) rotate(0deg) scale(0); opacity: 0; }
                   25% { transform: translate(${midX}vmin, ${midY}vmin) rotate(${rot * 0.4}deg) scale(1.15); opacity: 1; }
                   100% { transform: translate(${endX}vmin, ${endY}vmin) rotate(${rot}deg) scale(0.2); opacity: 0; }
                 }
               `;
-            }).join('')}
+          }).join('')}
             ${Array.from({ length: 30 }).map((_, i) => {
-              const angleRad = (Math.random() * 360) * (Math.PI / 180);
-              const distance = 15 + Math.random() * 55;
-              const endX = Math.cos(angleRad) * distance;
-              const endY = Math.sin(angleRad) * distance;
-              const rot = 180 + Math.random() * 360;
-              return `
+            const angleRad = (Math.random() * 360) * (Math.PI / 180);
+            const distance = 15 + Math.random() * 55;
+            const endX = Math.cos(angleRad) * distance;
+            const endY = Math.sin(angleRad) * distance;
+            const rot = 180 + Math.random() * 360;
+            return `
                 @keyframes diamond-fly-${i} {
                   0% { transform: translate(0, 0) rotate(0deg) scale(0); opacity: 0; }
                   30% { transform: translate(${endX * 0.5}vmin, ${endY * 0.5}vmin) rotate(${rot * 0.5}deg) scale(1.2); opacity: 1; }
                   100% { transform: translate(${endX}vmin, ${endY}vmin) rotate(${rot}deg) scale(0); opacity: 0; }
                 }
               `;
-            }).join('')}
+          }).join('')}
           `}</style>
         </div>,
         document.body

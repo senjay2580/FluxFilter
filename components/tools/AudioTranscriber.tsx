@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { AI_MODELS, type AIModel } from '../../lib/ai-models';
+import { AI_MODELS, type AIModel, getModelApiKey, setModelApiKey } from '../../lib/ai-models';
 import { createPortal } from 'react-dom';
 import DeleteConfirmModal from '../shared/DeleteConfirmModal';
 import {
@@ -7,7 +7,9 @@ import {
   getTranscriptHistory,
   createTranscript,
   updateTranscript,
-  deleteTranscript
+  deleteTranscript,
+  getAIConfigs,
+  upsertAIConfig
 } from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
 
@@ -37,17 +39,35 @@ interface CompareData {
   newTitle: string;
 }
 
+interface TaskData {
+  status: 'optimizing' | 'done' | 'error';
+  compareData: CompareData;
+  error?: string;
+}
+
 interface AudioTranscriberProps {
   onNavigate?: (page: string) => void;
 }
 
 const AudioTranscriber: React.FC<AudioTranscriberProps> = ({ onNavigate }) => {
   const [activeTab, setActiveTab] = useState<'transcribe' | 'history'>('transcribe');
-  const [groqKey, setGroqKey] = useState(() => localStorage.getItem('groq_api_key') || '');
-  const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem('ai_api_key') || '');
-  const [selectedModel, setSelectedModel] = useState(() => localStorage.getItem('ai_model') || 'deepseek-chat');
-  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url') || '');
-  const [customModelName, setCustomModelName] = useState(() => localStorage.getItem('ai_custom_model') || '');
+
+  // AI 相关配置 (由全局 SettingsModal 管理，这里引入监听逻辑)
+  const [configVersion, setConfigVersion] = useState(0);
+
+  // 监听 storage 事件，当在 SettingsModal 中保存配置时触发更新
+  useEffect(() => {
+    const handleStorageChange = () => setConfigVersion(v => v + 1);
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  const groqKey = localStorage.getItem('groq_api_key') || '';
+  const selectedModel = localStorage.getItem('ai_model') || 'deepseek-chat';
+  const aiApiKey = getModelApiKey(selectedModel);
+  const aiBaseUrl = localStorage.getItem('ai_base_url') || '';
+  const customModelName = localStorage.getItem('ai_custom_model') || '';
+
   const [file, setFile] = useState<File | null>(null);
   const [isVideoFile, setIsVideoFile] = useState(false);
   const [mediaUrl, setMediaUrl] = useState<string | null>(null);
@@ -56,24 +76,22 @@ const AudioTranscriber: React.FC<AudioTranscriberProps> = ({ onNavigate }) => {
   const [mediaCurrentTime, setMediaCurrentTime] = useState(0);
   const [transcribing, setTranscribing] = useState(false);
   const [optimizing, setOptimizing] = useState(false);
-  const [optimizingId, setOptimizingId] = useState<string | null>(null);
+
   const [rawResult, setRawResult] = useState('');
   const [optimizedResult, setOptimizedResult] = useState('');
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [history, setHistory] = useState<TranscriptRecord[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewingRecord, setViewingRecord] = useState<TranscriptRecord | null>(null);
-  const [compareData, setCompareData] = useState<CompareData | null>(null);
-  const [showCompareModal, setShowCompareModal] = useState(false);
+
+  // 多任务优化状态管理
+  const [optimizationTasks, setOptimizationTasks] = useState<Record<string, TaskData>>({});
+  const [viewingTaskId, setViewingTaskId] = useState<string | null>(null);
+
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  // Settings modal temp state
-  const [tempGroqKey, setTempGroqKey] = useState('');
-  const [tempAiKey, setTempAiKey] = useState('');
-  const [tempModel, setTempModel] = useState('');
-  const [tempBaseUrl, setTempBaseUrl] = useState('');
-  const [tempModelName, setTempModelName] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -181,6 +199,33 @@ const AudioTranscriber: React.FC<AudioTranscriberProps> = ({ onNavigate }) => {
     }
   }, [history, selectedModel]);
 
+  // 修改标题
+  const handleEditTitle = useCallback(async (record: TranscriptRecord, newTitle: string) => {
+    if (!newTitle.trim() || newTitle === (record.optimizedTitle || record.fileName)) {
+      setEditingId(null);
+      return;
+    }
+
+    try {
+      // 1. 更新本地状态
+      setHistory(prev => prev.map(r =>
+        r.id === record.id ? { ...r, optimizedTitle: newTitle.trim() } : r
+      ));
+
+      // 2. 更新数据库
+      if (isSupabaseConfigured && record.dbId) {
+        await updateTranscript(record.dbId, {
+          optimized_title: newTitle.trim()
+        });
+      }
+    } catch (err) {
+      console.error('更新标题失败:', err);
+      setError('更新标题失败，请重试');
+    } finally {
+      setEditingId(null);
+    }
+  }, [history]);
+
   // 流式调用 AI API 进行文本优化
   const callAIApiStream = useCallback(async (
     text: string,
@@ -275,9 +320,12 @@ ${text}
     } : currentModel;
 
     try {
-      // Gemini 2.0 Flash 使用不同的 API 格式且暂不支持简单流式优化
+      // Gemini 流式优化实现
       if (modelCfg.provider === 'Google') {
-        const response = await fetch(`${modelCfg.apiUrl}?key=${effectiveApiKey}`, {
+        // 使用 streamGenerateContent 实现流式
+        const streamUrl = `${modelCfg.apiUrl.replace(':generateContent', ':streamGenerateContent')}?alt=sse&key=${effectiveApiKey}`;
+
+        const response = await fetch(streamUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -288,23 +336,45 @@ ${text}
 
 转写文本：
 ${text}`
-              }]
+              }],
             }],
+            generationConfig: { temperature: 0.7, maxOutputTokens: 8192 }
           }),
         });
 
         if (!response.ok) {
           const errData = await response.json().catch(() => ({}));
-          throw new Error(errData.error?.message || `API 请求失败: ${response.status}`);
+          throw new Error(errData.error?.message || `Gemini 流式请求失败: ${response.status}`);
         }
 
-        const data = await response.json();
-        const fullContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const lines = fullContent.split('\n');
-        const title = lines[0] || '未命名记录';
-        const content = lines.slice(1).join('\n').trim();
-        onChunk(title, content);
-        return { title, content };
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+
+        if (!reader) throw new Error('无法读取响应流');
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          // Gemini SSE 格式通常是 "data: {...}"
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const json = JSON.parse(line.slice(6));
+                const delta = json.candidates?.[0]?.content?.parts?.[0]?.text || '';
+                if (delta) {
+                  fullText += delta;
+                  const parsed = parseResponse(fullText);
+                  onChunk(parsed.title, parsed.content);
+                }
+              } catch (e) { /* 忽略不完整的 JSON 块 */ }
+            }
+          }
+        }
+        return parseResponse(fullText);
       }
 
       // OpenAI 兼容格式流式输出
@@ -370,17 +440,15 @@ ${text}`
     }
   }, [aiApiKey, currentModel, selectedModel, aiBaseUrl, customModelName]);
 
-  // 对历史记录进行 AI 优化
+  // 对历史记录进行 AI 优化（支持多任务并发）
   const optimizeHistoryRecord = useCallback(async (record: TranscriptRecord) => {
     if (!aiApiKey) {
       setError('请先配置 AI API Key');
       return;
     }
 
-    setOptimizingId(record.id);
-    setError('');
-
-    setCompareData({
+    // 初始化任务数据
+    const initialCompareData: CompareData = {
       id: record.id,
       dbId: record.dbId,
       fileName: record.fileName,
@@ -389,75 +457,97 @@ ${text}`
       oldTitle: record.optimizedTitle,
       newOptimized: '',
       newTitle: '',
-    });
-    setShowCompareModal(true);
+    };
+
+    setOptimizationTasks(prev => ({
+      ...prev,
+      [record.id]: {
+        status: 'optimizing',
+        compareData: initialCompareData
+      }
+    }));
+
+    // 自动打开当前任务的查看窗口
+    setViewingTaskId(record.id);
+    setError('');
 
     try {
       await callAIApiStream(record.rawText, (title, content) => {
-        setCompareData(prev => prev ? { ...prev, newTitle: title, newOptimized: content } : null);
+        setOptimizationTasks(prev => {
+          const currentTask = prev[record.id];
+          if (!currentTask) return prev;
+
+          return {
+            ...prev,
+            [record.id]: {
+              ...currentTask,
+              compareData: {
+                ...currentTask.compareData,
+                newTitle: title,
+                newOptimized: content
+              }
+            }
+          };
+        });
       });
+
+      // 完成后更新状态
+      setOptimizationTasks(prev => ({
+        ...prev,
+        [record.id]: {
+          ...prev[record.id],
+          status: 'done'
+        }
+      }));
+
     } catch (err) {
       console.error('AI 优化失败:', err);
-      setError(err instanceof Error ? err.message : 'AI 优化失败，请重试');
-      setCompareData(null);
-      setShowCompareModal(false);
-    } finally {
-      setOptimizingId(null);
+      const errorMessage = err instanceof Error ? err.message : 'AI 优化失败，请重试';
+
+      setOptimizationTasks(prev => ({
+        ...prev,
+        [record.id]: {
+          ...prev[record.id],
+          status: 'error',
+          error: errorMessage
+        }
+      }));
+
+      // 如果当前正在查看该任务，显示全局错误
+      if (viewingTaskId === record.id) {
+        setError(errorMessage);
+      }
     }
-  }, [aiApiKey, callAIApiStream]);
+  }, [aiApiKey, callAIApiStream, viewingTaskId]);
 
   const confirmUseOptimized = useCallback((useNew: boolean) => {
-    if (useNew && compareData) {
-      updateHistoryRecord(compareData.id, compareData.newOptimized, compareData.newTitle);
+    if (viewingTaskId && optimizationTasks[viewingTaskId]) {
+      const task = optimizationTasks[viewingTaskId];
+      if (useNew) {
+        updateHistoryRecord(task.compareData.id, task.compareData.newOptimized, task.compareData.newTitle);
+      }
+
+      // 移除任务或保留（这里选择移除任务状态，结束流程）
+      // 如果要保留“已完成”状态供查看，可以不从 state 中删除，只关闭 modal
+      const newTasks = { ...optimizationTasks };
+      delete newTasks[viewingTaskId];
+      setOptimizationTasks(newTasks);
     }
-    setCompareData(null);
-    setShowCompareModal(false);
-  }, [compareData, updateHistoryRecord]);
+    setViewingTaskId(null);
+  }, [viewingTaskId, optimizationTasks, updateHistoryRecord]);
 
   // 最小化对照窗口（后台继续优化）
   const minimizeCompareModal = useCallback(() => {
-    setShowCompareModal(false);
+    setViewingTaskId(null);
   }, []);
 
   // 重新打开对照窗口
-  const reopenCompareModal = useCallback(() => {
-    if (compareData) {
-      setShowCompareModal(true);
+  const reopenCompareModal = useCallback((id: string) => {
+    if (optimizationTasks[id]) {
+      setViewingTaskId(id);
     }
-  }, [compareData]);
+  }, [optimizationTasks]);
 
-  // 保存设置
-  const saveSettings = useCallback(() => {
-    if (tempGroqKey) {
-      setGroqKey(tempGroqKey);
-      localStorage.setItem('groq_api_key', tempGroqKey);
-    }
-    if (tempAiKey) {
-      setAiApiKey(tempAiKey);
-      localStorage.setItem('ai_api_key', tempAiKey);
-    }
-    if (tempModel) {
-      setSelectedModel(tempModel);
-      localStorage.setItem('ai_model', tempModel);
-    }
-    // 保存自定义配置
-    setAiBaseUrl(tempBaseUrl);
-    localStorage.setItem('ai_base_url', tempBaseUrl);
-    setCustomModelName(tempModelName);
-    localStorage.setItem('ai_custom_model', tempModelName);
-
-    setShowSettingsModal(false);
-  }, [tempGroqKey, tempAiKey, tempModel, tempBaseUrl, tempModelName]);
-
-  // 打开设置弹窗
-  const openSettingsModal = useCallback(() => {
-    setTempGroqKey(groqKey);
-    setTempAiKey(aiApiKey);
-    setTempModel(selectedModel);
-    setTempBaseUrl(aiBaseUrl);
-    setTempModelName(customModelName);
-    setShowSettingsModal(true);
-  }, [groqKey, aiApiKey, selectedModel, aiBaseUrl, customModelName]);
 
 
   // 选择文件（支持音频和视频，Groq 会自动提取音轨）
@@ -617,22 +707,34 @@ ${text}`
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('model', 'whisper-large-v3-turbo');
+      // 标准化模型 ID
+      formData.append('model', 'whisper-large-v3');
       formData.append('language', 'zh');
       formData.append('response_format', 'verbose_json');
 
       setProgress(30);
 
+      // 强制清洗 Key，解决潜在的 401/CORS 问题
+      const activeGroqKey = (localStorage.getItem('groq_api_key') || '').trim();
+
       const response = await fetch(GROQ_API_URL, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${groqKey}` },
+        headers: { 'Authorization': `Bearer ${activeGroqKey}` },
         body: formData,
+      }).catch(err => {
+        if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
+          throw new Error('Groq 接口跨域或连接未授权。请检查转写 Key 是否正确。');
+        }
+        throw err;
       });
 
       setProgress(80);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          throw new Error('Groq 身份验证失败：API Key 无效。请在设置中检查。');
+        }
         throw new Error(errorData.error?.message || `请求失败: ${response.status}`);
       }
 
@@ -702,7 +804,7 @@ ${text}`
   const configStatus = groqKey && aiApiKey ? 'full' : (groqKey || aiApiKey ? 'partial' : 'none');
 
   return (
-    <div className="space-y-4 pb-8">
+    <div className="space-y-4 pb-8 max-w-7xl mx-auto">
       {/* 隐藏的音频元素 */}
       {mediaUrl && !isVideoFile && (
         <audio
@@ -751,31 +853,31 @@ ${text}`
             </svg>
           </button>
         )}
-        {/* 设置按钮 */}
-        <button
-          onClick={openSettingsModal}
-          className={`p-2.5 rounded-xl transition-all btn-press ${configStatus === 'full'
-            ? 'bg-green-500/20 hover:bg-green-500/30 text-green-400'
+        {/* 设置状态提示 */}
+        <div
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all ${configStatus === 'full'
+            ? ' border-none text-green-400'
             : configStatus === 'partial'
-              ? 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400'
-              : 'bg-red-500/20 hover:bg-red-500/30 text-red-400 animate-pulse'
+              ? ' border-none text-amber-400'
+              : ' border-none text-red-400 animate-pulse'
             }`}
-          title={configStatus === 'full' ? 'API 已配置' : configStatus === 'partial' ? '部分 API 已配置' : '请配置 API'}
+          title={configStatus === 'full' ? 'API 已从全局配置读取' : configStatus === 'partial' ? '部分 API 已配置' : 'API 未在全局设置中配置'}
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-            <circle cx="12" cy="12" r="3" />
-          </svg>
-        </button>
+          <div className={`w-2 h-2 rounded-full ${configStatus === 'full' ? 'bg-green-500' : configStatus === 'partial' ? 'bg-amber-500' : 'bg-red-500'}`} />
+
+        </div>
       </div>
 
       {activeTab === 'transcribe' ? (
         <>
           {/* 配置状态提示 */}
           {!groqKey && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-400 text-sm flex items-center gap-2">
-              <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
-              <span>请先点击右上角设置按钮配置 Groq API Key</span>
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-amber-400 text-sm flex items-center gap-3">
+              <svg className="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
+              <div className="flex-1">
+                <p className="font-bold">未检测到语音转写配置</p>
+                <p className="text-xs opacity-80">请前往首页右上角“设置”中的“AI 服务配置”填写 Groq API Key。</p>
+              </div>
             </div>
           )}
 
@@ -1035,8 +1137,12 @@ ${text}`
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {history.map((record, index) => {
-                const isOptimizingThis = compareData?.id === record.id && !showCompareModal;
-                const hasBackgroundOptimization = isOptimizingThis && (optimizingId === record.id || compareData?.newOptimized);
+                const task = optimizationTasks[record.id];
+                const isOptimizingThis = task && task.status === 'optimizing';
+                const hasTask = !!task;
+
+                // 是否显示顶部状态条：任务正在进行，或者任务已完成且有结果
+                const hasBackgroundOptimization = hasTask && (isOptimizingThis || (task.status === 'done'));
 
                 return (
                   <div
@@ -1048,17 +1154,22 @@ ${text}`
                     {/* 后台优化状态条 */}
                     {hasBackgroundOptimization && (
                       <div
-                        onClick={reopenCompareModal}
+                        onClick={() => reopenCompareModal(record.id)}
                         className="px-3 py-2 bg-violet-500/10 border-b border-violet-500/30 flex items-center justify-between cursor-pointer hover:bg-violet-500/20 transition-all"
                       >
                         <div className="flex items-center gap-2">
-                          {optimizingId === record.id ? (
+                          {isOptimizingThis ? (
                             <>
                               <svg className="w-3.5 h-3.5 animate-spin text-violet-400" viewBox="0 0 24 24" fill="none">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                               </svg>
                               <span className="text-violet-400 text-xs">AI 优化中...</span>
+                            </>
+                          ) : task.status === 'error' ? (
+                            <>
+                              <svg className="w-3.5 h-3.5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
+                              <span className="text-red-400 text-xs">优化失败: {task.error}</span>
                             </>
                           ) : (
                             <>
@@ -1080,15 +1191,44 @@ ${text}`
                     <div className="p-3">
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className="text-white text-sm font-medium truncate">
-                              {record.optimizedTitle || record.fileName}
-                            </p>
+                          <div className="flex items-center gap-2 group">
+                            {editingId === record.id ? (
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editingTitle}
+                                onChange={(e) => setEditingTitle(e.target.value)}
+                                onBlur={() => handleEditTitle(record, editingTitle)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') handleEditTitle(record, editingTitle);
+                                  if (e.key === 'Escape') setEditingId(null);
+                                }}
+                                className="bg-black/40 border border-cyber-lime/50 rounded px-2 py-0.5 text-sm text-white focus:outline-none w-full"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                            ) : (
+                              <div
+                                className="flex items-center gap-1.5 cursor-pointer hover:text-cyber-lime transition-colors truncate"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingId(record.id);
+                                  setEditingTitle(record.optimizedTitle || record.fileName);
+                                }}
+                              >
+                                <p className="text-white text-sm font-medium truncate inherit-color">
+                                  {record.optimizedTitle || record.fileName}
+                                </p>
+                                <svg className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                </svg>
+                              </div>
+                            )}
                             <span className={`px-1.5 py-0.5 text-xs rounded flex-shrink-0 ${record.optimizedText ? 'bg-violet-500/20 text-violet-400' : 'bg-gray-500/20 text-gray-400'}`}>
                               {record.optimizedText ? 'AI' : '原文'}
                             </span>
                           </div>
-                          <p className="text-gray-500 text-xs">{formatTime(record.createdAt)}</p>
+                          <p className="text-gray-500 text-[10px] mt-0.5">{formatTime(record.createdAt)}</p>
                         </div>
                         <button
                           onClick={() => setDeleteConfirmId(record.id)}
@@ -1100,7 +1240,7 @@ ${text}`
                         </button>
                       </div>
                       <div
-                        onClick={() => hasBackgroundOptimization ? reopenCompareModal() : setViewingRecord(record)}
+                        onClick={() => hasBackgroundOptimization ? reopenCompareModal(record.id) : setViewingRecord(record)}
                         className="cursor-pointer hover:bg-white/5 rounded-lg p-1 -mx-1 transition-all"
                       >
                         <p className="text-gray-400 text-xs line-clamp-3">{record.optimizedText || record.rawText}</p>
@@ -1116,8 +1256,8 @@ ${text}`
                         {aiApiKey && !hasBackgroundOptimization && (
                           <button
                             onClick={() => optimizeHistoryRecord(record)}
-                            disabled={!!optimizingId}
-                            className={`px-3 py-1.5 rounded-lg text-xs transition-all btn-press flex items-center gap-1 ${optimizingId
+                            disabled={isOptimizingThis}
+                            className={`px-3 py-1.5 rounded-lg text-xs transition-all btn-press flex items-center gap-1 ${isOptimizingThis
                               ? 'bg-gray-500/10 text-gray-500 cursor-not-allowed'
                               : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-400'
                               }`}
@@ -1136,139 +1276,6 @@ ${text}`
             </div>
           )}
         </div>
-      )}
-
-      {/* 设置弹窗 */}
-      {showSettingsModal && createPortal(
-        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-backdrop-in" onClick={() => setShowSettingsModal(false)} />
-          <div className="relative bg-cyber-dark border border-white/10 rounded-2xl w-full max-w-md animate-modal-in">
-            {/* 头部 */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <span className="text-white font-medium">API 配置</span>
-              </div>
-              <button onClick={() => setShowSettingsModal(false)} className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            {/* 内容 */}
-            <div className="p-5 space-y-5">
-              {/* Groq API Key */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-white text-sm font-medium">Groq API Key</label>
-                  {groqKey && <span className="text-green-400 text-xs">✓ 已配置</span>}
-                </div>
-                <input
-                  type="password"
-                  value={tempGroqKey}
-                  onChange={(e) => setTempGroqKey(e.target.value)}
-                  placeholder="gsk_xxx..."
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-pink-500/50"
-                />
-                <p className="text-gray-500 text-xs mt-1.5">
-                  用于语音转写，访问 <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-cyber-lime hover:underline">console.groq.com</a> 获取
-                </p>
-              </div>
-
-              {/* 分隔线 */}
-              <div className="border-t border-white/10" />
-
-              {/* AI 模型选择 */}
-              <div>
-                <label className="text-white text-sm font-medium mb-2 block">AI 优化模型</label>
-                <select
-                  value={tempModel}
-                  onChange={(e) => setTempModel(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-violet-500/50 appearance-none cursor-pointer"
-                  style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center', backgroundSize: '16px' }}
-                >
-                  {AI_MODELS.map(model => (
-                    <option key={model.id} value={model.id} className="bg-cyber-dark">
-                      {model.name} ({model.provider})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* AI API Key */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-white text-sm font-medium">AI API Key</label>
-                  {aiApiKey && <span className="text-green-400 text-xs">✓ 已配置</span>}
-                </div>
-                <input
-                  type="password"
-                  value={tempAiKey}
-                  onChange={(e) => setTempAiKey(e.target.value)}
-                  placeholder={AI_MODELS.find(m => m.id === tempModel)?.keyPrefix ? `${AI_MODELS.find(m => m.id === tempModel)?.keyPrefix}xxx...` : 'API Key'}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
-                />
-                {/* Custom Base URL */}
-                {tempModel === 'custom' && (
-                  <div className="mt-4">
-                    <label className="text-white text-sm font-medium mb-2 block">Base URL</label>
-                    <input
-                      type="text"
-                      value={tempBaseUrl}
-                      onChange={(e) => setTempBaseUrl(e.target.value)}
-                      placeholder="https://api.openai.com/v1/chat/completions"
-                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
-                    />
-                  </div>
-                )}
-
-                {/* Custom Model Name */}
-                {tempModel === 'custom' && (
-                  <div className="mt-4">
-                    <label className="text-white text-sm font-medium mb-2 block">模型名称</label>
-                    <input
-                      type="text"
-                      value={tempModelName}
-                      onChange={(e) => setTempModelName(e.target.value)}
-                      placeholder="如 gpt-4"
-                      className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
-                    />
-                  </div>
-                )}
-
-                <div className="text-gray-500 text-xs mt-1.5">
-                  <span>获取 API Key：</span>
-                  <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1">
-                    <a href="https://platform.deepseek.com" target="_blank" rel="noopener noreferrer" className="text-cyber-lime hover:underline">DeepSeek</a>
-                    <a href="https://open.bigmodel.cn" target="_blank" rel="noopener noreferrer" className="text-cyber-lime hover:underline">智谱AI</a>
-                    <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener noreferrer" className="text-cyber-lime hover:underline">通义千问</a>
-                    <a href="https://platform.moonshot.cn" target="_blank" rel="noopener noreferrer" className="text-cyber-lime hover:underline">Kimi</a>
-                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-cyber-lime hover:underline">Gemini</a>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 底部按钮 */}
-            <div className="px-5 py-4 border-t border-white/10 flex gap-3">
-              <button
-                onClick={() => setShowSettingsModal(false)}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-medium transition-all btn-press"
-              >
-                取消
-              </button>
-              <button
-                onClick={saveSettings}
-                className="flex-1 py-2.5 rounded-xl bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 text-sm font-medium transition-all btn-press"
-              >
-                保存
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
       )}
 
       {/* 查看详情弹窗 */}
@@ -1355,113 +1362,129 @@ ${text}`
         />
       )}
 
-      {/* AI 优化对照弹窗 */}
-      {compareData && showCompareModal && createPortal(
+      {/* AI 优化对照弹窗 - 基于 viewingTaskId 显示内容 */}
+      {viewingTaskId && optimizationTasks[viewingTaskId] && createPortal(
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm animate-backdrop-in" onClick={minimizeCompareModal} />
           <div className="relative bg-cyber-dark border border-white/10 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col animate-modal-in">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-              <div className="flex items-center gap-3 min-w-0 flex-1">
-                <svg className="w-5 h-5 text-violet-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
-                <span className="text-white font-medium flex-shrink-0">AI 优化对照</span>
-                {optimizingId && (
-                  <span className="flex items-center gap-1.5 text-violet-400 text-sm flex-shrink-0">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    生成中...
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {/* 最小化按钮 */}
-                <button
-                  onClick={minimizeCompareModal}
-                  className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
-                  title="最小化到后台"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-                  </svg>
-                </button>
-                {/* 关闭按钮 */}
-                <button
-                  onClick={() => confirmUseOptimized(false)}
-                  className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
-                  title="关闭并放弃"
-                >
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
-                </button>
-              </div>
-            </div>
+            {(() => {
+              const task = optimizationTasks[viewingTaskId];
+              const { compareData, status } = task;
+              const isOptimizing = status === 'optimizing';
 
-            {/* AI 生成的标题 */}
-            {compareData.newTitle && (
-              <div className="px-5 py-3 border-b border-white/10 bg-violet-500/5">
-                <div className="flex items-center gap-2 mb-1">
-                  <svg className="w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 7V4h16v3M9 20h6M12 4v16" />
-                  </svg>
-                  <span className="text-violet-400 text-xs">AI 生成标题</span>
-                </div>
-                <p className="text-white font-medium">{compareData.newTitle}</p>
-              </div>
-            )}
+              return (
+                <>
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <svg className="w-5 h-5 text-violet-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+                      <span className="text-white font-medium flex-shrink-0">AI 优化对照</span>
+                      {isOptimizing && (
+                        <span className="flex items-center gap-1.5 text-violet-400 text-sm flex-shrink-0">
+                          <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          生成中...
+                        </span>
+                      )}
+                      {task.error && (
+                        <span className="flex items-center gap-1.5 text-red-400 text-sm flex-shrink-0">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" /></svg>
+                          {task.error}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {/* 最小化按钮 */}
+                      <button
+                        onClick={minimizeCompareModal}
+                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                        title="最小化到后台"
+                      >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                        </svg>
+                      </button>
+                      {/* 关闭按钮 */}
+                      <button
+                        onClick={() => confirmUseOptimized(false)}
+                        className="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+                        title="关闭并放弃"
+                      >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  </div>
 
-            <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-4 p-4">
-              <div className="flex flex-col min-h-0 mb-4 md:mb-0">
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <span className="text-gray-400 text-sm font-medium">原文</span>
-                </div>
-                <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-4 overflow-y-auto">
-                  <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">{compareData.rawText}</p>
-                </div>
-              </div>
-
-              <div className="flex flex-col min-h-0">
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <svg className="w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
-                  <span className="text-violet-400 text-sm font-medium">AI 优化内容</span>
-                  {compareData.oldOptimized && (
-                    <span className="text-amber-400 text-xs bg-amber-500/10 px-2 py-0.5 rounded">将覆盖旧版本</span>
-                  )}
-                </div>
-                <div className="flex-1 bg-violet-500/5 border border-violet-500/20 rounded-xl p-4 overflow-y-auto">
-                  {compareData.newOptimized ? (
-                    <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">{compareData.newOptimized}</p>
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-gray-500">
-                      <svg className="w-6 h-6 animate-spin mr-2" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      正在生成...
+                  {/* AI 生成的标题 */}
+                  {compareData.newTitle && (
+                    <div className="px-5 py-3 border-b border-white/10 bg-violet-500/5">
+                      <div className="flex items-center gap-2 mb-1">
+                        <svg className="w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+                        </svg>
+                        <span className="text-violet-400 text-xs">AI 生成标题</span>
+                      </div>
+                      <p className="text-white font-medium">{compareData.newTitle}</p>
                     </div>
                   )}
-                </div>
-              </div>
-            </div>
 
-            <div className="px-5 py-4 border-t border-white/10 flex gap-3">
-              <button
-                onClick={minimizeCompareModal}
-                className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-medium transition-all btn-press flex items-center justify-center gap-2"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-                </svg>
-                后台运行
-              </button>
-              <button
-                onClick={() => confirmUseOptimized(true)}
-                disabled={!!optimizingId || !compareData.newOptimized}
-                className="flex-1 py-2.5 rounded-xl bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 text-sm font-medium transition-all btn-press flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" /></svg>
-                {compareData.oldOptimized ? '覆盖保存' : '保存优化结果'}
-              </button>
-            </div>
+                  <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-0 md:gap-4 p-4">
+                    <div className="flex flex-col min-h-0 mb-4 md:mb-0">
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <span className="text-gray-400 text-sm font-medium">原文</span>
+                      </div>
+                      <div className="flex-1 bg-white/5 border border-white/10 rounded-xl p-4 overflow-y-auto">
+                        <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">{compareData.rawText}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col min-h-0">
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <svg className="w-4 h-4 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" /></svg>
+                        <span className="text-violet-400 text-sm font-medium">AI 优化内容</span>
+                        {compareData.oldOptimized && (
+                          <span className="text-amber-400 text-xs bg-amber-500/10 px-2 py-0.5 rounded">将覆盖旧版本</span>
+                        )}
+                      </div>
+                      <div className="flex-1 bg-violet-500/5 border border-violet-500/20 rounded-xl p-4 overflow-y-auto">
+                        {compareData.newOptimized ? (
+                          <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">{compareData.newOptimized}</p>
+                        ) : (
+                          <div className="flex items-center justify-center h-full text-gray-500">
+                            <svg className="w-6 h-6 animate-spin mr-2" viewBox="0 0 24 24" fill="none">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            正在生成...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="px-5 py-4 border-t border-white/10 flex gap-3">
+                    <button
+                      onClick={minimizeCompareModal}
+                      className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 text-sm font-medium transition-all btn-press flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
+                      </svg>
+                      后台运行
+                    </button>
+                    <button
+                      onClick={() => confirmUseOptimized(true)}
+                      disabled={isOptimizing || !compareData.newOptimized}
+                      className="flex-1 py-2.5 rounded-xl bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 text-sm font-medium transition-all btn-press flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20 6L9 17l-5-5" /></svg>
+                      {compareData.oldOptimized ? '覆盖保存' : '保存优化结果'}
+                    </button>
+                  </div>
+                </>
+              )
+            })()}
           </div>
         </div>,
         document.body

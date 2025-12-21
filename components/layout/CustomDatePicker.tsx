@@ -4,7 +4,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from '../shared/Icons';
 import type { VideoWithUploader } from '../../lib/database.types';
 
 // 通用视频类型（支持旧格式和新格式）
-type VideoItem = { createdAt?: Date; pubdate?: string | null };
+type VideoItem = { createdAt?: Date; pubdate?: string | null; created_at?: string };
 
 interface CustomDatePickerProps {
   isOpen: boolean;
@@ -67,9 +67,9 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
     const map: Record<string, number> = {};
     videos.forEach((v: any) => {
       // 支持旧格式 (createdAt) 和新格式 (pubdate)
-      const dateValue = v.pubdate || v.createdAt;
+      const dateValue = v.pubdate || v.createdAt || v.created_at;
       if (!dateValue) return;
-      
+
       const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
       // 使用本地时间，而不是 UTC 时间
       const year = date.getFullYear();
@@ -87,7 +87,7 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
     const lastDay = new Date(currentYear, currentMonth + 1, 0);
     const startPadding = firstDay.getDay(); // 周日开始
     const days: (Date | null)[] = [];
-    
+
     // 前置空白
     for (let i = 0; i < startPadding; i++) days.push(null);
     // 当月日期
@@ -136,7 +136,7 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/80 backdrop-blur-sm" onClick={onClose}>
-      <div 
+      <div
         className="w-full max-w-sm bg-cyber-card border-t sm:border border-white/10 sm:rounded-2xl p-4 shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
@@ -162,7 +162,7 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
         <div className="grid grid-cols-7 gap-1">
           {calendarDays.map((date, idx) => {
             if (!date) return <div key={idx} className="aspect-square" />;
-            
+
             // 使用本地时间生成 key（与 videoCountByDate 一致）
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -170,7 +170,7 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
             const dateKey = `${year}-${month}-${day}`;
             const count = videoCountByDate[dateKey] || 0;
             const heat = getHeatLevel(count);
-            
+
             return (
               <button
                 key={idx}
@@ -206,7 +206,7 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
         </div>
 
         {/* 关闭按钮 */}
-        <button 
+        <button
           onClick={onClose}
           className="w-full mt-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
         >
