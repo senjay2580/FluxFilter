@@ -56,6 +56,11 @@ const App = () => {
   const [isVideoAnalyzerOpen, setIsVideoAnalyzerOpen] = useState(false);
   const [deleteConfirmVideo, setDeleteConfirmVideo] = useState<{ bvid: string; title: string; url: string } | null>(null);
 
+  // 记录子页面打开时的来源 Tab，用于返回（使用 ref 避免闭包问题）
+  const subPageSourceRef = React.useRef<Tab>('home');
+  // 记录设置页面打开前的来源，用于从设置返回
+  const settingsSourceRef = React.useRef<Tab>('home');
+
   // UP主筛选
   const [selectedUploader, setSelectedUploader] = useState<{ mid: number; name: string } | null>(null);
   const [isUploaderPickerOpen, setIsUploaderPickerOpen] = useState(false);
@@ -452,6 +457,7 @@ const App = () => {
         url: `https://www.bilibili.com/video/${bvid}`,
         title: video.title
       });
+      subPageSourceRef.current = activeTab; // 记录当前页面作为来源
       setIsLearningLogOpen(true);
     }
 
@@ -950,23 +956,39 @@ const App = () => {
               {/* 设置页面 */}
               <SettingsPage
                 isOpen={activeTab === 'settings'}
-                onClose={() => setActiveTab('home')}
+                onClose={() => setActiveTab(subPageSourceRef.current)}
                 initialView={settingsInitialView}
-                onOpenNotes={() => setIsNotesOpen(true)}
-                onOpenLearningLog={() => { setLearningLogInitialData({ url: '', title: '' }); setIsLearningLogOpen(true); }}
-                onOpenResourceCenter={() => setIsResourceCenterOpen(true)}
+                onOpenNotes={() => { subPageSourceRef.current = 'settings'; setIsNotesOpen(true); }}
+                onOpenLearningLog={() => { subPageSourceRef.current = 'settings'; setLearningLogInitialData({ url: '', title: '' }); setIsLearningLogOpen(true); }}
+                onOpenResourceCenter={() => { subPageSourceRef.current = 'settings'; setIsResourceCenterOpen(true); }}
               />
 
               {/* 笔记页面 */}
               <NotesPage
                 isOpen={isNotesOpen}
-                onClose={() => setIsNotesOpen(false)}
+                onClose={() => {
+                  setIsNotesOpen(false);
+                  // 返回到打开时的来源页面
+                  setActiveTab(subPageSourceRef.current);
+                  // 如果是从设置返回，恢复设置页面的来源
+                  if (subPageSourceRef.current === 'settings') {
+                    subPageSourceRef.current = settingsSourceRef.current;
+                  }
+                }}
               />
 
               {/* 学习日志页面 */}
               <LearningLog
                 isOpen={isLearningLogOpen}
-                onClose={() => setIsLearningLogOpen(false)}
+                onClose={() => {
+                  setIsLearningLogOpen(false);
+                  // 返回到打开时的来源页面
+                  setActiveTab(subPageSourceRef.current);
+                  // 如果是从设置返回，恢复设置页面的来源
+                  if (subPageSourceRef.current === 'settings') {
+                    subPageSourceRef.current = settingsSourceRef.current;
+                  }
+                }}
                 initialVideoUrl={learningLogInitialData.url}
                 initialVideoTitle={learningLogInitialData.title}
               />
@@ -974,7 +996,15 @@ const App = () => {
               {/* 资源中心 */}
               <ResourceCenter
                 isOpen={isResourceCenterOpen}
-                onClose={() => setIsResourceCenterOpen(false)}
+                onClose={() => {
+                  setIsResourceCenterOpen(false);
+                  // 返回到打开时的来源页面
+                  setActiveTab(subPageSourceRef.current);
+                  // 如果是从设置返回，恢复设置页面的来源
+                  if (subPageSourceRef.current === 'settings') {
+                    subPageSourceRef.current = settingsSourceRef.current;
+                  }
+                }}
               />
 
               {/* AI 视频分析 */}
@@ -1200,7 +1230,7 @@ const App = () => {
                         <div className="flex justify-center gap-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start">
                           {/* 收藏夹 */}
                           <button
-                            onClick={() => { setSettingsInitialView('collector'); setActiveTab('settings'); }}
+                            onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('collector'); setActiveTab('settings'); }}
                             className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1a1c20] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#252830] transition-all active:scale-[0.98]"
                           >
                             <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1216,7 +1246,7 @@ const App = () => {
 
                           {/* 提醒 */}
                           <button
-                            onClick={() => { setSettingsInitialView('reminder'); setActiveTab('settings'); }}
+                            onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('reminder'); setActiveTab('settings'); }}
                             className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1f1b16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#2a241c] transition-all active:scale-[0.98]"
                           >
                             <svg className="w-5 h-5 lg:w-6 lg:h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1233,7 +1263,7 @@ const App = () => {
 
                           {/* TODO */}
                           <button
-                            onClick={() => { setSettingsInitialView('todo'); setActiveTab('settings'); }}
+                            onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('todo'); setActiveTab('settings'); }}
                             className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a22] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e232e] transition-all active:scale-[0.98]"
                           >
                             <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1250,7 +1280,7 @@ const App = () => {
 
                           {/* 笔记 */}
                           <button
-                            onClick={() => setIsNotesOpen(true)}
+                            onClick={() => { subPageSourceRef.current = 'home'; setIsNotesOpen(true); }}
                             className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1d161d] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#271e27] transition-all active:scale-[0.98]"
                             title="笔记"
                           >
@@ -1271,6 +1301,7 @@ const App = () => {
                           {/* 音频转写 */}
                           <button
                             onClick={() => {
+                              subPageSourceRef.current = 'home';
                               setSettingsInitialView('transcriber');
                               setActiveTab('settings');
                             }}
@@ -1760,7 +1791,7 @@ const App = () => {
 
             {/* 设置 */}
             <button
-              onClick={() => { setSettingsInitialView('main'); setActiveTab('settings'); }}
+              onClick={() => { settingsSourceRef.current = activeTab !== 'settings' ? activeTab : 'home'; subPageSourceRef.current = settingsSourceRef.current; setSettingsInitialView('main'); setActiveTab('settings'); }}
               className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
                 }`}
             >
@@ -1826,7 +1857,7 @@ const App = () => {
 
             {/* 设置 */}
             <button
-              onClick={() => { setSettingsInitialView('main'); setActiveTab('settings'); }}
+              onClick={() => { settingsSourceRef.current = activeTab !== 'settings' ? activeTab : 'home'; subPageSourceRef.current = settingsSourceRef.current; setSettingsInitialView('main'); setActiveTab('settings'); }}
               className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'settings' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'
                 }`}
             >

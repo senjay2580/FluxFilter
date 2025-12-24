@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS video (
     share_count INTEGER DEFAULT 0,       -- 分享数
     like_count INTEGER DEFAULT 0,        -- 点赞数
     pubdate TIMESTAMPTZ,                 -- 发布时间
+    access_restriction VARCHAR(50),      -- 访问限制: pay/ugc_pay/arc_pay/charging/null
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     
@@ -78,6 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_video_user_id ON video(user_id);
 CREATE INDEX IF NOT EXISTS idx_video_mid ON video(user_id, mid);
 CREATE INDEX IF NOT EXISTS idx_video_pubdate ON video(user_id, pubdate DESC);
 CREATE INDEX IF NOT EXISTS idx_video_bvid ON video(bvid);
+CREATE INDEX IF NOT EXISTS idx_video_access_restriction ON video(user_id, access_restriction);
 
 -- 外键：video → uploader（同一用户下，通过mid关联）
 ALTER TABLE video 
@@ -281,6 +283,7 @@ CREATE TABLE IF NOT EXISTS collected_video (
     share_count INTEGER DEFAULT 0,       -- 分享数
     like_count INTEGER DEFAULT 0,        -- 点赞数
     pubdate TIMESTAMPTZ,                 -- 发布时间
+    access_restriction VARCHAR(50),      -- 访问限制: pay/ugc_pay/arc_pay/charging/null
     -- UP主信息（直接存储，无外键）
     uploader_mid BIGINT,                 -- UP主ID
     uploader_name VARCHAR(100),          -- UP主昵称
@@ -299,6 +302,7 @@ CREATE TABLE IF NOT EXISTS collected_video (
 CREATE INDEX IF NOT EXISTS idx_collected_video_user_id ON collected_video(user_id);
 CREATE INDEX IF NOT EXISTS idx_collected_video_pubdate ON collected_video(user_id, pubdate DESC);
 CREATE INDEX IF NOT EXISTS idx_collected_video_bvid ON collected_video(bvid);
+CREATE INDEX IF NOT EXISTS idx_collected_video_access_restriction ON collected_video(user_id, access_restriction);
 
 -- RLS策略
 ALTER TABLE collected_video ENABLE ROW LEVEL SECURITY;

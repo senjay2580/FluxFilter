@@ -11,6 +11,7 @@ import { Color } from '@tiptap/extension-color';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
 import DeleteConfirmModal from '../shared/DeleteConfirmModal';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 // Apple 风格浅色颜色配置
 const lightColorConfig: Record<NoteColor, { bg: string; border: string; card: string; text: string }> = {
@@ -819,6 +820,9 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
   const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
+  // 左滑返回手势
+  const swipeHandlers = useSwipeBack({ onBack: onClose });
+
   // 主题状态
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     const saved = localStorage.getItem('notes-theme-mode');
@@ -1108,8 +1112,15 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
+  // 解构出事件处理器，排除 swipeState
+  const { swipeState: _, ...swipeEventHandlers } = swipeHandlers;
+
   return createPortal(
-    <div className="fixed inset-0 z-[99998] flex flex-col notes-page-enter" style={{ backgroundColor: theme.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif' }}>
+    <div 
+      className="fixed inset-0 z-[99998] flex flex-col notes-page-enter" 
+      style={{ backgroundColor: theme.bg, fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif' }}
+      {...swipeEventHandlers}
+    >
       {/* 背景装饰 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 right-20 w-80 h-80 rounded-full blur-3xl notes-blob" style={{ background: isDark ? 'rgba(0,122,255,0.08)' : 'rgba(0,122,255,0.05)' }} />

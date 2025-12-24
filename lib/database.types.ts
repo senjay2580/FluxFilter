@@ -32,6 +32,7 @@ export interface Video {
   share_count: number;
   like_count: number;
   pubdate: string | null;
+  access_restriction: string | null; // 访问限制: charging/pay/ugc_pay/arc_pay/null
   created_at: string;
   updated_at: string;
 }

@@ -5,6 +5,7 @@ import { ClockIcon } from '../shared/Icons';
 import { formatDuration } from '../../lib/bilibili';
 import type { VideoWithUploader } from '../../lib/database.types';
 import EmbeddedPlayer from './EmbeddedPlayer';
+import { parseLinksToElements } from '../../lib/parseLinks';
 
 // 支持两种数据格式：旧的 Video 类型和新的 VideoWithUploader 类型
 interface VideoCardProps {
@@ -48,6 +49,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
   const [showEmbeddedPlayer, setShowEmbeddedPlayer] = useState(false);
   const [showTitleTooltip, setShowTitleTooltip] = useState(false);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [descExpanded, setDescExpanded] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
   // 使用 useMemo 缓存计算结果，避免每次渲染都重新计算
@@ -67,10 +69,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
         likes: video.like_count,
       } : null,
       pubdate: isDb && video.pubdate ? formatPubdate(video.pubdate) : null,
+      accessRestriction: isDb ? (video as any).access_restriction : null,
+      description: isDb ? (video as any).description || '' : (video as any).description || '',
     };
   }, [video]);
 
-  const { bvid, thumbnail, title, duration, author, avatar, stats, pubdate } = videoData;
+  const { bvid, thumbnail, title, duration, author, avatar, stats, pubdate, accessRestriction, description } = videoData;
 
   // 抽屉状态 - 使用全局控制
   const drawerOpen = openMenuId === bvid;
@@ -157,6 +161,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
           <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/70 rounded text-[11px] font-bold text-white">
             {duration}
           </div>
+
+          {/* 充电/付费标识 */}
+          {accessRestriction && (
+            <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded text-[10px] font-bold text-white flex items-center gap-0.5 shadow-lg">
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+              </svg>
+              <span>{accessRestriction === 'charging' ? '充电' : '付费'}</span>
+            </div>
+          )}
 
           {/* 底部数据展示条 - 在封面上，无模糊背景 */}
           <div className="absolute bottom-0 left-0 right-0 px-3 py-2">
@@ -283,7 +297,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
           {/* 遮罩层 - 移除 backdrop-blur 提升性能 */}
           <div
             className="absolute inset-0 bg-black/70 animate-drawer-overlay-in"
-            onClick={() => onMenuToggle?.(null)}
+            onClick={() => { setDescExpanded(false); onMenuToggle?.(null); }}
           />
 
           {/* 抽屉内容 */}
@@ -296,17 +310,45 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               </div>
 
               {/* 视频信息预览 */}
-              <div className="px-4 pb-3 pt-1 flex gap-3 items-start border-b border-white/10">
-                <img
-                  src={thumbnail || ''}
-                  alt={title}
-                  className="w-16 h-10 rounded object-cover bg-gray-800 shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-                <div className="flex-1 min-w-0">
-                  <h4 className="text-white text-sm font-medium line-clamp-2 leading-snug">{title}</h4>
-                  <p className="text-cyber-lime text-xs mt-0.5 truncate">{author}</p>
+              <div className="px-4 pb-3 pt-1 border-b border-white/10">
+                <div className="flex gap-3 items-start">
+                  <img
+                    src={thumbnail || ''}
+                    alt={title}
+                    className="w-16 h-10 rounded object-cover bg-gray-800 shrink-0"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-white text-sm font-medium line-clamp-2 leading-snug">{title}</h4>
+                    <p className="text-cyber-lime text-xs mt-0.5 truncate">{author}</p>
+                  </div>
                 </div>
+                {/* 视频简介 */}
+                {description && (
+                  <div className="mt-2.5">
+                    <div className="flex items-start gap-2">
+                      <p className={`flex-1 text-xs text-gray-400 leading-relaxed ${descExpanded ? '' : 'line-clamp-2'}`}>
+                        {parseLinksToElements(description)}
+                      </p>
+                      {description.length > 50 && (
+                        <button
+                          onClick={() => setDescExpanded(!descExpanded)}
+                          className="shrink-0 w-5 h-5 flex items-center justify-center text-cyber-lime hover:text-cyber-lime/80 transition-all"
+                        >
+                          <svg 
+                            className={`w-4 h-4 transition-transform duration-200 ${descExpanded ? 'rotate-180' : ''}`} 
+                            viewBox="0 0 24 24" 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="2"
+                          >
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 操作按钮列表 */}

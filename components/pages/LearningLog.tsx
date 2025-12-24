@@ -5,6 +5,7 @@ import { getStoredUserId } from '../../lib/auth';
 import type { LearningLog as LearningLogType } from '../../lib/database.types';
 import CustomDatePicker from '../layout/CustomDatePicker';
 import { DateFilter } from '../../types';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 interface LearningLogProps {
   isOpen: boolean;
@@ -32,6 +33,9 @@ const LearningLog: React.FC<LearningLogProps> = ({
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>({});
   const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
+
+  // 左滑返回手势
+  const swipeHandlers = useSwipeBack({ onBack: onClose });
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -312,7 +316,10 @@ const LearningLog: React.FC<LearningLogProps> = ({
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f] animate-page-enter">
+    <div 
+      className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f] animate-page-enter"
+      {...swipeHandlers}
+    >
       {/* 背景装饰 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-cyber-lime/5 rounded-full blur-3xl animate-blob" />

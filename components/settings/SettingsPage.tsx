@@ -27,6 +27,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
   useEffect(() => { if (isOpen) setCurrentView(initialView); }, [isOpen, initialView]);
 
+  // 监听下载视频事件
+  useEffect(() => {
+    const handleNavigateToDownloader = () => {
+      setCurrentView('downloader');
+      showToast('链接已复制，请粘贴到下载页面');
+    };
+    window.addEventListener('navigate-to-downloader', handleNavigateToDownloader);
+    return () => window.removeEventListener('navigate-to-downloader', handleNavigateToDownloader);
+  }, []);
+
   const showToast = useCallback((message: string) => {
     setToast(message);
     setTimeout(() => setToast(null), 3000);
@@ -96,7 +106,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   );
 
   return createPortal(
-    <div className="fixed inset-0 z-[99998] bg-cyber-dark overflow-hidden">
+    <div className="fixed inset-0 z-[99998] bg-cyber-dark overflow-hidden flex flex-col">
       {/* 背景 */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-cyber-lime/5 rounded-full blur-[100px]" />
@@ -104,8 +114,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       </div>
 
       {/* 顶部导航栏 */}
-      <div className="sticky top-0 z-10 bg-cyber-dark/80 backdrop-blur-xl border-b border-white/10">
-        <div className="flex items-center gap-3 px-4 py-3 safe-area-top mt-3">
+      <div className="relative z-20 bg-cyber-dark/80 backdrop-blur-xl border-b border-white/10 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-4">
           <button onClick={handleBack} className="p-2 -ml-2 rounded-xl hover:bg-white/10 active:bg-white/15 transition-all active:scale-95">
             <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -127,7 +137,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       </div>
 
       {/* 内容区域 */}
-      <div className="h-[calc(100vh-60px)] overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         {currentView === 'main' && (
           <div className="p-4 safe-area-bottom pb-20 max-w-6xl mx-auto w-full">
             {/* 效率工具 */}
@@ -164,7 +174,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 title="笔记"
                 desc="记录灵感，整理思路"
                 color="bg-purple-500/20"
-                onClick={() => { onClose(); onOpenNotes?.(); }}
+                onClick={() => { onOpenNotes?.(); onClose(); }}
               />
             </div>
 

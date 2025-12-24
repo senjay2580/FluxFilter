@@ -36,6 +36,7 @@ interface BilibiliVideoItem {
   description: string;
   duration: number;
   pubdate: number;
+  accessRestriction?: string | null;
 }
 
 export default async function handler(request: Request) {
@@ -123,6 +124,14 @@ export default async function handler(request: Request) {
             const todayVideos = videos.filter(v => v.pubdate >= todayTimestamp);
 
             for (const video of todayVideos) {
+              // 获取视频访问限制信息
+              let accessRestriction: string | null = null;
+              try {
+                accessRestriction = await fetchVideoAccessRestriction(video.bvid, userCookie);
+              } catch {
+                // 获取失败不影响主流程
+              }
+
               const videoData = {
                 user_id: userId,
                 bvid: video.bvid,
@@ -133,6 +142,7 @@ export default async function handler(request: Request) {
                 description: video.description || '',
                 duration: video.duration,
                 pubdate: new Date(video.pubdate * 1000).toISOString(),
+                access_restriction: accessRestriction,
               };
 
               const { error: upsertError } = await supabase
@@ -285,4 +295,40 @@ function parseDuration(durationStr: string): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * 获取视频访问限制信息
+ * 通过视频详情接口获取判断是否有访问限制
+ */
+async function fetchVideoAccessRestriction(bvid: string, userCookie?: string): Promise<string | null> {
+  const url = `${BILIBILI_API_BASE}/x/web-interface/view?bvid=${bvid}`;
+  
+  try {
+    const response = await fetch(url, { headers: getHeaders(userCookie) });
+    const data = await response.json();
+
+    if (data.code !== 0) {
+      return null;
+    }
+
+    const videoData = data.data;
+    const rights = videoData?.rights;
+
+    // 检查充电专属（顶层字段）
+    if (videoData?.is_upower_exclusive === true) {
+      return 'charging';
+    }
+
+    // 检查付费相关（rights字段）
+    if (rights) {
+      if (rights.arc_pay === 1) return 'arc_pay';
+      if (rights.ugc_pay === 1) return 'ugc_pay';
+      if (rights.pay === 1) return 'pay';
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }

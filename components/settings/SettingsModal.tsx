@@ -31,6 +31,18 @@ interface VideoItem {
   } | null;
 }
 
+// UP主视频列表项
+interface UploaderVideo {
+  bvid: string;
+  title: string;
+  pic: string;
+  duration: number;
+  pubdate: number;
+  play: number;
+  comment: number;
+  description: string;
+}
+
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -48,6 +60,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [deletingVideo, setDeletingVideo] = useState<number | null>(null);
+
+  // UP主视频浏览弹窗状态
+  const [browseUploader, setBrowseUploader] = useState<Uploader | null>(null);
+  const [uploaderVideos, setUploaderVideos] = useState<UploaderVideo[]>([]);
+  const [uploaderVideosLoading, setUploaderVideosLoading] = useState(false);
+  const [uploaderVideosPage, setUploaderVideosPage] = useState(1);
+  const [uploaderVideosHasMore, setUploaderVideosHasMore] = useState(true);
+  const [uploaderVideosSearch, setUploaderVideosSearch] = useState('');
+  const [addingVideos, setAddingVideos] = useState<Set<string>>(new Set());
+  const [addedVideos, setAddedVideos] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
+  const [usingFallbackApi, setUsingFallbackApi] = useState(false); // 是否使用备用接口
 
   // 当前打开菜单的视频
   const menuVideo = useMemo(() => {
@@ -117,10 +141,38 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
     }
   }, [isOpen, fetchData]);
 
+  // 验证 Cookie 格式
+  const validateCookieFormat = (cookieStr: string): { valid: boolean; message: string } => {
+    const trimmed = cookieStr.trim();
+    
+    // 检查是否为空
+    if (!trimmed) {
+      return { valid: false, message: '请输入Cookie' };
+    }
+    
+    // 检查是否包含关键字段
+    const hasSessionData = /SESSDATA\s*=/.test(trimmed);
+    const hasBiliJct = /bili_jct\s*=/.test(trimmed);
+    const hasDedeUserID = /DedeUserID\s*=/.test(trimmed);
+    
+    if (!hasSessionData) {
+      return { valid: false, message: 'Cookie 缺少 SESSDATA 字段，请复制完整的 Cookie' };
+    }
+    
+    // 警告但允许保存
+    if (!hasBiliJct || !hasDedeUserID) {
+      return { valid: true, message: '⚠️ Cookie 可能不完整，建议包含 SESSDATA、bili_jct、DedeUserID' };
+    }
+    
+    return { valid: true, message: '' };
+  };
+
   // 保存Cookie
   const handleSaveCookie = async () => {
-    if (!cookie.trim()) {
-      setCookieMessage({ type: 'error', text: '请输入Cookie' });
+    const validation = validateCookieFormat(cookie);
+    
+    if (!validation.valid) {
+      setCookieMessage({ type: 'error', text: validation.message });
       return;
     }
 
@@ -131,7 +183,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
 
     if (result.success) {
       clearCookieCache();
-      setCookieMessage({ type: 'success', text: 'Cookie保存成功！' });
+      // 更新本地 user 状态，确保后续请求使用新 Cookie
+      setUser(prev => prev ? { ...prev, bilibili_cookie: cookie.trim() } : prev);
+      
+      if (validation.message) {
+        // 有警告信息
+        setCookieMessage({ type: 'success', text: `Cookie 已保存。${validation.message}` });
+      } else {
+        setCookieMessage({ type: 'success', text: 'Cookie 保存成功！' });
+      }
     } else {
       setCookieMessage({ type: 'error', text: result.error || '保存失败' });
     }
@@ -167,6 +227,284 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
     } finally {
       setDeleting(null);
     }
+  };
+
+  // 动态接口偏移量（用于分页）
+  const [dynamicOffset, setDynamicOffset] = useState<string>('');
+
+  // 解析动态接口数据
+  const parseDynamicItems = (items: any[]): UploaderVideo[] => {
+    const videos: UploaderVideo[] = [];
+    for (const item of items) {
+      if (item.type === 'DYNAMIC_TYPE_AV' && item.modules?.module_dynamic?.major?.archive) {
+        const archive = item.modules.module_dynamic.major.archive;
+        const durationParts = (archive.duration_text || '0:00').split(':').map(Number);
+        const duration = durationParts.length === 3
+          ? durationParts[0] * 3600 + durationParts[1] * 60 + durationParts[2]
+          : durationParts[0] * 60 + (durationParts[1] || 0);
+
+        videos.push({
+          bvid: archive.bvid,
+          title: archive.title,
+          pic: archive.cover,
+          duration,
+          pubdate: item.modules?.module_author?.pub_ts || Math.floor(Date.now() / 1000),
+          play: parseInt(archive.stat?.play || '0'),
+          comment: 0,
+          description: archive.desc || '',
+        });
+      }
+    }
+    return videos;
+  };
+
+  // 获取UP主视频列表 - 优先使用动态接口（限流更宽松）
+  const fetchUploaderVideos = useCallback(async (mid: number, page: number, keyword?: string) => {
+    setUploaderVideosLoading(true);
+    try {
+      const isProduction = window.location.hostname !== 'localhost';
+      const userCookie = user?.bilibili_cookie || '';
+      
+      const headers: Record<string, string> = {};
+      if (userCookie && isProduction) {
+        headers['X-Bilibili-Cookie'] = userCookie;
+      }
+
+      // 如果有搜索关键词，必须用 arc/search 接口
+      if (keyword) {
+        const params = new URLSearchParams({
+          mid: mid.toString(),
+          ps: '30',
+          pn: page.toString(),
+          order: 'pubdate',
+          tid: '0',
+          keyword,
+        });
+
+        const apiUrl = isProduction
+          ? `/api/bilibili?path=/x/space/arc/search&${params.toString()}`
+          : `/bili-api/x/space/arc/search?${params.toString()}`;
+
+        const res = await fetch(apiUrl, { headers });
+        const data = await res.json();
+
+        if (data.code === 0 && data.data?.list?.vlist) {
+          const vlist = data.data.list.vlist as UploaderVideo[];
+          if (page === 1) {
+            setUploaderVideos(vlist);
+          } else {
+            setUploaderVideos(prev => [...prev, ...vlist]);
+          }
+          setUploaderVideosHasMore(vlist.length === 30);
+          setUploaderVideosPage(page);
+          setUsingFallbackApi(false);
+          return;
+        }
+
+        // 搜索接口失败
+        if (data.code === -799) {
+          setToast('请求过于频繁，请等待几秒后重试');
+          setTimeout(() => setToast(null), 3000);
+        } else {
+          setToast(`搜索失败: ${data.message || '未知错误'}`);
+          setTimeout(() => setToast(null), 3000);
+        }
+        return;
+      }
+
+      // 无搜索关键词 - 使用动态接口（支持分页，限流更宽松）
+      const params = new URLSearchParams({ host_mid: mid.toString() });
+      if (page > 1 && dynamicOffset) {
+        params.set('offset', dynamicOffset);
+      }
+
+      const dynamicUrl = isProduction
+        ? `/api/bilibili?path=/x/polymer/web-dynamic/v1/feed/space&${params.toString()}`
+        : `/bili-api/x/polymer/web-dynamic/v1/feed/space?${params.toString()}`;
+
+      const res = await fetch(dynamicUrl, { headers });
+      const data = await res.json();
+
+      if (data.code === 0 && data.data?.items) {
+        const videos = parseDynamicItems(data.data.items);
+        
+        if (page === 1) {
+          setUploaderVideos(videos);
+        } else {
+          setUploaderVideos(prev => [...prev, ...videos]);
+        }
+        
+        // 保存偏移量用于下一页
+        setDynamicOffset(data.data.offset || '');
+        setUploaderVideosHasMore(data.data.has_more === true && videos.length > 0);
+        setUploaderVideosPage(page);
+        setUsingFallbackApi(true);
+        return;
+      }
+
+      // 动态接口也失败了，显示错误
+      if (data.code === -799) {
+        setToast('请求过于频繁，请等待 10 秒后重试');
+        setTimeout(() => setToast(null), 3000);
+      } else {
+        console.error('获取UP主视频失败:', data);
+        setToast(`获取失败: ${data.message || '未知错误'}`);
+        setTimeout(() => setToast(null), 3000);
+      }
+      
+      if (page === 1) setUploaderVideos([]);
+      setUploaderVideosHasMore(false);
+    } catch (err) {
+      console.error('获取UP主视频失败:', err);
+      if (page === 1) setUploaderVideos([]);
+      setToast('网络错误，请重试');
+      setTimeout(() => setToast(null), 3000);
+    } finally {
+      setUploaderVideosLoading(false);
+    }
+  }, [user?.bilibili_cookie, dynamicOffset]);
+
+  // 打开UP主视频浏览弹窗
+  const handleBrowseUploaderVideos = (uploader: Uploader) => {
+    setBrowseUploader(uploader);
+    setUploaderVideos([]);
+    setUploaderVideosPage(1);
+    setUploaderVideosSearch('');
+    setAddedVideos(new Set());
+    setUsingFallbackApi(false);
+    setDynamicOffset(''); // 重置分页偏移量
+    fetchUploaderVideos(uploader.mid, 1);
+  };
+
+  // 搜索UP主视频
+  const handleSearchUploaderVideos = () => {
+    if (!browseUploader) return;
+    setUploaderVideosPage(1);
+    fetchUploaderVideos(browseUploader.mid, 1, uploaderVideosSearch);
+  };
+
+  // 加载更多UP主视频
+  const handleLoadMoreUploaderVideos = () => {
+    if (!browseUploader || uploaderVideosLoading || !uploaderVideosHasMore) return;
+    fetchUploaderVideos(browseUploader.mid, uploaderVideosPage + 1, uploaderVideosSearch);
+  };
+
+  // 获取视频访问限制信息
+  const fetchVideoAccessRestriction = async (bvid: string): Promise<string | null> => {
+    try {
+      const isProduction = window.location.hostname !== 'localhost';
+      const userCookie = user?.bilibili_cookie || '';
+      
+      const headers: Record<string, string> = {};
+      if (userCookie && isProduction) {
+        headers['X-Bilibili-Cookie'] = userCookie;
+      }
+
+      const url = isProduction
+        ? `/api/bilibili?path=/x/web-interface/view&bvid=${bvid}`
+        : `/bili-api/x/web-interface/view?bvid=${bvid}`;
+
+      const res = await fetch(url, { headers });
+      const data = await res.json();
+
+      if (data.code !== 0) {
+        return null;
+      }
+
+      const videoData = data.data;
+      const rights = videoData?.rights;
+      
+      // 检查充电专属（顶层字段）
+      if (videoData?.is_upower_exclusive === true) {
+        return 'charging';
+      }
+      
+      // 检查付费相关（rights字段）
+      if (rights) {
+        if (rights.arc_pay === 1) return 'arc_pay';
+        if (rights.ugc_pay === 1) return 'ugc_pay';
+        if (rights.pay === 1) return 'pay';
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  // 添加视频到收藏夹
+  const handleAddToCollection = async (video: UploaderVideo) => {
+    if (!user?.id || addingVideos.has(video.bvid)) return;
+
+    setAddingVideos(prev => new Set(prev).add(video.bvid));
+    try {
+      // 处理封面URL
+      let picUrl = video.pic;
+      if (picUrl.startsWith('//')) picUrl = `https:${picUrl}`;
+
+      // 获取视频访问限制信息
+      const accessRestriction = await fetchVideoAccessRestriction(video.bvid);
+
+      const { error } = await supabase
+        .from('collected_video')
+        .upsert({
+          user_id: user.id,
+          bvid: video.bvid,
+          title: video.title,
+          pic: picUrl,
+          duration: video.duration,
+          pubdate: new Date(video.pubdate * 1000).toISOString(),
+          view_count: video.play,
+          reply_count: video.comment,
+          description: video.description,
+          uploader_mid: browseUploader?.mid,
+          uploader_name: browseUploader?.name,
+          uploader_face: browseUploader?.face,
+          access_restriction: accessRestriction,
+        }, { onConflict: 'user_id,bvid' });
+
+      if (error) throw error;
+
+      setAddedVideos(prev => new Set(prev).add(video.bvid));
+      const restrictionText = accessRestriction ? ` [${accessRestriction === 'charging' ? '充电专属' : '付费'}]` : '';
+      setToast(`已添加「${video.title.slice(0, 20)}...」${restrictionText}`);
+      setTimeout(() => setToast(null), 2000);
+    } catch (err) {
+      console.error('添加到收藏夹失败:', err);
+      setToast('添加失败，请重试');
+      setTimeout(() => setToast(null), 2000);
+    } finally {
+      setAddingVideos(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(video.bvid);
+        return newSet;
+      });
+    }
+  };
+
+  // 格式化时长
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // 解析时长字符串 "1:23" 或 "1:23:45" -> 秒数
+  const parseDurationString = (durationStr: string): number => {
+    if (typeof durationStr === 'number') return durationStr;
+    const parts = String(durationStr).split(':').map(Number);
+    if (parts.length === 3) {
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    } else if (parts.length === 2) {
+      return parts[0] * 60 + parts[1];
+    }
+    return 0;
+  };
+
+  // 格式化播放量
+  const formatPlayCount = (count: number) => {
+    if (count >= 10000) return `${(count / 10000).toFixed(1)}万`;
+    return count.toString();
   };
 
   // 删除单个视频
@@ -380,6 +718,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
 
                     {/* 操作按钮 */}
                     <div className="flex items-center gap-2">
+                      {/* 浏览视频 */}
+                      <button
+                        onClick={() => handleBrowseUploaderVideos(uploader)}
+                        className="w-8 h-8 rounded-lg bg-cyber-lime/10 flex items-center justify-center hover:bg-cyber-lime/20 transition-colors"
+                        title="浏览视频"
+                      >
+                        <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="2" y="4" width="20" height="16" rx="2" />
+                          <path d="M10 9l5 3-5 3V9z" />
+                        </svg>
+                      </button>
+
                       {/* 跳转B站 */}
                       <button
                         onClick={() => window.open(`https://space.bilibili.com/${uploader.mid}`, '_blank')}
@@ -499,6 +849,178 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
           )}
         </div>
       </div>
+
+      {/* UP主视频浏览弹窗 */}
+      {browseUploader && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-end sm:items-center justify-center" onClick={() => setBrowseUploader(null)}>
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+          <div
+            className="relative w-full max-w-2xl bg-cyber-card border border-white/10 rounded-t-3xl sm:rounded-2xl shadow-2xl h-[85vh] flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}
+            style={{ animation: 'slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1)' }}
+          >
+            {/* 头部 */}
+            <div className="px-4 py-3 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <img
+                  src={browseUploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'}
+                  alt={browseUploader.name}
+                  className="w-10 h-10 rounded-full"
+                  referrerPolicy="no-referrer"
+                />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-white font-bold truncate">{browseUploader.name}</h3>
+                  <p className="text-xs text-gray-500">浏览视频并添加到收藏夹</p>
+                </div>
+                <button
+                  onClick={() => setBrowseUploader(null)}
+                  className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+                >
+                  <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* 搜索框 */}
+              <div className="flex gap-2 mt-3">
+                <div className="flex-1 relative">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="M21 21l-4.35-4.35" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={uploaderVideosSearch}
+                    onChange={(e) => setUploaderVideosSearch(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearchUploaderVideos()}
+                    placeholder="搜索该UP主的视频..."
+                    className="w-full pl-10 pr-4 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"
+                  />
+                </div>
+                <button
+                  onClick={handleSearchUploaderVideos}
+                  className="px-4 py-2 bg-cyber-lime text-black text-sm font-medium rounded-lg hover:bg-lime-400 transition-colors"
+                >
+                  搜索
+                </button>
+              </div>
+            </div>
+
+            {/* 视频列表 */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {uploaderVideosLoading && uploaderVideos.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-8 h-8 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : uploaderVideos.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <svg className="w-12 h-12 mx-auto mb-3 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
+                    <path d="M10 9l5 3-5 3V9z" />
+                  </svg>
+                  <p>暂无视频</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {uploaderVideos.map(video => (
+                    <div
+                      key={video.bvid}
+                      className="flex gap-3 p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                    >
+                      {/* 封面 */}
+                      <div className="w-32 h-20 rounded-lg overflow-hidden bg-black/30 flex-shrink-0 relative">
+                        <img
+                          src={video.pic.startsWith('//') ? `https:${video.pic}` : video.pic}
+                          alt={video.title}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                        <span className="absolute bottom-1 right-1 px-1.5 py-0.5 bg-black/70 rounded text-[10px] text-white">
+                          {formatDuration(video.duration)}
+                        </span>
+                      </div>
+
+                      {/* 信息 */}
+                      <div className="flex-1 min-w-0 flex flex-col">
+                        <h4 className="text-sm text-white line-clamp-2 leading-snug">{video.title}</h4>
+                        <div className="flex items-center gap-3 mt-auto text-xs text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                              <circle cx="12" cy="12" r="3" />
+                            </svg>
+                            {formatPlayCount(video.play)}
+                          </span>
+                          <span>{new Date(video.pubdate * 1000).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+
+                      {/* 添加按钮 */}
+                      <button
+                        onClick={() => handleAddToCollection(video)}
+                        disabled={addingVideos.has(video.bvid) || addedVideos.has(video.bvid)}
+                        className={`self-center px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-shrink-0 ${
+                          addedVideos.has(video.bvid)
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-cyber-lime/20 text-cyber-lime hover:bg-cyber-lime/30'
+                        } disabled:opacity-50`}
+                      >
+                        {addingVideos.has(video.bvid) ? (
+                          <div className="w-4 h-4 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
+                        ) : addedVideos.has(video.bvid) ? (
+                          <span className="flex items-center gap-1">
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M5 12l5 5L20 7" />
+                            </svg>
+                            已添加
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M12 5v14M5 12h14" />
+                            </svg>
+                            收藏
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* 加载更多 */}
+                  {uploaderVideosHasMore && (
+                    <button
+                      onClick={handleLoadMoreUploaderVideos}
+                      disabled={uploaderVideosLoading}
+                      className="w-full py-3 bg-white/5 rounded-xl text-gray-400 text-sm hover:bg-white/10 transition-colors disabled:opacity-50"
+                    >
+                      {uploaderVideosLoading ? (
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                          加载中...
+                        </div>
+                      ) : (
+                        '加载更多'
+                      )}
+                    </button>
+                  )}
+
+                  {/* 备用接口提示已移除，动态接口现在是主接口 */}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Toast 提示 */}
+      {toast && createPortal(
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[999999] px-4 py-2 bg-black/90 border border-white/10 rounded-full text-white text-sm shadow-xl animate-fade-in">
+          {toast}
+        </div>,
+        document.body
+      )}
 
       {/* 底部抽屉菜单 */}
       {menuVideo && (
@@ -669,6 +1191,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
         }
         .animate-slide-up {
           animation: slide-up 0.3s ease-out;
+        }
+        .animate-fade-in {
+          animation: fadeIn 0.2s ease-out;
         }
         .pb-safe {
           padding-bottom: env(safe-area-inset-bottom, 16px);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
+import { parseLinksToElements } from '../../lib/parseLinks';
 
 // 收藏视频类型
 interface CollectedVideo {
@@ -14,6 +15,8 @@ interface CollectedVideo {
   pubdate: string;
   uploader_name: string;
   uploader_face: string;
+  access_restriction: string | null;
+  description: string | null;
 }
 
 // 解析短链接获取BV号
@@ -108,6 +111,18 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
 
   // 剪贴板内容
   const [clipboardContent, setClipboardContent] = useState<string>('');
+
+  // 视频菜单状态
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [descExpanded, setDescExpanded] = useState(false);
+
+  // 组件卸载时清理菜单状态
+  useEffect(() => {
+    return () => {
+      setOpenMenuId(null);
+      setDescExpanded(false);
+    };
+  }, []);
 
   // 加载收藏视频
   const loadVideos = useCallback(async () => {
@@ -256,6 +271,18 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
           faceUrl = `https:${faceUrl}`;
         }
 
+        // 获取访问限制信息
+        let accessRestriction: string | null = null;
+        // 检查充电专属（顶层字段）
+        if (info.is_upower_exclusive === true) {
+          accessRestriction = 'charging';
+        } else if (info.rights) {
+          // 检查付费相关（rights字段）
+          if (info.rights.arc_pay === 1) accessRestriction = 'arc_pay';
+          else if (info.rights.ugc_pay === 1) accessRestriction = 'ugc_pay';
+          else if (info.rights.pay === 1) accessRestriction = 'pay';
+        }
+
         // 插入到收藏视频表（独立表，无外键约束）
         const { error } = await supabase
           .from('collected_video')
@@ -278,6 +305,7 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
             uploader_name: info.owner?.name,
             uploader_face: faceUrl,
             user_id: userId,
+            access_restriction: accessRestriction,
           }, { onConflict: 'user_id,bvid' });
 
         if (error) throw error;
@@ -411,6 +439,15 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                   <div className="absolute bottom-1.5 right-1.5 px-1.5 py-0.5 bg-black/80 rounded text-[10px] text-white font-medium">
                     {formatDuration(video.duration)}
                   </div>
+                  {/* 充电/付费标识 */}
+                  {video.access_restriction && (
+                    <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded text-[10px] font-bold text-white flex items-center gap-0.5 shadow-lg">
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                      </svg>
+                      <span>{video.access_restriction === 'charging' ? '充电' : '付费'}</span>
+                    </div>
+                  )}
                   {/* 删除按钮 */}
                   <button
                     onClick={(e) => { e.stopPropagation(); requestDelete(video.id, video.title); }}
@@ -431,10 +468,23 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
                   >
                     {video.title}
                   </h4>
-                  <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-gray-500">
-                    <span className="truncate max-w-[60px]">{video.uploader_name}</span>
-                    <span>·</span>
-                    <span>{formatCount(video.view_count)}播放</span>
+                  <div className="flex items-center justify-between gap-1.5 mt-1.5">
+                    <div className="flex items-center gap-1.5 text-[10px] text-gray-500 min-w-0">
+                      <span className="truncate max-w-[60px]">{video.uploader_name}</span>
+                      <span>·</span>
+                      <span className="shrink-0">{formatCount(video.view_count)}播放</span>
+                    </div>
+                    {/* 三个点按钮 */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setOpenMenuId(video.id); }}
+                      className="shrink-0 w-6 h-6 flex items-center justify-center rounded-lg hover:bg-white/10 transition-colors"
+                    >
+                      <svg className="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="5" cy="12" r="2" />
+                        <circle cx="12" cy="12" r="2" />
+                        <circle cx="19" cy="12" r="2" />
+                      </svg>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -442,6 +492,185 @@ const VideoCollector: React.FC<VideoCollectorProps> = ({ onSuccess }) => {
           </div>
         )}
       </div>
+
+      {/* 视频操作抽屉 */}
+      {openMenuId && (() => {
+        const video = videos.find(v => v.id === openMenuId);
+        if (!video) return null;
+        return createPortal(
+          <div className="fixed inset-0 z-[99999]" onClick={(e) => e.stopPropagation()}>
+            {/* 遮罩层 */}
+            <div
+              className="absolute inset-0 bg-black/70 animate-drawer-overlay-in"
+              onClick={() => { setDescExpanded(false); setOpenMenuId(null); }}
+            />
+            {/* 抽屉内容 */}
+            <div className="absolute bottom-0 left-0 right-0 animate-drawer-slide-up transform-gpu">
+              <div className="bg-[#0c0c0c] border-t border-white/10 rounded-t-2xl pb-safe">
+                {/* 拖拽指示条 */}
+                <div className="flex justify-center pt-3 pb-2">
+                  <div className="w-10 h-1 bg-white/25 rounded-full" />
+                </div>
+
+                {/* 视频信息预览 */}
+                <div className="px-4 pb-3 pt-1 border-b border-white/10">
+                  <div className="flex gap-3 items-start">
+                    <img
+                      src={video.pic}
+                      alt={video.title}
+                      className="w-16 h-10 rounded object-cover bg-gray-800 shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-white text-sm font-medium line-clamp-2 leading-snug">{video.title}</h4>
+                      <p className="text-cyber-lime text-xs mt-0.5 truncate">{video.uploader_name}</p>
+                    </div>
+                  </div>
+                  {/* 视频简介 */}
+                  {video.description && (
+                    <div className="mt-2.5">
+                      <div className="flex items-start gap-2">
+                        <p className={`flex-1 text-xs text-gray-400 leading-relaxed ${descExpanded ? '' : 'line-clamp-2'}`}>
+                          {parseLinksToElements(video.description)}
+                        </p>
+                        {video.description.length > 50 && (
+                          <button
+                            onClick={() => setDescExpanded(!descExpanded)}
+                            className="shrink-0 w-5 h-5 flex items-center justify-center text-cyber-lime hover:text-cyber-lime/80 transition-all"
+                          >
+                            <svg 
+                              className={`w-4 h-4 transition-transform duration-200 ${descExpanded ? 'rotate-180' : ''}`} 
+                              viewBox="0 0 24 24" 
+                              fill="none" 
+                              stroke="currentColor" 
+                              strokeWidth="2"
+                            >
+                              <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 操作按钮列表 */}
+                <div className="py-1">
+                  {/* 分享 */}
+                  <button
+                    onClick={() => {
+                      const url = `https://www.bilibili.com/video/${video.bvid}`;
+                      if (navigator.share) {
+                        navigator.share({ title: video.title, url });
+                      } else {
+                        navigator.clipboard.writeText(url);
+                        alert('链接已复制到剪贴板');
+                      }
+                      setOpenMenuId(null);
+                    }}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="18" cy="5" r="3" />
+                        <circle cx="6" cy="12" r="3" />
+                        <circle cx="18" cy="19" r="3" />
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] text-white font-medium">分享</span>
+                      <p className="text-xs text-gray-500 mt-0.5">分享给好友或复制链接</p>
+                    </div>
+                  </button>
+
+                  {/* 在B站打开 */}
+                  <button
+                    onClick={() => {
+                      window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank');
+                      setOpenMenuId(null);
+                    }}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                        <polyline points="15 3 21 3 21 9" />
+                        <line x1="10" y1="14" x2="21" y2="3" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] text-white font-medium">在B站打开</span>
+                      <p className="text-xs text-gray-500 mt-0.5">跳转到哔哩哔哩观看</p>
+                    </div>
+                  </button>
+
+                  {/* 下载视频 */}
+                  <button
+                    onClick={async () => {
+                      const videoUrl = `https://www.bilibili.com/video/${video.bvid}`;
+                      try {
+                        await navigator.clipboard.writeText(videoUrl);
+                      } catch { /* ignore */ }
+                      setOpenMenuId(null);
+                      // 触发自定义事件，通知父组件跳转到下载页面
+                      window.dispatchEvent(new CustomEvent('navigate-to-downloader', { detail: { url: videoUrl } }));
+                    }}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-pink-500/20 to-rose-500/20 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-pink-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] text-white font-medium">下载视频</span>
+                      <p className="text-xs text-gray-500 mt-0.5">跳转下载页面，链接已复制</p>
+                    </div>
+                    <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </button>
+
+                  {/* 删除视频 */}
+                  <button
+                    onClick={() => {
+                      setOpenMenuId(null);
+                      requestDelete(video.id, video.title);
+                    }}
+                    className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-red-500/15 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 text-left">
+                      <span className="text-[15px] text-red-400 font-medium">删除视频</span>
+                      <p className="text-xs text-gray-500 mt-0.5">从收藏夹中移除</p>
+                    </div>
+                  </button>
+                </div>
+
+                {/* 取消按钮 */}
+                <div className="px-4 pb-4 pt-2">
+                  <button
+                    onClick={() => { setDescExpanded(false); setOpenMenuId(null); }}
+                    className="w-full py-3 bg-white/10 active:bg-white/15 rounded-xl text-white text-[15px] font-medium transition-colors"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* 抽屉弹窗 */}
       {isDrawerOpen && createPortal(

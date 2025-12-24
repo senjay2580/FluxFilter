@@ -7,6 +7,7 @@ import {
 } from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
 import type { Resource, ResourceFolder } from '../../lib/database.types';
+import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 interface ResourceCenterProps { isOpen: boolean; onClose: () => void; }
 interface FolderNode extends ResourceFolder { children: FolderNode[]; }
@@ -24,6 +25,9 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
   const [newResource, setNewResource] = useState({ name: '', url: '' });
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // 左滑返回手势
+  const swipeHandlers = useSwipeBack({ onBack: onClose });
 
   // 资源多选
   const [selectMode, setSelectMode] = useState(false);
@@ -421,7 +425,10 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f] animate-page-enter">
+    <div 
+      className="fixed inset-0 z-[99999] flex flex-col bg-[#0a0a0f] animate-page-enter"
+      {...swipeHandlers}
+    >
       {/* 背景装饰 */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 right-10 w-60 h-60 bg-cyber-lime/5 rounded-full blur-3xl animate-float" />
