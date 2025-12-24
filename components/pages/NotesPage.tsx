@@ -838,6 +838,10 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
   // 删除动画状态
   const [deletingNotes, setDeletingNotes] = useState<Set<number>>(new Set());
 
+  // 虚拟滚动 - 只渲染可见区域的笔记
+  const [visibleCount, setVisibleCount] = useState(20);
+  const listRef = useRef<HTMLDivElement>(null);
+
   // 计算实际主题
   const isDark = getActualTheme(themeMode) === 'dark';
   const theme = getThemeColors(isDark);
@@ -887,12 +891,16 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
     }
   }, []);
 
-  // 加载笔记
-  const loadNotes = useCallback(async () => {
+  // 加载笔记 - 优化：保持旧数据直到新数据加载完成，避免闪动
+  const loadNotes = useCallback(async (showLoading = true) => {
     const userId = getStoredUserId();
     if (!userId) return;
 
-    setLoading(true);
+    // 只有首次加载或强制刷新时才显示 loading
+    if (showLoading && notes.length === 0) {
+      setLoading(true);
+    }
+
     const { data, error } = await supabase
       .from('notes')
       .select('*')
@@ -905,7 +913,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
       setNotes(data);
     }
     setLoading(false);
-  }, []);
+  }, [notes.length]);
 
   // 添加分类
   const handleAddCategory = async () => {
@@ -940,10 +948,11 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
 
   useEffect(() => {
     if (isOpen) {
-      loadNotes();
+      // 首次打开时加载，后续静默刷新
+      loadNotes(notes.length === 0);
       loadCategories();
     }
-  }, [isOpen, loadNotes, loadCategories]);
+  }, [isOpen, loadNotes, loadCategories, notes.length]);
 
   // 筛选笔记
   const filteredNotes = useMemo(() => {
@@ -961,6 +970,40 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
   // 置顶笔记
   const pinnedNotes = filteredNotes.filter(n => n.is_pinned);
   const unpinnedNotes = filteredNotes.filter(n => !n.is_pinned);
+
+  // 虚拟滚动：只渲染可见的笔记
+  const visiblePinnedNotes = pinnedNotes.slice(0, Math.min(visibleCount, pinnedNotes.length));
+  const remainingCount = Math.max(0, visibleCount - pinnedNotes.length);
+  const visibleUnpinnedNotes = unpinnedNotes.slice(0, remainingCount);
+
+  // 滚动加载更多
+  useEffect(() => {
+    const container = listRef.current;
+    if (!container) return;
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const { scrollTop, scrollHeight, clientHeight } = container;
+          // 距离底部 500px 时加载更多
+          if (scrollTop + clientHeight >= scrollHeight - 500) {
+            setVisibleCount(prev => Math.min(prev + 20, filteredNotes.length));
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [filteredNotes.length]);
+
+  // 筛选条件变化时重置可见数量
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [searchTerm, selectedCategory]);
 
   // 保存笔记
   const handleSave = async (data: CreateNoteParams | UpdateNoteParams) => {
@@ -1279,9 +1322,9 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
       </div>
 
       {/* 笔记列表 - Apple 风格 */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-4" ref={listRef}>
         <div className="max-w-7xl mx-auto w-full">
-          {loading ? (
+          {loading && notes.length === 0 ? (
             <div style={{ columnCount: 2, columnGap: '12px' }}>
               {[...Array(6)].map((_, i) => (
                 <div
@@ -1350,7 +1393,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
               {compactMode ? (
                 <div className="space-y-2">
                   {/* 置顶笔记 */}
-                  {pinnedNotes.length > 0 && (
+                  {visiblePinnedNotes.length > 0 && (
                     <div className="mb-4">
                       <h3 className="text-xs font-semibold mb-2 flex items-center gap-1.5 uppercase tracking-wide" style={{ color: theme.textSecondary }}>
                         <svg className="w-3.5 h-3.5" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="currentColor">
@@ -1358,7 +1401,7 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                         </svg>
                         置顶
                       </h3>
-                      {pinnedNotes.map((note) => (
+                      {visiblePinnedNotes.map((note) => (
                         <div
                           key={note.id}
                           onClick={() => setEditingNote(note)}
@@ -1377,12 +1420,12 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                     </div>
                   )}
                   {/* 普通笔记 */}
-                  {unpinnedNotes.length > 0 && (
+                  {visibleUnpinnedNotes.length > 0 && (
                     <div>
-                      {pinnedNotes.length > 0 && (
+                      {visiblePinnedNotes.length > 0 && (
                         <h3 className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: theme.textSecondary }}>其他笔记</h3>
                       )}
-                      {unpinnedNotes.map((note) => (
+                      {visibleUnpinnedNotes.map((note) => (
                         <div
                           key={note.id}
                           onClick={() => setEditingNote(note)}
@@ -1398,13 +1441,21 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                           </span>
                         </div>
                       ))}
+                      {/* 加载更多提示 */}
+                      {visibleUnpinnedNotes.length < unpinnedNotes.length && (
+                        <div className="text-center py-4">
+                          <span className="text-xs" style={{ color: theme.textSecondary }}>
+                            滑动加载更多...
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
               ) : (
                 <>
                   {/* 置顶笔记 */}
-                  {pinnedNotes.length > 0 && (
+                  {visiblePinnedNotes.length > 0 && (
                     <div>
                       <h3 className="text-xs font-semibold mb-3 flex items-center gap-1.5 uppercase tracking-wide" style={{ color: theme.textSecondary }}>
                         <svg className="w-3.5 h-3.5" style={{ color: '#FF9F0A' }} viewBox="0 0 24 24" fill="currentColor">
@@ -1412,10 +1463,10 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                         </svg>
                         置顶
                       </h3>
-                      {/* 瀑布流布局 */}
-                      <div style={{ columnCount: 2, columnGap: '12px' }}>
-                        {pinnedNotes.map((note, index) => (
-                          <div key={note.id} style={{ breakInside: 'avoid', marginBottom: '12px' }}>
+                      {/* 瀑布流布局 - 使用 CSS Grid 替代 column-count 提升性能 */}
+                      <div className="grid grid-cols-2 gap-3" style={{ alignItems: 'start' }}>
+                        {visiblePinnedNotes.map((note, index) => (
+                          <div key={note.id} style={{ gridRow: `span ${Math.ceil((note.content?.length || 100) / 200)}` }}>
                             <NoteCard
                               note={note}
                               onClick={() => setEditingNote(note)}
@@ -1441,15 +1492,15 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                   )}
 
                   {/* 普通笔记 */}
-                  {unpinnedNotes.length > 0 && (
+                  {visibleUnpinnedNotes.length > 0 && (
                     <div>
-                      {pinnedNotes.length > 0 && (
+                      {visiblePinnedNotes.length > 0 && (
                         <h3 className="text-xs font-semibold mb-3 uppercase tracking-wide" style={{ color: theme.textSecondary }}>其他笔记</h3>
                       )}
-                      {/* 瀑布流布局 */}
-                      <div style={{ columnCount: 2, columnGap: '12px' }}>
-                        {unpinnedNotes.map((note, index) => (
-                          <div key={note.id} style={{ breakInside: 'avoid', marginBottom: '12px' }}>
+                      {/* 瀑布流布局 - 使用 CSS Grid 替代 column-count 提升性能 */}
+                      <div className="grid grid-cols-2 gap-3" style={{ alignItems: 'start' }}>
+                        {visibleUnpinnedNotes.map((note, index) => (
+                          <div key={note.id} style={{ gridRow: `span ${Math.ceil((note.content?.length || 100) / 200)}` }}>
                             <NoteCard
                               note={note}
                               onClick={() => setEditingNote(note)}
@@ -1465,12 +1516,20 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
                                   return newSet;
                                 });
                               }}
-                              animationIndex={pinnedNotes.length + index}
+                              animationIndex={visiblePinnedNotes.length + index}
                               isDeleting={deletingNotes.has(note.id)}
                             />
                           </div>
                         ))}
                       </div>
+                      {/* 加载更多提示 */}
+                      {visibleUnpinnedNotes.length < unpinnedNotes.length && (
+                        <div className="text-center py-4">
+                          <span className="text-xs" style={{ color: theme.textSecondary }}>
+                            滑动加载更多...
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>
