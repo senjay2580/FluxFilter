@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { Tab, FilterType, DateFilter } from './types';
 import VideoCard from './components/video/VideoCard';
@@ -28,8 +28,29 @@ import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBv
 import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
 import { clearCookieCache } from './lib/bilibili';
 import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
+import { insightService } from './lib/insight-service';
+import InsightFloatingBall from './components/shared/InsightFloatingBall';
 
 const App = () => {
+  // 全局策展状态
+  const insightLoading = useSyncExternalStore(
+    insightService.subscribe.bind(insightService),
+    () => insightService.isLoading
+  );
+  const [insightDone, setInsightDone] = useState(false);
+
+  // 监听策展完成
+  useEffect(() => {
+    const handleStatus = (e: CustomEvent<{ status: string }>) => {
+      if (e.detail.status === 'done') {
+        setInsightDone(true);
+        setTimeout(() => setInsightDone(false), 3000);
+      }
+    };
+    window.addEventListener('insight-status', handleStatus as EventListener);
+    return () => window.removeEventListener('insight-status', handleStatus as EventListener);
+  }, []);
+
   // 认证状态 - null=检查中, true=已登录, false=游客模式
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1894,6 +1915,21 @@ const App = () => {
             setActiveFilter('custom');
           }}
         />
+
+        {/* 策展悬浮球 - 全局显示，支持拖动 */}
+        {activeTab !== 'settings' && (
+          <InsightFloatingBall
+            isLoading={insightLoading}
+            isDone={insightDone}
+            onClick={() => {
+              setSettingsInitialView('main');
+              setActiveTab('settings');
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('navigate-to-insights'));
+              }, 100);
+            }}
+          />
+        )}
 
         {/* Toast 提示 - 右上角毛玻璃 macOS 风格 */}
         {toast && (

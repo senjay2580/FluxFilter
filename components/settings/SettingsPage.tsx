@@ -6,8 +6,10 @@ import VideoCollector from '../video/VideoCollector';
 import DevCommunity from '../pages/DevCommunity';
 import VideoDownloader from '../tools/VideoDownloader';
 import AudioTranscriber from '../tools/AudioTranscriber';
+import DailyInsights from '../tools/DailyInsights';
+import InsightFloatingBall from '../shared/InsightFloatingBall';
 
-export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber';
+export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights';
 
 interface SettingsPageProps {
   isOpen: boolean;
@@ -24,8 +26,33 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
   const [currentView, setCurrentView] = useState<SettingsView>(initialView);
   const [toast, setToast] = useState<string | null>(null);
+  
+  // 策展状态
+  const [insightStatus, setInsightStatus] = useState<'idle' | 'loading' | 'done'>('idle');
 
   useEffect(() => { if (isOpen) setCurrentView(initialView); }, [isOpen, initialView]);
+
+  // 监听策展状态
+  useEffect(() => {
+    const handleInsightStatus = (e: CustomEvent<{ status: 'loading' | 'done' | 'idle' }>) => {
+      setInsightStatus(e.detail.status);
+      // 3秒后自动隐藏完成状态
+      if (e.detail.status === 'done') {
+        setTimeout(() => setInsightStatus('idle'), 3000);
+      }
+    };
+    window.addEventListener('insight-status', handleInsightStatus as EventListener);
+    return () => window.removeEventListener('insight-status', handleInsightStatus as EventListener);
+  }, []);
+
+  // 监听跳转到每日信息差事件
+  useEffect(() => {
+    const handleNavigateToInsights = () => {
+      setCurrentView('insights');
+    };
+    window.addEventListener('navigate-to-insights', handleNavigateToInsights);
+    return () => window.removeEventListener('navigate-to-insights', handleNavigateToInsights);
+  }, []);
 
   // 监听下载视频事件
   useEffect(() => {
@@ -57,6 +84,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       case 'devcommunity': return '开发者社区';
       case 'downloader': return '视频下载';
       case 'transcriber': return '音频转写';
+      case 'insights': return '每日信息差';
       default: return '设置';
     }
   };
@@ -137,7 +165,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       </div>
 
       {/* 内容区域 */}
-      <div className="flex-1 overflow-y-auto">
+      <div 
+        className="flex-1 overflow-y-auto"
+        style={{ overscrollBehaviorX: 'none' }}
+      >
         {currentView === 'main' && (
           <div className="p-4 safe-area-bottom pb-20 max-w-6xl mx-auto w-full">
             {/* 效率工具 */}
@@ -195,6 +226,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 color="bg-violet-500/20"
                 onClick={() => setCurrentView('transcriber')}
               />
+              <MenuItem
+                icon={<svg className="w-5 h-5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>}
+                title="每日信息差"
+                desc="AI策展硬核知识"
+                color="bg-rose-500/20"
+                onClick={() => setCurrentView('insights')}
+              />
             </div>
 
             {/* 资源 & 社区 */}
@@ -248,7 +286,17 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             onNavigate(page);
           }
         }} /></div>}
+        {currentView === 'insights' && <div className="p-4" style={{ touchAction: 'pan-y pinch-zoom' }}><DailyInsights /></div>}
       </div>
+
+      {/* 策展悬浮球 - 仅在非insights页面时显示，支持拖动 */}
+      {currentView !== 'insights' && (
+        <InsightFloatingBall
+          isLoading={insightStatus === 'loading'}
+          isDone={insightStatus === 'done'}
+          onClick={() => setCurrentView('insights')}
+        />
+      )}
 
       {/* Toast */}
       {toast && (
