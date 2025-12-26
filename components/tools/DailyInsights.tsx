@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useCallback, useSyncExternalStore, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
@@ -43,6 +43,47 @@ const DailyInsights: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [startX, setStartX] = useState(0);
   const [offsetX, setOffsetX] = useState(0);
+  
+  // 卡片容器 ref
+  const cardsContainerRef = useRef<HTMLDivElement>(null);
+  const savedCardsContainerRef = useRef<HTMLDivElement>(null);
+  // 用于存储滑动状态的 ref（避免闭包问题）
+  const dragStateRef = useRef({ isDragging: false, startX: 0 });
+
+  // 在卡片容器上阻止事件冒泡到 App.tsx 的 Tab 切换
+  useEffect(() => {
+    const stopPropagation = (e: TouchEvent) => {
+      e.stopPropagation();
+    };
+
+    const container1 = cardsContainerRef.current;
+    const container2 = savedCardsContainerRef.current;
+    
+    // 在卡片容器上阻止冒泡，这样卡片滑动正常工作，但不会触发 App.tsx 的 Tab 切换
+    if (container1) {
+      container1.addEventListener('touchstart', stopPropagation, { passive: true });
+      container1.addEventListener('touchmove', stopPropagation, { passive: true });
+      container1.addEventListener('touchend', stopPropagation, { passive: true });
+    }
+    if (container2) {
+      container2.addEventListener('touchstart', stopPropagation, { passive: true });
+      container2.addEventListener('touchmove', stopPropagation, { passive: true });
+      container2.addEventListener('touchend', stopPropagation, { passive: true });
+    }
+    
+    return () => {
+      if (container1) {
+        container1.removeEventListener('touchstart', stopPropagation);
+        container1.removeEventListener('touchmove', stopPropagation);
+        container1.removeEventListener('touchend', stopPropagation);
+      }
+      if (container2) {
+        container2.removeEventListener('touchstart', stopPropagation);
+        container2.removeEventListener('touchmove', stopPropagation);
+        container2.removeEventListener('touchend', stopPropagation);
+      }
+    };
+  }, [showSaved]);
 
   // 加载已归档卡片
   useEffect(() => {
@@ -159,15 +200,17 @@ const DailyInsights: React.FC = () => {
   const handleTouchStart = (e: React.TouchEvent) => {
     setIsDragging(true);
     setStartX(e.touches[0].clientX);
+    dragStateRef.current = { isDragging: true, startX: e.touches[0].clientX };
   };
   const handleTouchMove = (e: React.TouchEvent) => {
     if (!isDragging) return;
-    e.preventDefault(); // 阻止浏览器默认的返回手势
+    // 不在这里调用 preventDefault，由原生事件监听器处理
     setOffsetX(e.touches[0].clientX - startX);
   };
   const handleTouchEnd = () => {
     if (!isDragging) return;
     setIsDragging(false);
+    dragStateRef.current.isDragging = false;
     const threshold = 80;
     const displayCards = showSaved ? savedCards : cards;
     if (offsetX > threshold && currentIndex > 0) setCurrentIndex(currentIndex - 1);
@@ -177,6 +220,34 @@ const DailyInsights: React.FC = () => {
   const handleMouseDown = (e: React.MouseEvent) => { setIsDragging(true); setStartX(e.clientX); };
   const handleMouseMove = (e: React.MouseEvent) => { if (isDragging) setOffsetX(e.clientX - startX); };
   const handleMouseUp = () => handleTouchEnd();
+
+  // 使用原生事件监听器来阻止默认行为（解决 passive event listener 问题）
+  useEffect(() => {
+    const handleNativeTouchMove = (e: TouchEvent) => {
+      if (dragStateRef.current.isDragging) {
+        e.preventDefault();
+      }
+    };
+
+    const container1 = cardsContainerRef.current;
+    const container2 = savedCardsContainerRef.current;
+    
+    if (container1) {
+      container1.addEventListener('touchmove', handleNativeTouchMove, { passive: false });
+    }
+    if (container2) {
+      container2.addEventListener('touchmove', handleNativeTouchMove, { passive: false });
+    }
+    
+    return () => {
+      if (container1) {
+        container1.removeEventListener('touchmove', handleNativeTouchMove);
+      }
+      if (container2) {
+        container2.removeEventListener('touchmove', handleNativeTouchMove);
+      }
+    };
+  }, [showSaved]);
 
 
   // 渲染单张卡片
@@ -295,7 +366,7 @@ const DailyInsights: React.FC = () => {
 
 
   return (
-    <div className="min-h-[500px]" style={{ touchAction: 'pan-y pinch-zoom' }}>
+    <div id="daily-insights-container" className="min-h-[500px]" style={{ touchAction: 'pan-y pinch-zoom', overscrollBehaviorX: 'none' }}>
       {/* 兴趣标签区域 */}
       <div className="mb-4 p-4 bg-white/5 rounded-2xl border border-white/10">
         <div className="flex items-center justify-between mb-3">
@@ -446,6 +517,7 @@ const DailyInsights: React.FC = () => {
       {!showSaved && cards.length > 0 && (
         <>
           <div
+            ref={cardsContainerRef}
             className="relative h-[400px] overflow-hidden select-none"
             style={{ touchAction: 'none' }}
             onTouchStart={handleTouchStart}
@@ -486,6 +558,7 @@ const DailyInsights: React.FC = () => {
         ) : (
           <>
             <div
+              ref={savedCardsContainerRef}
               className="relative h-[400px] overflow-hidden select-none"
               style={{ touchAction: 'none' }}
               onTouchStart={handleTouchStart}

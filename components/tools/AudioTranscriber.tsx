@@ -12,6 +12,7 @@ import {
   upsertAIConfig
 } from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
+import { transcribeService, type TranscribeTask } from '../../lib/transcribe-service';
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
 
@@ -440,7 +441,7 @@ ${text}`
     }
   }, [aiApiKey, currentModel, selectedModel, aiBaseUrl, customModelName]);
 
-  // 对历史记录进行 AI 优化（支持多任务并发）
+  // 对历史记录进行 AI 优化（支持多任务并发，后台运行）
   const optimizeHistoryRecord = useCallback(async (record: TranscriptRecord) => {
     if (!aiApiKey) {
       setError('请先配置 AI API Key');
@@ -472,34 +473,46 @@ ${text}`
     setError('');
 
     try {
-      await callAIApiStream(record.rawText, (title, content) => {
-        setOptimizationTasks(prev => {
-          const currentTask = prev[record.id];
-          if (!currentTask) return prev;
+      // 使用全局转写服务进行优化（后台运行）
+      await transcribeService.optimizeText(
+        record.id,
+        record.rawText,
+        record.fileName,
+        (title, content) => {
+          // 进度回调
+          setOptimizationTasks(prev => {
+            const currentTask = prev[record.id];
+            if (!currentTask) return prev;
 
-          return {
+            return {
+              ...prev,
+              [record.id]: {
+                ...currentTask,
+                compareData: {
+                  ...currentTask.compareData,
+                  newTitle: title,
+                  newOptimized: content
+                }
+              }
+            };
+          });
+        },
+        (title, content) => {
+          // 完成回调
+          setOptimizationTasks(prev => ({
             ...prev,
             [record.id]: {
-              ...currentTask,
+              ...prev[record.id],
+              status: 'done',
               compareData: {
-                ...currentTask.compareData,
+                ...prev[record.id].compareData,
                 newTitle: title,
                 newOptimized: content
               }
             }
-          };
-        });
-      });
-
-      // 完成后更新状态
-      setOptimizationTasks(prev => ({
-        ...prev,
-        [record.id]: {
-          ...prev[record.id],
-          status: 'done'
+          }));
         }
-      }));
-
+      );
     } catch (err) {
       console.error('AI 优化失败:', err);
       const errorMessage = err instanceof Error ? err.message : 'AI 优化失败，请重试';
@@ -518,7 +531,7 @@ ${text}`
         setError(errorMessage);
       }
     }
-  }, [aiApiKey, callAIApiStream, viewingTaskId]);
+  }, [aiApiKey, viewingTaskId]);
 
   const confirmUseOptimized = useCallback((useNew: boolean) => {
     if (viewingTaskId && optimizationTasks[viewingTaskId]) {
@@ -694,7 +707,172 @@ ${text}`
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // 转写音频
+  // 当前后台转写任务 ID
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
+
+  // 组件挂载时恢复正在进行的任务状态
+  useEffect(() => {
+    const activeTasks = transcribeService.activeTasks;
+    if (activeTasks.length > 0) {
+      // 找到最新的转写任务（非历史记录优化任务）
+      const transcribeTasks = activeTasks.filter(t => !t.id.startsWith('opt-'));
+      if (transcribeTasks.length > 0) {
+        const latestTask = transcribeTasks[transcribeTasks.length - 1];
+        setCurrentTaskId(latestTask.id);
+        
+        // 恢复状态
+        if (latestTask.status === 'transcribing') {
+          setTranscribing(true);
+          setProgress(latestTask.progress);
+        } else if (latestTask.status === 'optimizing') {
+          setOptimizing(true);
+          if (latestTask.rawText) {
+            setRawResult(latestTask.rawText);
+          }
+        }
+        
+        if (latestTask.rawText) {
+          setRawResult(latestTask.rawText);
+        }
+        if (latestTask.optimizedText) {
+          setOptimizedResult(latestTask.optimizedText);
+        }
+      }
+      
+      // 恢复历史记录优化任务
+      const historyOptTasks = activeTasks.filter(t => t.id.startsWith('opt-'));
+      historyOptTasks.forEach(task => {
+        // 从任务 ID 中提取记录 ID (格式: opt-{recordId}-{timestamp})
+        const parts = task.id.split('-');
+        if (parts.length >= 2) {
+          const recordId = parts[1];
+          setOptimizationTasks(prev => ({
+            ...prev,
+            [recordId]: {
+              status: task.status === 'optimizing' ? 'optimizing' : (task.status === 'done' ? 'done' : 'error'),
+              compareData: {
+                id: recordId,
+                fileName: task.fileName,
+                rawText: task.rawText || '',
+                newOptimized: task.optimizedText || '',
+                newTitle: task.optimizedTitle || '',
+              },
+              error: task.error
+            }
+          }));
+        }
+      });
+    }
+    
+    // 也检查已完成的任务（用于恢复结果）
+    const allTasks = transcribeService.tasks;
+    const doneTasks = allTasks.filter(t => t.status === 'done' && t.rawText && !t.id.startsWith('opt-'));
+    if (doneTasks.length > 0 && !rawResult) {
+      const latestDone = doneTasks[doneTasks.length - 1];
+      if (latestDone.rawText) {
+        setRawResult(latestDone.rawText);
+      }
+      if (latestDone.optimizedText) {
+        setOptimizedResult(latestDone.optimizedText);
+      }
+    }
+  }, []);
+
+  // 监听后台转写服务的状态变化
+  useEffect(() => {
+    const unsubscribe = transcribeService.subscribe(() => {
+      // 检查所有活跃的转写任务（排除历史记录优化任务）
+      const activeTasks = transcribeService.activeTasks.filter(t => !t.id.startsWith('opt-'));
+      
+      if (activeTasks.length > 0) {
+        const latestTask = activeTasks[activeTasks.length - 1];
+        
+        // 更新当前任务 ID
+        if (!currentTaskId || currentTaskId !== latestTask.id) {
+          setCurrentTaskId(latestTask.id);
+        }
+        
+        // 更新状态
+        setProgress(latestTask.progress);
+        if (latestTask.rawText) {
+          setRawResult(latestTask.rawText);
+        }
+        if (latestTask.optimizedText) {
+          setOptimizedResult(latestTask.optimizedText);
+        }
+        
+        // 更新加载状态
+        if (latestTask.status === 'transcribing') {
+          setTranscribing(true);
+          setOptimizing(false);
+        } else if (latestTask.status === 'optimizing') {
+          setTranscribing(false);
+          setOptimizing(true);
+        }
+      }
+      
+      // 检查当前任务是否完成
+      if (currentTaskId && !currentTaskId.startsWith('opt-')) {
+        const task = transcribeService.getTask(currentTaskId);
+        if (task) {
+          if (task.rawText) {
+            setRawResult(task.rawText);
+          }
+          if (task.optimizedText) {
+            setOptimizedResult(task.optimizedText);
+          }
+          if (task.status === 'done' || task.status === 'error') {
+            setTranscribing(false);
+            setOptimizing(false);
+            setProgress(0);
+            if (task.error) {
+              setError(task.error);
+            }
+          }
+        }
+      }
+      
+      // 同步历史记录优化任务状态
+      const allTasks = transcribeService.tasks;
+      const historyOptTasks = allTasks.filter(t => t.id.startsWith('opt-'));
+      historyOptTasks.forEach(task => {
+        const parts = task.id.split('-');
+        if (parts.length >= 2) {
+          const recordId = parts[1];
+          if (task.status === 'optimizing' || task.status === 'done' || task.status === 'error') {
+            setOptimizationTasks(prev => {
+              // 只有当状态有变化时才更新
+              const existing = prev[recordId];
+              const newStatus = task.status === 'optimizing' ? 'optimizing' : (task.status === 'done' ? 'done' : 'error');
+              if (existing && existing.status === newStatus && 
+                  existing.compareData.newOptimized === (task.optimizedText || '') &&
+                  existing.compareData.newTitle === (task.optimizedTitle || '')) {
+                return prev;
+              }
+              return {
+                ...prev,
+                [recordId]: {
+                  status: newStatus,
+                  compareData: {
+                    ...existing?.compareData,
+                    id: recordId,
+                    fileName: task.fileName,
+                    rawText: task.rawText || existing?.compareData?.rawText || '',
+                    newOptimized: task.optimizedText || '',
+                    newTitle: task.optimizedTitle || '',
+                  },
+                  error: task.error
+                }
+              };
+            });
+          }
+        }
+      });
+    });
+    return () => { unsubscribe(); };
+  }, [currentTaskId]);
+
+  // 转写音频（使用后台服务）
   const transcribe = useCallback(async () => {
     if (!file || !groqKey) return;
 
@@ -705,52 +883,25 @@ ${text}`
     setOptimizedResult('');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      // 标准化模型 ID
-      formData.append('model', 'whisper-large-v3');
-      formData.append('language', 'zh');
-      formData.append('response_format', 'verbose_json');
-
-      setProgress(30);
-
-      // 强制清洗 Key，解决潜在的 401/CORS 问题
-      const activeGroqKey = (localStorage.getItem('groq_api_key') || '').trim();
-
-      const response = await fetch(GROQ_API_URL, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${activeGroqKey}` },
-        body: formData,
-      }).catch(err => {
-        if (err.name === 'TypeError' && err.message === 'Failed to fetch') {
-          throw new Error('Groq 接口跨域或连接未授权。请检查转写 Key 是否正确。');
+      // 使用全局转写服务（后台运行）
+      const taskId = await transcribeService.transcribe(file, false, (task) => {
+        // 转写完成后的回调
+        if (task.rawText) {
+          setRawResult(task.rawText);
         }
-        throw err;
+        setTranscribing(false);
+        setProgress(0);
       });
-
-      setProgress(80);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 401) {
-          throw new Error('Groq 身份验证失败：API Key 无效。请在设置中检查。');
-        }
-        throw new Error(errorData.error?.message || `请求失败: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setProgress(100);
-      setRawResult(data.text || '');
+      setCurrentTaskId(taskId);
     } catch (err) {
       console.error('转写失败:', err);
       setError(err instanceof Error ? err.message : '转写失败，请重试');
-    } finally {
       setTranscribing(false);
       setProgress(0);
     }
   }, [file, groqKey]);
 
-  // AI 优化
+  // AI 优化（使用后台服务）
   const optimizeWithAI = useCallback(async () => {
     if (!rawResult || !aiApiKey) return;
 
@@ -759,16 +910,27 @@ ${text}`
     setError('');
 
     try {
-      await callAIApiStream(rawResult, (chunk) => {
-        setOptimizedResult(chunk);
-      });
+      // 使用全局转写服务进行优化（后台运行）
+      await transcribeService.optimizeText(
+        `current-${Date.now()}`,
+        rawResult,
+        file?.name || '未知文件',
+        (title, content) => {
+          // 进度回调
+          setOptimizedResult(content);
+        },
+        (title, content) => {
+          // 完成回调
+          setOptimizedResult(content);
+          setOptimizing(false);
+        }
+      );
     } catch (err) {
       console.error('AI 优化失败:', err);
       setError(err instanceof Error ? err.message : 'AI 优化失败，请重试');
-    } finally {
       setOptimizing(false);
     }
-  }, [rawResult, aiApiKey, callAIApiStream]);
+  }, [rawResult, aiApiKey, file]);
 
   // 复制文本
   const copyText = useCallback(async (text: string, id?: string) => {
