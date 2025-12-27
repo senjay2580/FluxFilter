@@ -29,7 +29,6 @@ import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
 import { clearCookieCache } from './lib/bilibili';
 import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 import { insightService } from './lib/insight-service';
-import { transcribeService } from './lib/transcribe-service';
 import InsightFloatingBall from './components/shared/InsightFloatingBall';
 
 const App = () => {
@@ -39,13 +38,6 @@ const App = () => {
     () => insightService.isLoading
   );
   const [insightDone, setInsightDone] = useState(false);
-
-  // 全局转写状态
-  const transcribeLoading = useSyncExternalStore(
-    transcribeService.subscribe.bind(transcribeService),
-    () => transcribeService.hasActiveTasks
-  );
-  const [transcribeDone, setTranscribeDone] = useState(false);
 
   // 监听策展完成
   useEffect(() => {
@@ -57,18 +49,6 @@ const App = () => {
     };
     window.addEventListener('insight-status', handleStatus as EventListener);
     return () => window.removeEventListener('insight-status', handleStatus as EventListener);
-  }, []);
-
-  // 监听转写完成
-  useEffect(() => {
-    const handleStatus = (e: CustomEvent<{ status: string }>) => {
-      if (e.detail.status === 'done') {
-        setTranscribeDone(true);
-        setTimeout(() => setTranscribeDone(false), 3000);
-      }
-    };
-    window.addEventListener('transcribe-status', handleStatus as EventListener);
-    return () => window.removeEventListener('transcribe-status', handleStatus as EventListener);
   }, []);
 
   // 认证状态 - null=检查中, true=已登录, false=游客模式
@@ -1950,23 +1930,6 @@ const App = () => {
             }}
             color="green"
             storageKey="insight-ball-pos"
-          />
-        )}
-
-        {/* 转写悬浮球 - 全局显示，紫色 */}
-        {activeTab !== 'settings' && (
-          <InsightFloatingBall
-            isLoading={transcribeLoading}
-            isDone={transcribeDone}
-            onClick={() => {
-              setSettingsInitialView('main');
-              setActiveTab('settings');
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('navigate-to-transcriber'));
-              }, 100);
-            }}
-            color="violet"
-            storageKey="transcribe-ball-pos"
           />
         )}
 

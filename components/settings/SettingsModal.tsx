@@ -5,7 +5,8 @@ import { getCurrentUser, updateBilibiliCookie, logout, type User } from '../../l
 import { clearCookieCache } from '../../lib/bilibili';
 import { invalidateCache, CACHE_KEYS } from '../../lib/cache';
 import { ClockIcon } from '../shared/Icons';
-import AIConfigForm from '../shared/AIConfigForm';
+import { transcribeService } from '../../lib/transcribe-service';
+import { AI_MODELS, getModelApiKey, setModelApiKey } from '../../lib/ai-models';
 
 interface Uploader {
   id: number;
@@ -52,7 +53,7 @@ interface SettingsModalProps {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout, watchLaterIds, onToggleWatchLater }) => {
-  const [activeTab, setActiveTab] = useState<'account' | 'uploaders' | 'videos'>('account');
+  const [activeTab, setActiveTab] = useState<'account' | 'uploaders' | 'videos' | 'api-pool'>('account');
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [uploaders, setUploaders] = useState<Uploader[]>([]);
   const [videos, setVideos] = useState<VideoItem[]>([]);
@@ -72,6 +73,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   const [addedVideos, setAddedVideos] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
   const [usingFallbackApi, setUsingFallbackApi] = useState(false); // 是否使用备用接口
+
+  // API 池配置
+  const [apiPoolKeys, setApiPoolKeys] = useState<any[]>([]);
+  const [newApiKey, setNewApiKey] = useState('');
+  const [newApiName, setNewApiName] = useState('');
+  const [newApiModel, setNewApiModel] = useState('whisper-large-v3-turbo');
+  const [apiPoolLoading, setApiPoolLoading] = useState(false);
+
+  // AI 模型配置
+  const [selectedAIModel, setSelectedAIModel] = useState(() => localStorage.getItem('ai_model') || 'deepseek-chat');
+  const [aiModelKey, setAiModelKey] = useState(() => getModelApiKey(localStorage.getItem('ai_model') || 'deepseek-chat'));
+  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url') || '');
+  const [customModelName, setCustomModelName] = useState(() => localStorage.getItem('ai_custom_model') || '');
+  const [showAIKey, setShowAIKey] = useState(false);
 
   // 当前打开菜单的视频
   const menuVideo = useMemo(() => {
@@ -137,9 +152,86 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   useEffect(() => {
     if (isOpen) {
       fetchData();
+      loadApiPool();
       setCookieMessage(null);
     }
   }, [isOpen, fetchData]);
+
+  // 加载 API 池
+  const loadApiPool = useCallback(async () => {
+    try {
+      setApiPoolLoading(true);
+      await transcribeService.initializeApiPool();
+      const keys = transcribeService.getAllApiKeys();
+      setApiPoolKeys(keys);
+    } catch (err) {
+      console.error('加载 API 池失败:', err);
+    } finally {
+      setApiPoolLoading(false);
+    }
+  }, []);
+
+  // 添加 API Key
+  const handleAddApiKey = async () => {
+    if (!newApiKey.trim()) {
+      alert('请输入 API Key');
+      return;
+    }
+    if (!newApiName.trim()) {
+      alert('请输入 API Key 名称');
+      return;
+    }
+
+    try {
+      await transcribeService.addApiKey(newApiKey.trim(), newApiName.trim(), newApiModel);
+      setNewApiKey('');
+      setNewApiName('');
+      setNewApiModel('whisper-large-v3-turbo');
+      await loadApiPool();
+    } catch (err) {
+      alert('添加 API Key 失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    }
+  };
+
+  // 删除 API Key
+  const handleRemoveApiKey = async (id: string) => {
+    if (confirm('确定要删除这个 API Key 吗？')) {
+      try {
+        await transcribeService.removeApiKey(id);
+        await loadApiPool();
+      } catch (err) {
+        alert('删除 API Key 失败: ' + (err instanceof Error ? err.message : '未知错误'));
+      }
+    }
+  };
+
+  // 切换 API Key 状态
+  const handleToggleApiKey = async (id: string) => {
+    try {
+      await transcribeService.toggleApiKeyActive(id);
+      await loadApiPool();
+    } catch (err) {
+      alert('切换 API Key 状态失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    }
+  };
+
+  // 保存 API 配置（AI 模型 + Groq）
+  const handleSaveAPIConfig = async () => {
+    try {
+      // 保存到 localStorage
+      localStorage.setItem('ai_model', selectedAIModel);
+      setModelApiKey(selectedAIModel, aiModelKey);
+      localStorage.setItem('ai_base_url', aiBaseUrl);
+      localStorage.setItem('ai_custom_model', customModelName);
+
+      // 触发全局存储事件
+      window.dispatchEvent(new Event('storage'));
+      
+      alert('API 配置已保存');
+    } catch (err) {
+      alert('保存失败: ' + (err instanceof Error ? err.message : '未知错误'));
+    }
+  };
 
   // 验证 Cookie 格式
   const validateCookieFormat = (cookieStr: string): { valid: boolean; message: string } => {
@@ -578,10 +670,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
         </div>
 
         {/* Tab切换 */}
-        <div className="flex gap-2 p-2 shrink-0">
+        <div className="flex gap-2 p-2 shrink-0 overflow-x-auto">
           <button
             onClick={() => setActiveTab('account')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'account'
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeTab === 'account'
               ? 'bg-cyber-lime/20 text-cyber-lime'
               : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
               }`}
@@ -590,7 +682,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
           </button>
           <button
             onClick={() => setActiveTab('uploaders')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'uploaders'
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeTab === 'uploaders'
               ? 'bg-cyber-lime/20 text-cyber-lime'
               : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
               }`}
@@ -599,12 +691,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
           </button>
           <button
             onClick={() => setActiveTab('videos')}
-            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all ${activeTab === 'videos'
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeTab === 'videos'
               ? 'bg-cyber-lime/20 text-cyber-lime'
               : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
               }`}
           >
             数据
+          </button>
+          <button
+            onClick={() => setActiveTab('api-pool')}
+            className={`flex-1 py-2 text-sm font-medium rounded-lg transition-all whitespace-nowrap ${activeTab === 'api-pool'
+              ? 'bg-cyber-lime/20 text-cyber-lime'
+              : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+              }`}
+          >
+            API 池
           </button>
         </div>
 
@@ -661,16 +762,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
 
               <div className="h-px bg-white/5 mx-2 my-2" />
 
-              {/* 服务配置 */}
-              <div className="p-4 bg-white/5 rounded-xl space-y-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9" />
-                  </svg>
-                  <p className="text-white font-medium">服务配置</p>
-                </div>
-                <AIConfigForm />
-              </div>
+
 
               {/* 退出登录 */}
               <button
@@ -764,7 +856,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 ))
               )}
             </div>
-          ) : (
+          ) : activeTab === 'videos' ? (
             /* 视频管理 - 视频列表 */
             <div className="p-4 space-y-3">
               {/* 标题 */}
@@ -846,7 +938,195 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 </p>
               )}
             </div>
-          )}
+          ) : activeTab === 'api-pool' ? (
+            /* API 池配置 */
+            <div className="p-4 space-y-4 overflow-y-auto">
+              {/* AI 模型配置 */}
+              <div className="p-4 bg-white/5 rounded-xl space-y-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 0 1 9-9" />
+                  </svg>
+                  <p className="text-white font-medium">AI 助手服务模型</p>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">
+                  配置用于文本优化的 AI 模型
+                </p>
+
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-400 ml-1">选择模型</span>
+                    <select
+                      value={selectedAIModel}
+                      onChange={(e) => setSelectedAIModel(e.target.value)}
+                      className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white appearance-none focus:outline-none focus:border-emerald-500/50"
+                    >
+                      {AI_MODELS.map(m => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <span className="text-xs text-gray-400 ml-1">API Key</span>
+                    <div className="relative">
+                      <input
+                        type={showAIKey ? 'text' : 'password'}
+                        value={aiModelKey}
+                        onChange={(e) => setAiModelKey(e.target.value)}
+                        placeholder={`输入 ${AI_MODELS.find(m => m.id === selectedAIModel)?.name} 的 Key...`}
+                        className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAIKey(!showAIKey)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-gray-500 hover:text-white transition-colors"
+                      >
+                        {showAIKey ? (
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                            <line x1="1" y1="1" x2="23" y2="23" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                            <circle cx="12" cy="12" r="3" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {selectedAIModel === 'custom' && (
+                    <>
+                      <div className="space-y-2">
+                        <span className="text-xs text-gray-400 ml-1">Base URL</span>
+                        <input
+                          type="text"
+                          value={aiBaseUrl}
+                          onChange={(e) => setAiBaseUrl(e.target.value)}
+                          placeholder="https://api.openai.com/v1"
+                          className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <span className="text-xs text-gray-400 ml-1">模型名称</span>
+                        <input
+                          type="text"
+                          value={customModelName}
+                          onChange={(e) => setCustomModelName(e.target.value)}
+                          placeholder="gpt-4-turbo"
+                          className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-emerald-500/50"
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="h-px bg-white/5" />
+
+              {/* Groq API 池配置 */}
+              <div className="p-4 bg-white/5 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="1" />
+                    <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24" />
+                  </svg>
+                  <p className="text-white font-medium">Groq API 池</p>
+                </div>
+                <p className="text-xs text-gray-500 mb-4">
+                  配置多个 Groq API Key，系统会自动负载均衡分配转写任务。
+                </p>
+
+                {/* 添加新 API Key */}
+                <div className="space-y-3 mb-4">
+                  <input
+                    type="text"
+                    value={newApiName}
+                    onChange={(e) => setNewApiName(e.target.value)}
+                    placeholder="API Key 名称（如：API Key 1）"
+                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50"
+                  />
+                  <select
+                    value={newApiModel}
+                    onChange={(e) => setNewApiModel(e.target.value)}
+                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white appearance-none focus:outline-none focus:border-violet-500/50"
+                  >
+                    <option value="whisper-large-v3-turbo">Whisper Large V3 Turbo (快速)</option>
+                    <option value="whisper-large-v3">Whisper Large V3 (精准)</option>
+                  </select>
+                  <input
+                    type="password"
+                    value={newApiKey}
+                    onChange={(e) => setNewApiKey(e.target.value)}
+                    placeholder="gsk_..."
+                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500/50 font-mono"
+                  />
+                  <button
+                    onClick={handleAddApiKey}
+                    className="w-full py-2 bg-violet-500/20 hover:bg-violet-500/30 text-violet-400 text-sm font-medium rounded-lg transition-all"
+                  >
+                    添加 API Key
+                  </button>
+                </div>
+
+                {/* API Key 列表 */}
+                {apiPoolLoading ? (
+                  <div className="text-center py-4 text-gray-500">
+                    <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin mx-auto" />
+                  </div>
+                ) : apiPoolKeys.length === 0 ? (
+                  <div className="text-center py-4 text-gray-500 text-sm">
+                    还没有配置 API Key
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {apiPoolKeys.map((apiKey) => (
+                      <div
+                        key={apiKey.id}
+                        className="flex items-center justify-between p-3 bg-black/40 rounded-lg border border-white/10"
+                      >
+                        <div className="flex-1">
+                          <p className="text-white font-medium text-sm">{apiKey.name}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            请求: {apiKey.requestCount} | 总计: {apiKey.totalRequests}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleToggleApiKey(apiKey.id)}
+                            className={`px-3 py-1 rounded text-xs font-medium transition-all ${
+                              apiKey.isActive
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}
+                          >
+                            {apiKey.isActive ? '启用' : '禁用'}
+                          </button>
+                          <button
+                            onClick={() => handleRemoveApiKey(apiKey.id)}
+                            className="px-3 py-1 rounded text-xs font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-all"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 保存按钮 */}
+              <button
+                onClick={handleSaveAPIConfig}
+                className="w-full py-2.5 bg-gradient-to-r from-cyber-lime to-emerald-400 text-black text-sm font-bold rounded-xl hover:from-lime-400 hover:to-emerald-500 transition-all shadow-lg shadow-cyber-lime/10 active:scale-[0.98]"
+              >
+                保存 API 配置
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 

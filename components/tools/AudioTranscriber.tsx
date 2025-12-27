@@ -48,10 +48,91 @@ interface TaskData {
 
 interface AudioTranscriberProps {
   onNavigate?: (page: string) => void;
+  apiKeyId?: string; // 指定使用的 API Key ID
 }
 
-const AudioTranscriber: React.FC<AudioTranscriberProps> = ({ onNavigate }) => {
+const AudioTranscriber: React.FC<AudioTranscriberProps> = ({ onNavigate, apiKeyId }) => {
   const [activeTab, setActiveTab] = useState<'transcribe' | 'history'>('transcribe');
+  const [apiKeys, setApiKeys] = useState<any[]>([]);
+  const [selectedApiKeyIndex, setSelectedApiKeyIndex] = useState(0);
+  const [showApiManager, setShowApiManager] = useState(false);
+
+  // 每个 API Key 的独立转写状态类型
+  interface ApiKeyTranscribeState {
+    file: File | null;
+    isVideoFile: boolean;
+    mediaUrl: string | null;
+    isPlaying: boolean;
+    mediaDuration: number;
+    mediaCurrentTime: number;
+    transcribing: boolean;
+    optimizing: boolean;
+    rawResult: string;
+    optimizedResult: string;
+    optimizedChunks: Array<{ content: string; isChunkEnd: boolean }>;
+    error: string;
+    progress: number;
+    copiedId: string | null;
+    currentTaskId: string | null;
+  }
+
+  // 默认状态
+  const getDefaultApiKeyState = (): ApiKeyTranscribeState => ({
+    file: null,
+    isVideoFile: false,
+    mediaUrl: null,
+    isPlaying: false,
+    mediaDuration: 0,
+    mediaCurrentTime: 0,
+    transcribing: false,
+    optimizing: false,
+    rawResult: '',
+    optimizedResult: '',
+    optimizedChunks: [],
+    error: '',
+    progress: 0,
+    copiedId: null,
+    currentTaskId: null,
+  });
+
+  // 为每个 API Key 维护独立的转写状态
+  const [transcribeStateByApiKey, setTranscribeStateByApiKey] = useState<Record<string, ApiKeyTranscribeState>>({});
+
+  // 初始化 API 池
+  useEffect(() => {
+    const initializePool = async () => {
+      await transcribeService.initializeApiPool();
+      const keys = transcribeService.getAllApiKeys();
+      setApiKeys(keys);
+      
+      // 如果指定了 apiKeyId，找到对应的索引
+      if (apiKeyId && keys.length > 0) {
+        const index = keys.findIndex(k => k.id === apiKeyId);
+        if (index >= 0) {
+          setSelectedApiKeyIndex(index);
+        }
+      }
+    };
+    initializePool();
+  }, [apiKeyId]);
+
+  // 获取当前 API Key 的状态
+  // 使用 selectedApiKeyIndex 作为 fallback key，确保在 apiKeys 加载前后状态一致
+  const currentApiKeyId = apiKeys.length > 0 
+    ? (apiKeys[selectedApiKeyIndex]?.id || `index-${selectedApiKeyIndex}`)
+    : `index-${selectedApiKeyIndex}`;
+  const currentState = transcribeStateByApiKey[currentApiKeyId] || getDefaultApiKeyState();
+
+  // 更新当前 API Key 状态的辅助函数
+  const updateCurrentState = useCallback((updates: Partial<ApiKeyTranscribeState>) => {
+    setTranscribeStateByApiKey(prev => ({
+      ...prev,
+      [currentApiKeyId]: {
+        ...(prev[currentApiKeyId] || getDefaultApiKeyState()),
+        ...updates,
+      },
+    }));
+  }, [currentApiKeyId]);
 
   // AI 相关配置 (由全局 SettingsModal 管理，这里引入监听逻辑)
   const [configVersion, setConfigVersion] = useState(0);
@@ -69,22 +150,44 @@ const AudioTranscriber: React.FC<AudioTranscriberProps> = ({ onNavigate }) => {
   const aiBaseUrl = localStorage.getItem('ai_base_url') || '';
   const customModelName = localStorage.getItem('ai_custom_model') || '';
 
-  const [file, setFile] = useState<File | null>(null);
-  const [isVideoFile, setIsVideoFile] = useState(false);
-  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [mediaDuration, setMediaDuration] = useState(0);
-  const [mediaCurrentTime, setMediaCurrentTime] = useState(0);
-  const [transcribing, setTranscribing] = useState(false);
-  const [optimizing, setOptimizing] = useState(false);
+  // 从 currentState 解构当前 API Key 的状态
+  const {
+    file,
+    isVideoFile,
+    mediaUrl,
+    isPlaying,
+    mediaDuration,
+    mediaCurrentTime,
+    transcribing,
+    optimizing,
+    rawResult,
+    optimizedResult,
+    optimizedChunks,
+    error,
+    progress,
+    copiedId,
+    currentTaskId,
+  } = currentState;
 
-  const [rawResult, setRawResult] = useState('');
-  const [optimizedResult, setOptimizedResult] = useState('');
-  const [optimizedChunks, setOptimizedChunks] = useState<Array<{ content: string; isChunkEnd: boolean }>>([]);
-  const [error, setError] = useState('');
-  const [progress, setProgress] = useState(0);
+  // 状态更新函数（使用 updateCurrentState）
+  const setFile = useCallback((f: File | null) => updateCurrentState({ file: f }), [updateCurrentState]);
+  const setIsVideoFile = useCallback((v: boolean) => updateCurrentState({ isVideoFile: v }), [updateCurrentState]);
+  const setMediaUrl = useCallback((url: string | null) => updateCurrentState({ mediaUrl: url }), [updateCurrentState]);
+  const setIsPlaying = useCallback((v: boolean) => updateCurrentState({ isPlaying: v }), [updateCurrentState]);
+  const setMediaDuration = useCallback((d: number) => updateCurrentState({ mediaDuration: d }), [updateCurrentState]);
+  const setMediaCurrentTime = useCallback((t: number) => updateCurrentState({ mediaCurrentTime: t }), [updateCurrentState]);
+  const setTranscribing = useCallback((v: boolean) => updateCurrentState({ transcribing: v }), [updateCurrentState]);
+  const setOptimizing = useCallback((v: boolean) => updateCurrentState({ optimizing: v }), [updateCurrentState]);
+  const setRawResult = useCallback((r: string) => updateCurrentState({ rawResult: r }), [updateCurrentState]);
+  const setOptimizedResult = useCallback((r: string) => updateCurrentState({ optimizedResult: r }), [updateCurrentState]);
+  const setOptimizedChunks = useCallback((c: Array<{ content: string; isChunkEnd: boolean }>) => updateCurrentState({ optimizedChunks: c }), [updateCurrentState]);
+  const setError = useCallback((e: string) => updateCurrentState({ error: e }), [updateCurrentState]);
+  const setProgress = useCallback((p: number) => updateCurrentState({ progress: p }), [updateCurrentState]);
+  const setCopiedId = useCallback((id: string | null) => updateCurrentState({ copiedId: id }), [updateCurrentState]);
+  const setCurrentTaskId = useCallback((id: string | null) => updateCurrentState({ currentTaskId: id }), [updateCurrentState]);
+
+  // 共享状态（历史记录等不按 API Key 分开）
   const [history, setHistory] = useState<TranscriptRecord[]>([]);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [viewingRecord, setViewingRecord] = useState<TranscriptRecord | null>(null);
 
   // 多任务优化状态管理
@@ -574,28 +677,31 @@ ${text}`
       const fileExt = selectedFile.name.split('.').pop()?.toLowerCase();
 
       if (!fileExt || !validExtensions.includes(fileExt)) {
-        setError('请选择音频或视频文件（MP3、MP4、WAV、M4A、WebM 等）');
+        updateCurrentState({ error: '请选择音频或视频文件（MP3、MP4、WAV、M4A、WebM 等）' });
         return;
       }
       if (selectedFile.size > 500 * 1024 * 1024) {
-        setError('文件大小不能超过 500MB');
+        updateCurrentState({ error: '文件大小不能超过 500MB' });
         return;
       }
       if (mediaUrl) {
         URL.revokeObjectURL(mediaUrl);
       }
       const isVideo = videoExtensions.includes(fileExt) || selectedFile.type.startsWith('video/');
-      setFile(selectedFile);
-      setIsVideoFile(isVideo);
-      setMediaUrl(URL.createObjectURL(selectedFile));
-      setIsPlaying(false);
-      setMediaCurrentTime(0);
-      setMediaDuration(0);
-      setError('');
-      setRawResult('');
-      setOptimizedResult('');
+      // 一次性更新所有状态
+      updateCurrentState({
+        file: selectedFile,
+        isVideoFile: isVideo,
+        mediaUrl: URL.createObjectURL(selectedFile),
+        isPlaying: false,
+        mediaCurrentTime: 0,
+        mediaDuration: 0,
+        error: '',
+        rawResult: '',
+        optimizedResult: '',
+      });
     }
-  }, [mediaUrl]);
+  }, [mediaUrl, updateCurrentState]);
 
   // 媒体播放控制
   const togglePlay = useCallback(() => {
@@ -606,11 +712,11 @@ ${text}`
       } else {
         media.play().catch(err => {
           console.error('播放失败:', err);
-          setError('播放失败，请重试');
+          updateCurrentState({ error: '播放失败，请重试' });
         });
       }
     }
-  }, [isVideoFile]);
+  }, [isVideoFile, updateCurrentState]);
 
   // 每500ms更新一次时间显示，避免频繁渲染
   const startTimeUpdate = useCallback(() => {
@@ -619,15 +725,15 @@ ${text}`
     }
     const media = isVideoFile ? videoRef.current : audioRef.current;
     if (media) {
-      setMediaCurrentTime(media.currentTime);
+      updateCurrentState({ mediaCurrentTime: media.currentTime });
     }
     timeUpdateIntervalRef.current = window.setInterval(() => {
       const media = isVideoFile ? videoRef.current : audioRef.current;
       if (media && isPlayingRef.current) {
-        setMediaCurrentTime(media.currentTime);
+        updateCurrentState({ mediaCurrentTime: media.currentTime });
       }
     }, 500);
-  }, [isVideoFile]);
+  }, [isVideoFile, updateCurrentState]);
 
   const stopTimeUpdate = useCallback(() => {
     if (timeUpdateIntervalRef.current) {
@@ -637,61 +743,60 @@ ${text}`
     // 更新最终时间
     const media = isVideoFile ? videoRef.current : audioRef.current;
     if (media) {
-      setMediaCurrentTime(media.currentTime);
+      updateCurrentState({ mediaCurrentTime: media.currentTime });
     }
-  }, [isVideoFile]);
+  }, [isVideoFile, updateCurrentState]);
 
   const handleVideoPlay = useCallback(() => {
     isPlayingRef.current = true;
-    setIsPlaying(true);
+    updateCurrentState({ isPlaying: true });
     startTimeUpdate();
-  }, [startTimeUpdate]);
+  }, [startTimeUpdate, updateCurrentState]);
 
   const handleVideoPause = useCallback(() => {
     isPlayingRef.current = false;
-    setIsPlaying(false);
+    updateCurrentState({ isPlaying: false });
     stopTimeUpdate();
-  }, [stopTimeUpdate]);
+  }, [stopTimeUpdate, updateCurrentState]);
 
   const handleAudioPlay = useCallback(() => {
     isPlayingRef.current = true;
-    setIsPlaying(true);
+    updateCurrentState({ isPlaying: true });
     startTimeUpdate();
-  }, [startTimeUpdate]);
+  }, [startTimeUpdate, updateCurrentState]);
 
   const handleAudioPause = useCallback(() => {
     isPlayingRef.current = false;
-    setIsPlaying(false);
+    updateCurrentState({ isPlaying: false });
     stopTimeUpdate();
-  }, [stopTimeUpdate]);
+  }, [stopTimeUpdate, updateCurrentState]);
 
   const handleVideoLoadedMetadata = useCallback(() => {
     if (videoRef.current) {
-      setMediaDuration(videoRef.current.duration);
+      updateCurrentState({ mediaDuration: videoRef.current.duration });
     }
-  }, []);
+  }, [updateCurrentState]);
 
   const handleAudioLoadedMetadata = useCallback(() => {
     if (audioRef.current) {
-      setMediaDuration(audioRef.current.duration);
+      updateCurrentState({ mediaDuration: audioRef.current.duration });
     }
-  }, []);
+  }, [updateCurrentState]);
 
   const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const time = parseFloat(e.target.value);
     const media = isVideoFile ? videoRef.current : audioRef.current;
     if (media) {
       media.currentTime = time;
-      setMediaCurrentTime(time);
+      updateCurrentState({ mediaCurrentTime: time });
     }
-  }, [isVideoFile]);
+  }, [isVideoFile, updateCurrentState]);
 
   const handleMediaEnded = useCallback(() => {
     isPlayingRef.current = false;
-    setIsPlaying(false);
-    setMediaCurrentTime(0);
+    updateCurrentState({ isPlaying: false, mediaCurrentTime: 0 });
     stopTimeUpdate();
-  }, [stopTimeUpdate]);
+  }, [stopTimeUpdate, updateCurrentState]);
 
   // 组件卸载时清理
   useEffect(() => {
@@ -708,42 +813,49 @@ ${text}`
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // 当前后台转写任务 ID
-  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
-
-  // 组件挂载时恢复正在进行的任务状态
+  // 组件挂载时恢复正在进行的任务状态（按 API Key 隔离）
   useEffect(() => {
+    // 获取当前选中的 API Key ID
+    const selectedApiKey = apiKeys[selectedApiKeyIndex];
+    const matchApiKeyId = selectedApiKey?.id;
+    
     const activeTasks = transcribeService.activeTasks;
     if (activeTasks.length > 0) {
-      // 找到最新的转写任务（非历史记录优化任务）
-      const transcribeTasks = activeTasks.filter(t => !t.id.startsWith('opt-'));
-      if (transcribeTasks.length > 0) {
-        const latestTask = transcribeTasks[transcribeTasks.length - 1];
-        setCurrentTaskId(latestTask.id);
+      // 只恢复当前 API Key 的转写任务
+      const myTasks = activeTasks.filter(t => 
+        !t.id.startsWith('opt-') && t.apiKeyId === matchApiKeyId
+      );
+      
+      if (myTasks.length > 0) {
+        const latestTask = myTasks[myTasks.length - 1];
         
-        // 恢复状态
+        const updates: Partial<ApiKeyTranscribeState> = {
+          currentTaskId: latestTask.id,
+        };
+        
         if (latestTask.status === 'transcribing') {
-          setTranscribing(true);
-          setProgress(latestTask.progress);
+          updates.transcribing = true;
+          updates.progress = latestTask.progress;
         } else if (latestTask.status === 'optimizing') {
-          setOptimizing(true);
+          updates.optimizing = true;
           if (latestTask.rawText) {
-            setRawResult(latestTask.rawText);
+            updates.rawResult = latestTask.rawText;
           }
         }
         
         if (latestTask.rawText) {
-          setRawResult(latestTask.rawText);
+          updates.rawResult = latestTask.rawText;
         }
         if (latestTask.optimizedText) {
-          setOptimizedResult(latestTask.optimizedText);
+          updates.optimizedResult = latestTask.optimizedText;
         }
+        
+        updateCurrentState(updates);
       }
       
-      // 恢复历史记录优化任务
+      // 恢复历史记录优化任务（这个是共享的，不按 API Key 分）
       const historyOptTasks = activeTasks.filter(t => t.id.startsWith('opt-'));
       historyOptTasks.forEach(task => {
-        // 从任务 ID 中提取记录 ID (格式: opt-{recordId}-{timestamp})
         const parts = task.id.split('-');
         if (parts.length >= 2) {
           const recordId = parts[1];
@@ -765,75 +877,100 @@ ${text}`
       });
     }
     
-    // 也检查已完成的任务（用于恢复结果）
+    // 恢复当前 API Key 已完成的任务结果
     const allTasks = transcribeService.tasks;
-    const doneTasks = allTasks.filter(t => t.status === 'done' && t.rawText && !t.id.startsWith('opt-'));
-    if (doneTasks.length > 0 && !rawResult) {
-      const latestDone = doneTasks[doneTasks.length - 1];
+    const myDoneTasks = allTasks.filter(t => 
+      t.status === 'done' && 
+      t.rawText && 
+      !t.id.startsWith('opt-') &&
+      t.apiKeyId === matchApiKeyId
+    );
+    
+    if (myDoneTasks.length > 0 && !rawResult) {
+      const latestDone = myDoneTasks[myDoneTasks.length - 1];
+      const updates: Partial<ApiKeyTranscribeState> = {};
       if (latestDone.rawText) {
-        setRawResult(latestDone.rawText);
+        updates.rawResult = latestDone.rawText;
       }
       if (latestDone.optimizedText) {
-        setOptimizedResult(latestDone.optimizedText);
+        updates.optimizedResult = latestDone.optimizedText;
+      }
+      if (Object.keys(updates).length > 0) {
+        updateCurrentState(updates);
       }
     }
-  }, []);
+  }, [apiKeys, selectedApiKeyIndex, updateCurrentState, rawResult]);
 
-  // 监听后台转写服务的状态变化
+  // 监听后台转写服务的状态变化（按 API Key 隔离）
   useEffect(() => {
+    // 获取当前选中的 API Key ID（用于匹配任务）
+    const selectedApiKey = apiKeys[selectedApiKeyIndex];
+    const matchApiKeyId = selectedApiKey?.id;
+    
     const unsubscribe = transcribeService.subscribe(() => {
-      // 检查所有活跃的转写任务（排除历史记录优化任务）
-      const activeTasks = transcribeService.activeTasks.filter(t => !t.id.startsWith('opt-'));
+      // 只处理当前 API Key 的转写任务
+      const myActiveTasks = transcribeService.activeTasks.filter(t => 
+        !t.id.startsWith('opt-') && t.apiKeyId === matchApiKeyId
+      );
       
-      if (activeTasks.length > 0) {
-        const latestTask = activeTasks[activeTasks.length - 1];
+      if (myActiveTasks.length > 0) {
+        const latestTask = myActiveTasks[myActiveTasks.length - 1];
+        
+        const updates: Partial<ApiKeyTranscribeState> = {
+          progress: latestTask.progress,
+        };
         
         // 更新当前任务 ID
         if (!currentTaskId || currentTaskId !== latestTask.id) {
-          setCurrentTaskId(latestTask.id);
+          updates.currentTaskId = latestTask.id;
         }
         
-        // 更新状态
-        setProgress(latestTask.progress);
         if (latestTask.rawText) {
-          setRawResult(latestTask.rawText);
+          updates.rawResult = latestTask.rawText;
         }
         if (latestTask.optimizedText) {
-          setOptimizedResult(latestTask.optimizedText);
+          updates.optimizedResult = latestTask.optimizedText;
         }
         
         // 更新加载状态
         if (latestTask.status === 'transcribing') {
-          setTranscribing(true);
-          setOptimizing(false);
+          updates.transcribing = true;
+          updates.optimizing = false;
         } else if (latestTask.status === 'optimizing') {
-          setTranscribing(false);
-          setOptimizing(true);
+          updates.transcribing = false;
+          updates.optimizing = true;
         }
+        
+        updateCurrentState(updates);
       }
       
-      // 检查当前任务是否完成
+      // 检查当前任务是否完成（只检查当前 API Key 的任务）
       if (currentTaskId && !currentTaskId.startsWith('opt-')) {
         const task = transcribeService.getTask(currentTaskId);
-        if (task) {
+        // 确保任务属于当前 API Key
+        if (task && task.apiKeyId === matchApiKeyId) {
+          const updates: Partial<ApiKeyTranscribeState> = {};
           if (task.rawText) {
-            setRawResult(task.rawText);
+            updates.rawResult = task.rawText;
           }
           if (task.optimizedText) {
-            setOptimizedResult(task.optimizedText);
+            updates.optimizedResult = task.optimizedText;
           }
           if (task.status === 'done' || task.status === 'error') {
-            setTranscribing(false);
-            setOptimizing(false);
-            setProgress(0);
+            updates.transcribing = false;
+            updates.optimizing = false;
+            updates.progress = 0;
             if (task.error) {
-              setError(task.error);
+              updates.error = task.error;
             }
+          }
+          if (Object.keys(updates).length > 0) {
+            updateCurrentState(updates);
           }
         }
       }
       
-      // 同步历史记录优化任务状态
+      // 同步历史记录优化任务状态（共享）
       const allTasks = transcribeService.tasks;
       const historyOptTasks = allTasks.filter(t => t.id.startsWith('opt-'));
       historyOptTasks.forEach(task => {
@@ -842,7 +979,6 @@ ${text}`
           const recordId = parts[1];
           if (task.status === 'optimizing' || task.status === 'done' || task.status === 'error') {
             setOptimizationTasks(prev => {
-              // 只有当状态有变化时才更新
               const existing = prev[recordId];
               const newStatus = task.status === 'optimizing' ? 'optimizing' : (task.status === 'done' ? 'done' : 'error');
               if (existing && existing.status === newStatus && 
@@ -871,44 +1007,51 @@ ${text}`
       });
     });
     return () => { unsubscribe(); };
-  }, [currentTaskId]);
+  }, [apiKeys, selectedApiKeyIndex, currentTaskId, updateCurrentState]);
 
   // 转写音频（使用后台服务）
   const transcribe = useCallback(async () => {
     if (!file || !groqKey) return;
 
-    setTranscribing(true);
-    setError('');
-    setProgress(10);
-    setRawResult('');
-    setOptimizedResult('');
+    updateCurrentState({
+      transcribing: true,
+      error: '',
+      progress: 10,
+      rawResult: '',
+      optimizedResult: '',
+    });
 
     try {
       // 使用全局转写服务（后台运行）
+      const selectedApiKey = apiKeys[selectedApiKeyIndex];
       const taskId = await transcribeService.transcribe(file, false, (task) => {
         // 转写完成后的回调
-        if (task.rawText) {
-          setRawResult(task.rawText);
-        }
-        setTranscribing(false);
-        setProgress(0);
-      });
-      setCurrentTaskId(taskId);
+        updateCurrentState({
+          rawResult: task.rawText || '',
+          transcribing: false,
+          progress: 0,
+        });
+      }, selectedApiKey?.id);
+      updateCurrentState({ currentTaskId: taskId });
     } catch (err) {
       console.error('转写失败:', err);
-      setError(err instanceof Error ? err.message : '转写失败，请重试');
-      setTranscribing(false);
-      setProgress(0);
+      updateCurrentState({
+        error: err instanceof Error ? err.message : '转写失败，请重试',
+        transcribing: false,
+        progress: 0,
+      });
     }
-  }, [file, groqKey]);
+  }, [file, groqKey, apiKeys, selectedApiKeyIndex, updateCurrentState]);
 
   // AI 优化（使用后台服务）
   const optimizeWithAI = useCallback(async () => {
     if (!rawResult || !aiApiKey) return;
 
-    setOptimizing(true);
-    setOptimizedResult('');
-    setError('');
+    updateCurrentState({
+      optimizing: true,
+      optimizedResult: '',
+      error: '',
+    });
 
     try {
       // 使用全局转写服务进行优化（后台运行）
@@ -918,31 +1061,35 @@ ${text}`
         file?.name || '未知文件',
         (title, content) => {
           // 进度回调 - 实时显示
-          setOptimizedResult(content);
+          updateCurrentState({ optimizedResult: content });
         },
         (title, content) => {
           // 完成回调
-          setOptimizedResult(content);
-          setOptimizing(false);
+          updateCurrentState({
+            optimizedResult: content,
+            optimizing: false,
+          });
         }
       );
     } catch (err) {
       console.error('AI 优化失败:', err);
-      setError(err instanceof Error ? err.message : 'AI 优化失败，请重试');
-      setOptimizing(false);
+      updateCurrentState({
+        error: err instanceof Error ? err.message : 'AI 优化失败，请重试',
+        optimizing: false,
+      });
     }
-  }, [rawResult, aiApiKey, file]);
+  }, [rawResult, aiApiKey, file, updateCurrentState]);
 
   // 复制文本
   const copyText = useCallback(async (text: string, id?: string) => {
     try {
       await navigator.clipboard.writeText(text);
       if (id) {
-        setCopiedId(id);
-        setTimeout(() => setCopiedId(null), 2000);
+        updateCurrentState({ copiedId: id });
+        setTimeout(() => updateCurrentState({ copiedId: null }), 2000);
       }
     } catch { /* ignore */ }
-  }, []);
+  }, [updateCurrentState]);
 
   // 保存结果
   const saveResult = useCallback(() => {
@@ -963,8 +1110,8 @@ ${text}`
     return `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
   };
 
-  // 配置状态：全部配置=green，部分配置=amber，未配置=red
-  const configStatus = groqKey && aiApiKey ? 'full' : (groqKey || aiApiKey ? 'partial' : 'none');
+  // 配置状态：有API Key=green，有AI模型=amber，都没有=red
+  const configStatus = apiKeys.length > 0 && aiApiKey ? 'full' : (apiKeys.length > 0 || aiApiKey ? 'partial' : 'none');
 
   return (
     <div className="space-y-4 pb-8 max-w-7xl mx-auto">
@@ -979,6 +1126,34 @@ ${text}`
           onPause={handleAudioPause}
           className="hidden"
         />
+      )}
+
+      {/* API Key 选择 Tab 栏 */}
+      {apiKeys.length > 0 && (
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 overflow-x-auto">
+          {apiKeys.map((apiKey, index) => (
+            <button
+              key={apiKey.id}
+              onClick={() => setSelectedApiKeyIndex(index)}
+              className={`px-4 py-2 rounded-lg font-medium transition-all whitespace-nowrap flex items-center gap-2 ${
+                selectedApiKeyIndex === index
+                  ? 'bg-cyber-lime/20 text-cyber-lime'
+                  : 'bg-white/5 text-gray-400 hover:bg-white/10'
+              }`}
+            >
+              <span>{apiKey.name}</span>
+              {/* 显示模型类型 */}
+              <span className={`text-xs px-1.5 py-0.5 rounded ${
+                apiKey.modelId?.includes('turbo') 
+                  ? 'bg-amber-500/20 text-amber-400' 
+                  : 'bg-blue-500/20 text-blue-400'
+              }`}>
+                {apiKey.modelId?.includes('turbo') ? 'Turbo' : 'V3'}
+              </span>
+              {!apiKey.isActive && <span className="text-xs text-red-400">(禁用)</span>}
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Tab 切换 + 设置按钮 */}
@@ -1024,7 +1199,7 @@ ${text}`
               ? ' border-none text-amber-400'
               : ' border-none text-red-400 animate-pulse'
             }`}
-          title={configStatus === 'full' ? 'API 已从全局配置读取' : configStatus === 'partial' ? '部分 API 已配置' : 'API 未在全局设置中配置'}
+          title={configStatus === 'full' ? 'Groq API 已配置' : configStatus === 'partial' ? '部分 API 已配置' : 'API 未配置'}
         >
           <div className={`w-2 h-2 rounded-full ${configStatus === 'full' ? 'bg-green-500' : configStatus === 'partial' ? 'bg-amber-500' : 'bg-red-500'}`} />
 

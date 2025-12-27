@@ -1,4 +1,5 @@
 import { AI_MODELS, getModelApiKey } from './ai-models';
+import { groqApiPool } from './groq-api-pool';
 
 // 转写任务类型
 export interface TranscribeTask {
@@ -18,10 +19,14 @@ export interface TranscribeTask {
   // 分块处理相关
   totalChunks?: number;
   processedChunks?: number;
+  // API Key 相关
+  apiKeyId?: string; // 使用的 API Key ID
 }
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
-const MAX_CHUNK_SIZE = 20 * 1024 * 1024; // 20MB per chunk
+const MAX_CHUNK_SIZE = 25 * 1024 * 1024; // 25MB per chunk
+const MAX_RETRIES = 3; // 最多重试 3 次
+const RETRY_DELAY = 2000; // 重试延迟 2 秒
 
 // 全局转写服务
 class TranscribeService {
@@ -41,6 +46,11 @@ class TranscribeService {
     return this.activeTasks.length > 0;
   }
 
+  // 获取特定 API Key 的活跃任务数
+  getActiveTasksForApiKey(apiKeyId: string): number {
+    return this.activeTasks.filter(t => (t.apiKeyId || 'default') === apiKeyId).length;
+  }
+
   // 订阅状态变化
   subscribe(listener: () => void) {
     this._listeners.add(listener);
@@ -49,11 +59,23 @@ class TranscribeService {
 
   private notify() {
     this._listeners.forEach(l => l());
+    
+    // 按 API Key 分组统计任务
+    const tasksByApiKey = new Map<string, TranscribeTask[]>();
+    this.activeTasks.forEach(task => {
+      const apiKeyId = task.apiKeyId || 'default';
+      if (!tasksByApiKey.has(apiKeyId)) {
+        tasksByApiKey.set(apiKeyId, []);
+      }
+      tasksByApiKey.get(apiKeyId)!.push(task);
+    });
+
     // 发送全局事件
     window.dispatchEvent(new CustomEvent('transcribe-status', {
       detail: {
         status: this.hasActiveTasks ? 'loading' : (this.tasks.some(t => t.status === 'done') ? 'done' : 'idle'),
-        tasksCount: this.activeTasks.length
+        tasksCount: this.activeTasks.length,
+        tasksByApiKey: Object.fromEntries(tasksByApiKey)
       }
     }));
   }
@@ -90,11 +112,86 @@ class TranscribeService {
     return { apiKey: key, model };
   }
 
+  // 带重试的 API 调用
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit,
+    retries = MAX_RETRIES
+  ): Promise<Response> {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: AbortSignal.timeout(60000), // 60 秒超时
+        });
+        
+        // 处理速率限制
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 30000; // 默认等待 30 秒
+          
+          if (attempt < retries) {
+            console.warn(`API 速率限制，${waitTime / 1000} 秒后重试...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+            continue;
+          }
+        }
+        
+        return response;
+      } catch (err) {
+        const isLastAttempt = attempt === retries;
+        const isNetworkError = err instanceof TypeError && 
+          (err.message.includes('Failed to fetch') || 
+           err.message.includes('ERR_CONNECTION'));
+        
+        if (isNetworkError && !isLastAttempt) {
+          // 网络错误，等待后重试
+          const delay = RETRY_DELAY * Math.pow(2, attempt); // 指数退避
+          console.warn(`网络错误，${delay / 1000} 秒后重试...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        
+        throw err;
+      }
+    }
+    
+    throw new Error('转写请求失败，请检查网络连接');
+  }
+
   // 转写音频文件（后台运行）
-  async transcribe(file: File, autoOptimize = false, onComplete?: (task: TranscribeTask) => void): Promise<string> {
-    const groqKey = (localStorage.getItem('groq_api_key') || '').trim();
-    if (!groqKey) {
-      throw new Error('请先配置 Groq API Key');
+  async transcribe(file: File, autoOptimize = false, onComplete?: (task: TranscribeTask) => void, apiKeyId?: string): Promise<string> {
+    // 如果没有指定 API Key ID，从池中选择
+    let groqKey: string;
+    let selectedApiKeyId: string;
+    let modelId: string = 'whisper-large-v3'; // 默认模型
+
+    if (apiKeyId) {
+      // 使用指定的 API Key
+      const apiKeyObj = groqApiPool.getAllApiKeys().find(k => k.id === apiKeyId);
+      if (!apiKeyObj) {
+        throw new Error('指定的 API Key 不存在');
+      }
+      groqKey = apiKeyObj.key;
+      selectedApiKeyId = apiKeyId;
+      modelId = apiKeyObj.modelId || 'whisper-large-v3';
+      console.log(`[转写] 使用 API Key: ${apiKeyObj.name}, 模型: ${modelId}`);
+    } else {
+      // 从池中选择最空闲的 API Key
+      const nextKey = groqApiPool.getNextApiKey();
+      if (!nextKey) {
+        // 如果没有配置 API 池，使用旧的方式（单个 key）
+        groqKey = (localStorage.getItem('groq_api_key') || '').trim();
+        if (!groqKey) {
+          throw new Error('请先配置 Groq API Key');
+        }
+        selectedApiKeyId = 'default';
+      } else {
+        groqKey = nextKey.key;
+        selectedApiKeyId = nextKey.id;
+        modelId = nextKey.modelId || 'whisper-large-v3';
+        console.log(`[转写] 自动选择 API Key: ${nextKey.name}, 模型: ${modelId}`);
+      }
     }
 
     const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -107,27 +204,33 @@ class TranscribeService {
       file,
       autoOptimize,
       onComplete,
+      apiKeyId: selectedApiKeyId,
     };
 
     this._tasks.set(taskId, task);
     this.notify();
 
+    // 标记 API Key 开始使用
+    if (selectedApiKeyId !== 'default') {
+      groqApiPool.markApiKeyInUse(selectedApiKeyId);
+    }
+
     // 在后台执行转写（不阻塞）
-    this.executeTranscribe(taskId, file, groqKey, autoOptimize);
+    this.executeTranscribe(taskId, file, groqKey, modelId, autoOptimize, selectedApiKeyId);
 
     return taskId;
   }
 
   // 实际执行转写的方法
-  private async executeTranscribe(taskId: string, file: File, groqKey: string, autoOptimize: boolean) {
+  private async executeTranscribe(taskId: string, file: File, groqKey: string, modelId: string, autoOptimize: boolean, apiKeyId?: string) {
     try {
       let rawText = '';
       
       // 检查文件大小，超过 24MB 则分片处理
       if (file.size > MAX_CHUNK_SIZE) {
-        rawText = await this.transcribeInChunks(taskId, file, groqKey);
+        rawText = await this.transcribeInChunks(taskId, file, groqKey, modelId);
       } else {
-        rawText = await this.transcribeSingleFile(taskId, file, groqKey);
+        rawText = await this.transcribeSingleFile(taskId, file, groqKey, modelId);
       }
 
       this.updateTask(taskId, { progress: 100, rawText });
@@ -146,103 +249,199 @@ class TranscribeService {
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '转写失败';
       this.updateTask(taskId, { status: 'error', error: errorMessage });
+    } finally {
+      // 标记 API Key 使用完成
+      if (apiKeyId && apiKeyId !== 'default') {
+        groqApiPool.markApiKeyDone(apiKeyId);
+      }
     }
   }
 
   // 单文件转写
-  private async transcribeSingleFile(taskId: string, file: File, groqKey: string): Promise<string> {
+  private async transcribeSingleFile(taskId: string, file: File, groqKey: string, modelId: string): Promise<string> {
+    this.updateTask(taskId, { progress: 20 });
+
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('model', 'whisper-large-v3');
+    formData.append('model', modelId); // 使用传入的模型 ID
     formData.append('language', 'zh');
     formData.append('response_format', 'verbose_json');
 
-    this.updateTask(taskId, { progress: 30 });
-
-    const response = await fetch(GROQ_API_URL, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${groqKey}` },
-      body: formData,
-    });
-
-    this.updateTask(taskId, { progress: 80 });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      if (response.status === 401) {
-        throw new Error('Groq API Key 无效');
-      }
-      throw new Error(errorData.error?.message || `转写失败: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.text || '';
-  }
-
-  // 分片转写大文件
-  private async transcribeInChunks(taskId: string, file: File, groqKey: string): Promise<string> {
-    this.updateTask(taskId, { progress: 5 });
-    
-    // 获取音频时长
-    const duration = await this.getAudioDuration(file);
-    
-    // 根据文件大小和时长计算每秒字节数，然后确定分片时长
-    const bytesPerSecond = file.size / duration;
-    // 目标每个分片 15MB（WAV 会膨胀，所以用更小的值）
-    const targetChunkSize = 15 * 1024 * 1024;
-    // 计算分片时长（秒），最少30秒，最多180秒
-    const chunkDuration = Math.max(30, Math.min(180, targetChunkSize / bytesPerSecond / 3)); // 除以3因为WAV膨胀
-    
-    const chunkCount = Math.ceil(duration / chunkDuration);
-    
-    this.updateTask(taskId, { progress: 10 });
-    
-    const results: string[] = [];
-    
-    for (let i = 0; i < chunkCount; i++) {
-      const startTime = i * chunkDuration;
-      const endTime = Math.min((i + 1) * chunkDuration, duration);
-      
-      // 切分音频（降采样到16kHz单声道以减小体积）
-      const chunk = await this.sliceAudio(file, startTime, endTime);
-      
-      // 检查分片大小
-      if (chunk.size > 24 * 1024 * 1024) {
-        throw new Error(`分片 ${i + 1} 仍然过大 (${(chunk.size / 1024 / 1024).toFixed(1)}MB)，请尝试更短的音频`);
-      }
-      
-      // 转写分片
-      const formData = new FormData();
-      formData.append('file', chunk, `chunk_${i}.wav`);
-      formData.append('model', 'whisper-large-v3');
-      formData.append('language', 'zh');
-      formData.append('response_format', 'verbose_json');
-
-      const response = await fetch(GROQ_API_URL, {
+    try {
+      const response = await this.fetchWithRetry(GROQ_API_URL, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${groqKey}` },
         body: formData,
       });
+
+      this.updateTask(taskId, { progress: 80 });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         if (response.status === 401) {
           throw new Error('Groq API Key 无效');
         }
-        throw new Error(errorData.error?.message || `转写分片 ${i + 1} 失败`);
+        throw new Error(errorData.error?.message || `转写失败: ${response.status}`);
       }
 
       const data = await response.json();
-      if (data.text) {
-        results.push(data.text);
+      return data.text || '';
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error('转写超时，请尝试更短的音频或分片处理');
       }
+      throw err;
+    }
+  }
+
+  // 分片转写大文件
+  private async transcribeInChunks(taskId: string, file: File, groqKey: string, modelId: string): Promise<string> {
+    this.updateTask(taskId, { progress: 5 });
+    
+    // 获取音频时长
+    const duration = await this.getAudioDuration(file);
+    
+    console.log(`[转写] 开始分片转写，文件: ${file.name}, 大小: ${(file.size / 1024 / 1024).toFixed(2)}MB, 时长: ${(duration / 60).toFixed(1)}分钟`);
+    
+    // 更大的分片策略：每片最多 10 分钟（600秒），减少分片数量
+    // Groq 支持最大 25MB，10分钟音频通常在 10-15MB 左右
+    const maxChunkDuration = 600; // 10 分钟
+    const chunkCount = Math.ceil(duration / maxChunkDuration);
+    const chunkDuration = duration / chunkCount; // 均匀分配
+    
+    console.log(`[转写] 分片策略: ${chunkCount} 片, 每片约 ${(chunkDuration / 60).toFixed(1)} 分钟`);
+    
+    this.updateTask(taskId, { progress: 10, totalChunks: chunkCount });
+    
+    const results: string[] = new Array(chunkCount);
+    const errors: string[] = [];
+    let completedChunks = 0;
+    
+    // 串行处理分片，避免速率限制
+    for (let i = 0; i < chunkCount; i++) {
+      const chunkIndex = i;
+      const startTime = chunkIndex * chunkDuration;
+      const endTime = Math.min((chunkIndex + 1) * chunkDuration, duration);
       
-      // 更新进度
-      const progress = 10 + Math.round((i + 1) / chunkCount * 80);
-      this.updateTask(taskId, { progress });
+      try {
+        // 切分音频
+        console.log(`[转写] 处理分片 ${chunkIndex + 1}/${chunkCount}, 时间: ${(startTime / 60).toFixed(1)}分 - ${(endTime / 60).toFixed(1)}分`);
+        
+        let chunk: Blob;
+        try {
+          chunk = await this.sliceAudio(file, startTime, endTime);
+        } catch (sliceErr) {
+          const errMsg = sliceErr instanceof Error ? sliceErr.message : '音频切分失败';
+          console.error(`分片 ${chunkIndex + 1} 切分失败:`, errMsg);
+          errors.push(`分片 ${chunkIndex + 1}: ${errMsg}`);
+          results[chunkIndex] = '';
+          continue;
+        }
+        
+        // 检查分片大小
+        if (chunk.size > 25 * 1024 * 1024) {
+          const errMsg = `分片过大 (${(chunk.size / 1024 / 1024).toFixed(1)}MB > 25MB)`;
+          console.warn(`分片 ${chunkIndex + 1} ${errMsg}，跳过`);
+          errors.push(`分片 ${chunkIndex + 1}: ${errMsg}`);
+          results[chunkIndex] = '';
+          continue;
+        }
+        
+        console.log(`[转写] 分片 ${chunkIndex + 1} 大小: ${(chunk.size / 1024 / 1024).toFixed(2)}MB`);
+        
+        // 转写分片
+        const formData = new FormData();
+        formData.append('file', chunk, `chunk_${chunkIndex}.wav`);
+        formData.append('model', modelId);
+        formData.append('language', 'zh');
+        formData.append('response_format', 'verbose_json');
+
+        const response = await this.fetchWithRetry(GROQ_API_URL, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${groqKey}` },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          const apiError = errorData.error?.message || `HTTP ${response.status}`;
+          
+          if (response.status === 401) {
+            throw new Error('Groq API Key 无效');
+          }
+          if (response.status === 429) {
+            console.warn(`分片 ${chunkIndex + 1} 遇到速率限制，等待 30 秒后重试...`);
+            await new Promise(resolve => setTimeout(resolve, 30000));
+            const retryResponse = await this.fetchWithRetry(GROQ_API_URL, {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${groqKey}` },
+              body: formData,
+            });
+            if (retryResponse.ok) {
+              const retryData = await retryResponse.json();
+              results[chunkIndex] = retryData.text || '';
+              completedChunks++;
+              console.log(`[转写] 分片 ${chunkIndex + 1} 重试成功`);
+            } else {
+              errors.push(`分片 ${chunkIndex + 1}: 速率限制重试失败`);
+              results[chunkIndex] = '';
+            }
+            // 更新进度
+            const progress = 10 + Math.round((completedChunks / chunkCount) * 80);
+            this.updateTask(taskId, { progress, processedChunks: completedChunks, rawText: results.filter(r => r).join('\n') });
+            continue;
+          }
+          
+          console.error(`分片 ${chunkIndex + 1} 转写失败:`, apiError);
+          errors.push(`分片 ${chunkIndex + 1}: ${apiError}`);
+          results[chunkIndex] = '';
+          continue;
+        }
+
+        const data = await response.json();
+        results[chunkIndex] = data.text || '';
+        completedChunks++;
+        console.log(`[转写] 分片 ${chunkIndex + 1} 完成，文本长度: ${(data.text || '').length}`);
+        
+        // 实时更新进度和已转写内容
+        const progress = 10 + Math.round((completedChunks / chunkCount) * 80);
+        const currentText = results.filter(r => r).join('\n');
+        this.updateTask(taskId, { progress, processedChunks: completedChunks, rawText: currentText });
+        
+        // 添加请求间隔，避免速率限制
+        if (i < chunkCount - 1) {
+          await new Promise(resolve => setTimeout(resolve, 3000));
+        }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : '未知错误';
+        console.error(`分片 ${chunkIndex + 1} 处理失败:`, errMsg);
+        errors.push(`分片 ${chunkIndex + 1}: ${errMsg}`);
+        results[chunkIndex] = '';
+        
+        // 如果是 API Key 无效，直接抛出错误
+        if (errMsg.includes('API Key 无效')) {
+          throw err;
+        }
+      }
     }
     
-    return results.join('\n');
+    this.updateTask(taskId, { progress: 90 });
+    
+    const finalText = results.filter(r => r).join('\n');
+    
+    if (!finalText) {
+      const errorDetail = errors.length > 0 
+        ? `\n错误详情:\n${errors.join('\n')}`
+        : '';
+      throw new Error(`转写失败：所有 ${chunkCount} 个分片都未能成功转写。${errorDetail}\n\n可能原因：\n1. API 配额已用尽\n2. 音频格式不支持\n3. 网络连接问题\n\n请检查控制台日志获取更多信息。`);
+    }
+    
+    // 如果有部分分片失败，记录警告
+    if (completedChunks < chunkCount) {
+      console.warn(`[转写] 完成 ${completedChunks}/${chunkCount} 个分片，${chunkCount - completedChunks} 个分片失败`);
+    }
+    
+    return finalText;
   }
 
   // 获取音频时长
@@ -267,74 +466,83 @@ class TranscribeService {
     });
   }
 
-  // 切分音频（使用 Web Audio API，降采样到16kHz单声道）
+  // 切分音频 - 使用 Web Audio API 按时间段切分
   private async sliceAudio(file: File, startTime: number, endTime: number): Promise<Blob> {
-    const arrayBuffer = await file.arrayBuffer();
-    const audioContext = new AudioContext();
-    
     try {
-      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-      const originalSampleRate = audioBuffer.sampleRate;
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const arrayBuffer = await file.arrayBuffer();
       
-      // 目标采样率 16kHz（Whisper 推荐），单声道
-      const targetSampleRate = 16000;
-      
-      const startSample = Math.floor(startTime * originalSampleRate);
-      const endSample = Math.min(Math.floor(endTime * originalSampleRate), audioBuffer.length);
-      const originalLength = endSample - startSample;
-      
-      // 计算重采样后的长度
-      const resampledLength = Math.floor(originalLength * targetSampleRate / originalSampleRate);
-      
-      // 创建单声道、16kHz 的 buffer（虽然不直接使用，但需要用于计算）
-      new OfflineAudioContext(1, resampledLength, targetSampleRate);
-      
-      // 混合所有声道到单声道
-      const monoData = new Float32Array(originalLength);
-      const numChannels = audioBuffer.numberOfChannels;
-      for (let i = 0; i < originalLength; i++) {
-        let sum = 0;
-        for (let ch = 0; ch < numChannels; ch++) {
-          sum += audioBuffer.getChannelData(ch)[startSample + i];
+      // 解码音频数据（使用 slice 创建副本避免 detached buffer 问题）
+      let audioBuffer: AudioBuffer;
+      try {
+        audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      } catch (decodeErr) {
+        console.error('无法解码音频，尝试直接返回原文件:', decodeErr);
+        await audioContext.close();
+        // 如果无法解码，且文件小于 25MB，直接返回原文件
+        if (file.size <= 25 * 1024 * 1024) {
+          return file;
         }
-        monoData[i] = sum / numChannels;
+        throw new Error('无法解码音频文件，请尝试转换为 MP3 或 WAV 格式');
       }
       
-      // 简单线性重采样
-      const resampledData = new Float32Array(resampledLength);
-      const ratio = originalLength / resampledLength;
-      for (let i = 0; i < resampledLength; i++) {
-        const srcIndex = i * ratio;
-        const srcIndexFloor = Math.floor(srcIndex);
-        const srcIndexCeil = Math.min(srcIndexFloor + 1, originalLength - 1);
-        const t = srcIndex - srcIndexFloor;
-        resampledData[i] = monoData[srcIndexFloor] * (1 - t) + monoData[srcIndexCeil] * t;
+      const sampleRate = audioBuffer.sampleRate;
+      const startSample = Math.floor(startTime * sampleRate);
+      const endSample = Math.min(Math.floor(endTime * sampleRate), audioBuffer.length);
+      const length = endSample - startSample;
+      
+      console.log(`[切分] 采样率: ${sampleRate}, 开始样本: ${startSample}, 结束样本: ${endSample}, 长度: ${length}`);
+      
+      if (length <= 0) {
+        console.error('切分长度无效:', { startTime, endTime, startSample, endSample, length });
+        await audioContext.close();
+        throw new Error('音频切分失败：无效的时间范围');
       }
       
-      // 编码为 WAV（16kHz 单声道 16bit）
-      const wavBlob = this.float32ToWav(resampledData, targetSampleRate);
-      return wavBlob;
-    } finally {
+      const numberOfChannels = audioBuffer.numberOfChannels;
+      const newBuffer = audioContext.createBuffer(numberOfChannels, length, sampleRate);
+      
+      for (let channel = 0; channel < numberOfChannels; channel++) {
+        const oldData = audioBuffer.getChannelData(channel);
+        const newData = newBuffer.getChannelData(channel);
+        for (let i = 0; i < length; i++) {
+          newData[i] = oldData[startSample + i];
+        }
+      }
+      
+      const wavBlob = this.audioBufferToWav(newBuffer);
       await audioContext.close();
+      
+      console.log(`[切分] 时间: ${(startTime / 60).toFixed(1)}分 - ${(endTime / 60).toFixed(1)}分, 切分后大小: ${(wavBlob.size / 1024 / 1024).toFixed(2)}MB`);
+      return wavBlob;
+    } catch (err) {
+      console.error('音频切分失败:', err);
+      throw err;
     }
   }
 
-  // Float32Array 转 WAV（单声道）
-  private float32ToWav(samples: Float32Array, sampleRate: number): Blob {
+  // 将 AudioBuffer 转换为 WAV Blob（降采样到 16kHz 单声道以减小文件大小）
+  private audioBufferToWav(buffer: AudioBuffer): Blob {
+    // 目标：16kHz 单声道，这样 10 分钟音频约 19MB
+    const targetSampleRate = 16000;
+    const targetChannels = 1;
     const format = 1; // PCM
     const bitDepth = 16;
-    const numChannels = 1;
+    
+    const originalSampleRate = buffer.sampleRate;
+    const ratio = originalSampleRate / targetSampleRate;
+    const newLength = Math.floor(buffer.length / ratio);
     
     const bytesPerSample = bitDepth / 8;
-    const blockAlign = numChannels * bytesPerSample;
+    const blockAlign = targetChannels * bytesPerSample;
     
-    const dataLength = samples.length * blockAlign;
+    const dataLength = newLength * blockAlign;
     const bufferLength = 44 + dataLength;
     
     const arrayBuffer = new ArrayBuffer(bufferLength);
     const view = new DataView(arrayBuffer);
     
-    // WAV header
+    // WAV 头部
     const writeString = (offset: number, str: string) => {
       for (let i = 0; i < str.length; i++) {
         view.setUint8(offset + i, str.charCodeAt(i));
@@ -347,18 +555,32 @@ class TranscribeService {
     writeString(12, 'fmt ');
     view.setUint32(16, 16, true);
     view.setUint16(20, format, true);
-    view.setUint16(22, numChannels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * blockAlign, true);
+    view.setUint16(22, targetChannels, true);
+    view.setUint32(24, targetSampleRate, true);
+    view.setUint32(28, targetSampleRate * blockAlign, true);
     view.setUint16(32, blockAlign, true);
     view.setUint16(34, bitDepth, true);
     writeString(36, 'data');
     view.setUint32(40, dataLength, true);
     
-    // Write audio data
+    // 获取所有声道数据，混合成单声道并降采样
+    const channels: Float32Array[] = [];
+    for (let i = 0; i < buffer.numberOfChannels; i++) {
+      channels.push(buffer.getChannelData(i));
+    }
+    
     let offset = 44;
-    for (let i = 0; i < samples.length; i++) {
-      const sample = Math.max(-1, Math.min(1, samples[i]));
+    for (let i = 0; i < newLength; i++) {
+      const srcIndex = Math.floor(i * ratio);
+      // 混合所有声道
+      let sample = 0;
+      for (let ch = 0; ch < channels.length; ch++) {
+        sample += channels[ch][srcIndex] || 0;
+      }
+      sample /= channels.length;
+      
+      // 转换为 16-bit PCM
+      sample = Math.max(-1, Math.min(1, sample));
       const intSample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
       view.setInt16(offset, intSample, true);
       offset += 2;
@@ -857,6 +1079,46 @@ ${chunkText}`;
   // 获取任务
   getTask(taskId: string): TranscribeTask | undefined {
     return this._tasks.get(taskId);
+  }
+
+  // 获取 API 池统计信息
+  getApiPoolStats() {
+    return groqApiPool.getStats();
+  }
+
+  // 获取所有 API Key
+  getAllApiKeys() {
+    return groqApiPool.getAllApiKeys();
+  }
+
+  // 添加 API Key 到池
+  async addApiKey(key: string, name: string, modelId: string = 'whisper-large-v3-turbo'): Promise<string> {
+    const id = await groqApiPool.addApiKey(key, name, modelId);
+    this.notify();
+    return id;
+  }
+
+  // 移除 API Key
+  async removeApiKey(id: string): Promise<boolean> {
+    const result = await groqApiPool.removeApiKey(id);
+    if (result) {
+      this.notify();
+    }
+    return result;
+  }
+
+  // 切换 API Key 活跃状态
+  async toggleApiKeyActive(id: string): Promise<boolean> {
+    const result = await groqApiPool.toggleApiKeyActive(id);
+    if (result) {
+      this.notify();
+    }
+    return result;
+  }
+
+  // 初始化 API 池（从数据库加载）
+  async initializeApiPool(): Promise<void> {
+    await groqApiPool.initialize();
   }
 }
 

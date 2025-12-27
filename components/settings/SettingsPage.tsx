@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import IntervalReminder from '../tools/IntervalReminder';
 import TodoList from '../tools/TodoList';
@@ -8,7 +8,6 @@ import VideoDownloader from '../tools/VideoDownloader';
 import AudioTranscriber from '../tools/AudioTranscriber';
 import DailyInsights from '../tools/DailyInsights';
 import InsightFloatingBall from '../shared/InsightFloatingBall';
-import { transcribeService } from '../../lib/transcribe-service';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights';
@@ -31,12 +30,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   
   // 策展状态
   const [insightStatus, setInsightStatus] = useState<'idle' | 'loading' | 'done'>('idle');
-  // 转写状态 - 使用全局服务
-  const transcribeLoading = useSyncExternalStore(
-    transcribeService.subscribe.bind(transcribeService),
-    () => transcribeService.hasActiveTasks
-  );
-  const [transcribeDone, setTranscribeDone] = useState(false);
 
   useEffect(() => { if (isOpen) setCurrentView(initialView); }, [isOpen, initialView]);
 
@@ -51,18 +44,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     };
     window.addEventListener('insight-status', handleInsightStatus as EventListener);
     return () => window.removeEventListener('insight-status', handleInsightStatus as EventListener);
-  }, []);
-
-  // 监听转写完成状态
-  useEffect(() => {
-    const handleTranscribeStatus = (e: CustomEvent<{ status: 'loading' | 'done' | 'idle' }>) => {
-      if (e.detail.status === 'done') {
-        setTranscribeDone(true);
-        setTimeout(() => setTranscribeDone(false), 3000);
-      }
-    };
-    window.addEventListener('transcribe-status', handleTranscribeStatus as EventListener);
-    return () => window.removeEventListener('transcribe-status', handleTranscribeStatus as EventListener);
   }, []);
 
   // 监听跳转到每日信息差事件
@@ -104,7 +85,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   }, [currentView, onClose]);
 
   // 左滑返回手势 - 在 insights 页面禁用（因为有卡片滑动）
-  const swipeHandlers = useSwipeBack({ 
+  const { swipeState, ...swipeHandlers } = useSwipeBack({ 
     onBack: handleBack,
     threshold: 80,
     edgeWidth: 25
@@ -337,17 +318,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           onClick={() => setCurrentView('insights')}
           color="green"
           storageKey="insight-ball-pos"
-        />
-      )}
-
-      {/* 转写悬浮球 - 仅在非transcriber页面时显示 */}
-      {currentView !== 'transcriber' && (
-        <InsightFloatingBall
-          isLoading={transcribeLoading}
-          isDone={transcribeDone}
-          onClick={() => setCurrentView('transcriber')}
-          color="violet"
-          storageKey="transcribe-ball-pos"
         />
       )}
 
