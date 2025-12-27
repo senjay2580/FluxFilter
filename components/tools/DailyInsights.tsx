@@ -373,7 +373,7 @@ const DailyInsights: React.FC = () => {
   };
 
 
-  // 渲染单张卡片 - 真实 3D 翻页动画效果
+  // 渲染单张卡片 - 简单流畅的滑动动画
   const renderCard = (card: InsightCard, index: number, total: number, isSaved = false) => {
     const config = CATEGORY_CONFIG[card.category] || { label: card.category, icon: '📌' };
     const isActive = index === currentIndex;
@@ -382,84 +382,30 @@ const DailyInsights: React.FC = () => {
     // 只显示当前卡片和前后各一张
     if (Math.abs(offset) > 1) return null;
     
-    // 计算拖动进度
+    // 计算拖动偏移
     const dragOffset = isDragging ? offsetX : 0;
-    const dragProgress = Math.min(Math.abs(dragOffset) / 120, 1);
     
-    // 3D 翻页效果计算
+    // 简单的滑动效果
     const getCardStyle = () => {
-      // 向左滑（看下一张）
-      if (dragOffset < 0) {
-        if (isActive) {
-          // 当前卡片向左翻出
-          const rotateY = -dragProgress * 180;
-          const translateZ = -dragProgress * 50;
-          const scale = 1 - dragProgress * 0.1;
-          return {
-            transform: `translateX(-50%) perspective(1200px) rotateY(${rotateY}deg) translateZ(${translateZ}px) scale(${scale})`,
-            transformOrigin: 'left center',
-            opacity: 1 - dragProgress * 0.3,
-            zIndex: 10,
-          };
-        }
-        if (offset === 1) {
-          // 下一张卡片从右边翻入
-          const rotateY = 180 - dragProgress * 180;
-          const translateX = 100 - dragProgress * 100;
-          const scale = 0.9 + dragProgress * 0.1;
-          return {
-            transform: `translateX(calc(-50% + ${translateX}px)) perspective(1200px) rotateY(${rotateY}deg) scale(${scale})`,
-            transformOrigin: 'right center',
-            opacity: dragProgress,
-            zIndex: 5,
-          };
-        }
-      }
+      // 基础位置：每张卡片相对于当前卡片的偏移
+      const baseTranslateX = offset * 100; // 百分比
       
-      // 向右滑（看上一张）
-      if (dragOffset > 0) {
-        if (isActive) {
-          // 当前卡片向右翻出
-          const rotateY = dragProgress * 180;
-          const translateZ = -dragProgress * 50;
-          const scale = 1 - dragProgress * 0.1;
-          return {
-            transform: `translateX(-50%) perspective(1200px) rotateY(${rotateY}deg) translateZ(${translateZ}px) scale(${scale})`,
-            transformOrigin: 'right center',
-            opacity: 1 - dragProgress * 0.3,
-            zIndex: 10,
-          };
-        }
-        if (offset === -1) {
-          // 上一张卡片从左边翻入
-          const rotateY = -180 + dragProgress * 180;
-          const translateX = -100 + dragProgress * 100;
-          const scale = 0.9 + dragProgress * 0.1;
-          return {
-            transform: `translateX(calc(-50% + ${translateX}px)) perspective(1200px) rotateY(${rotateY}deg) scale(${scale})`,
-            transformOrigin: 'left center',
-            opacity: dragProgress,
-            zIndex: 5,
-          };
-        }
-      }
+      // 拖动时的额外偏移（转换为百分比）
+      const dragPercent = (dragOffset / (window.innerWidth || 375)) * 100;
       
-      // 默认状态
-      if (isActive) {
-        return {
-          transform: 'translateX(-50%) perspective(1200px) rotateY(0deg)',
-          transformOrigin: 'center center',
-          opacity: 1,
-          zIndex: 10,
-        };
-      }
+      // 最终位置
+      const translateX = baseTranslateX + dragPercent;
       
-      // 非活动卡片隐藏
+      // 缩放：非当前卡片稍微缩小
+      const scale = isActive ? 1 : 0.92;
+      
+      // 透明度
+      const opacity = Math.abs(offset) === 0 ? 1 : (Math.abs(offset) === 1 ? 0.6 : 0);
+      
       return {
-        transform: `translateX(-50%) perspective(1200px) rotateY(${offset > 0 ? 180 : -180}deg)`,
-        transformOrigin: offset > 0 ? 'right center' : 'left center',
-        opacity: 0,
-        zIndex: 5,
+        transform: `translateX(calc(-50% + ${translateX}%)) scale(${scale})`,
+        opacity,
+        zIndex: isActive ? 10 : 5,
       };
     };
     
@@ -474,34 +420,16 @@ const DailyInsights: React.FC = () => {
           ...cardStyle,
           transform: `${cardStyle.transform} translateY(-50%)`,
           pointerEvents: isActive ? 'auto' : 'none',
-          transition: isDragging ? 'none' : 'all 0.8s cubic-bezier(0.25, 0.1, 0.25, 1)',
-          backfaceVisibility: 'hidden',
-          transformStyle: 'preserve-3d',
+          transition: isDragging ? 'none' : 'all 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)',
         }}
       >
-        {/* 书脊效果 - 左侧立体边缘 */}
+        {/* 主卡片 - 简洁深色样式 */}
         <div 
-          className="absolute left-0 top-2 bottom-2 w-3 rounded-l-sm"
-          style={{
-            background: 'linear-gradient(to right, #2D3748 0%, #4A5568 30%, #718096 50%, #4A5568 70%, #2D3748 100%)',
-            transform: 'translateX(-100%) rotateY(-90deg)',
-            transformOrigin: 'right center',
-            boxShadow: 'inset 0 0 10px rgba(0,0,0,0.5)',
-          }}
-        />
-        
-        {/* 书页厚度效果 - 底部多层 */}
-        <div className="absolute inset-x-1 -bottom-1 h-2 rounded-b-sm bg-gradient-to-b from-[#2D3748] to-[#1A202C]" style={{ transform: 'translateZ(-2px)' }} />
-        <div className="absolute inset-x-2 -bottom-2 h-2 rounded-b-sm bg-gradient-to-b from-[#1A202C] to-[#171923]" style={{ transform: 'translateZ(-4px)' }} />
-        
-        {/* 主卡片 - 深色书页样式 */}
-        <div 
-          className="relative min-h-[420px] flex flex-col rounded-r-lg rounded-l-sm overflow-hidden"
+          className="relative min-h-[420px] flex flex-col rounded-2xl overflow-hidden"
           style={{
             background: 'linear-gradient(135deg, #1E2530 0%, #252D3A 50%, #1A202C 100%)',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05), inset -2px 0 8px rgba(0, 0, 0, 0.1)',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderLeft: '3px solid #4A5568',
           }}
         >
           {/* 装饰边框 */}

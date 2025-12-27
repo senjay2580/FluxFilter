@@ -1130,7 +1130,7 @@ ${text}`
 
       {/* API Key 选择 Tab 栏 */}
       {apiKeys.length > 0 && (
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 overflow-x-auto">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 overflow-x-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {apiKeys.map((apiKey, index) => (
             <button
               key={apiKey.id}
@@ -1373,47 +1373,55 @@ ${text}`
             <div className="bg-[#1a2634] rounded-2xl border border-white/10 overflow-hidden animate-list-item">
               <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
                 <span className="text-white font-medium text-sm">原始转写</span>
-                <button
-                  onClick={() => copyText(rawResult, 'raw')}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all btn-press ${copiedId === 'raw' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white'
-                    }`}
-                >
-                  {copiedId === 'raw' ? '已复制' : '复制'}
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* AI 优化图标按钮 */}
+                  {aiApiKey && (
+                    <button
+                      onClick={optimizeWithAI}
+                      disabled={optimizing}
+                      className={`p-2 rounded-lg transition-all btn-press ${optimizing ? 'text-gray-500 cursor-not-allowed' : 'text-violet-400 hover:bg-violet-500/20'}`}
+                      title={optimizing ? `${currentModel.name} 优化中...` : `AI 优化（${currentModel.name}）`}
+                    >
+                      {optimizing ? (
+                        <svg className="w-4 h-4 animate-spin-smooth" viewBox="0 0 24 24" fill="none">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                        </svg>
+                      )}
+                    </button>
+                  )}
+                  {/* 保存图标按钮 */}
+                  <button
+                    onClick={saveResult}
+                    className="p-2 rounded-lg text-cyber-lime hover:bg-cyber-lime/20 transition-all btn-press"
+                    title="保存到历史记录"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                      <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
+                    </svg>
+                  </button>
+                  {/* 复制按钮 */}
+                  <button
+                    onClick={() => copyText(rawResult, 'raw')}
+                    className={`p-2 rounded-lg transition-all btn-press ${copiedId === 'raw' ? 'bg-green-500/20 text-green-400' : 'text-gray-400 hover:bg-white/10 hover:text-white'}`}
+                    title={copiedId === 'raw' ? '已复制' : '复制'}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                </div>
               </div>
               <div className="p-4 max-h-40 overflow-y-auto">
                 <p className="text-gray-300 text-sm whitespace-pre-wrap leading-relaxed">{rawResult}</p>
               </div>
             </div>
-          )}
-
-          {/* AI 优化按钮 */}
-          {rawResult && aiApiKey && (
-            <button
-              onClick={optimizeWithAI}
-              disabled={optimizing}
-              className={`w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 btn-press ${!optimizing
-                ? 'bg-white/10 border border-white/20 text-white hover:bg-white/15'
-                : 'bg-white/5 text-gray-500 cursor-not-allowed'
-                }`}
-            >
-              {optimizing ? (
-                <>
-                  <svg className="w-5 h-5 animate-spin-smooth" viewBox="0 0 24 24" fill="none">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  <span>{currentModel.name} 优化中...</span>
-                </>
-              ) : (
-                <>
-                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                  <span>AI 优化（{currentModel.name}）</span>
-                </>
-              )}
-            </button>
           )}
 
           {/* 优化后结果 */}
@@ -1440,20 +1448,6 @@ ${text}`
                 </div>
               </div>
             </div>
-          )}
-
-          {/* 保存按钮 */}
-          {rawResult && (
-            <button
-              onClick={saveResult}
-              className="w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 btn-press bg-cyber-lime/20 hover:bg-cyber-lime/30 text-cyber-lime border border-cyber-lime/30"
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                <polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" />
-              </svg>
-              <span>保存到历史记录</span>
-            </button>
           )}
         </>
       ) : (
