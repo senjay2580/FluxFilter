@@ -740,7 +740,7 @@ const App = () => {
 
         {/* 游客模式提示 - 未登录时显示 */}
         {!isAuthenticated && !authExpired && (
-          <div className="fixed bottom-20 left-4 right-4 z-50">
+          <div className="fixed bottom-20 left-4 right-4 lg:left-60 z-50">
             <div className="bg-gradient-to-r from-cyber-lime/20 to-cyan-500/20 backdrop-blur-xl rounded-2xl p-4 border border-cyber-lime/30">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-cyber-lime/20 flex items-center justify-center shrink-0">

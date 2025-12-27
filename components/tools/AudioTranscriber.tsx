@@ -80,6 +80,7 @@ const AudioTranscriber: React.FC<AudioTranscriberProps> = ({ onNavigate }) => {
 
   const [rawResult, setRawResult] = useState('');
   const [optimizedResult, setOptimizedResult] = useState('');
+  const [optimizedChunks, setOptimizedChunks] = useState<Array<{ content: string; isChunkEnd: boolean }>>([]);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState(0);
   const [history, setHistory] = useState<TranscriptRecord[]>([]);
@@ -576,8 +577,8 @@ ${text}`
         setError('请选择音频或视频文件（MP3、MP4、WAV、M4A、WebM 等）');
         return;
       }
-      if (selectedFile.size > 25 * 1024 * 1024) {
-        setError('文件大小不能超过 25MB');
+      if (selectedFile.size > 500 * 1024 * 1024) {
+        setError('文件大小不能超过 500MB');
         return;
       }
       if (mediaUrl) {
@@ -916,7 +917,7 @@ ${text}`
         rawResult,
         file?.name || '未知文件',
         (title, content) => {
-          // 进度回调
+          // 进度回调 - 实时显示
           setOptimizedResult(content);
         },
         (title, content) => {
@@ -1077,7 +1078,7 @@ ${text}`
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
                   <p className="text-gray-400 text-sm">点击上传音频或视频文件</p>
-                  <p className="text-gray-600 text-xs mt-1">MP3、MP4、WAV、M4A、WebM（最大 25MB）</p>
+                  <p className="text-gray-600 text-xs mt-1">MP3、MP4、WAV、M4A、WebM（最大 500MB）</p>
                 </>
               )}
             </div>
@@ -1258,8 +1259,10 @@ ${text}`
                   {copiedId === 'optimized' ? '已复制' : '复制'}
                 </button>
               </div>
-              <div className="p-4 max-h-64 overflow-y-auto">
-                <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">{optimizedResult}</p>
+              <div className="p-4 max-h-64 overflow-y-auto optimized-content">
+                <div className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">
+                  {optimizedResult}
+                </div>
               </div>
             </div>
           )}
@@ -1488,9 +1491,9 @@ ${text}`
                 </button>
               </div>
               <div className={`rounded-xl p-4 ${viewingRecord.optimizedText ? 'bg-violet-500/5 border border-violet-500/20' : 'bg-white/5 border border-white/10'}`}>
-                <p className="text-gray-200 text-sm whitespace-pre-wrap leading-relaxed">
+                <div className="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">
                   {viewingRecord.optimizedText || viewingRecord.rawText}
-                </p>
+                </div>
               </div>
             </div>
 
