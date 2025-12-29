@@ -120,51 +120,63 @@ const DevCommunity: React.FC = () => {
     return { apiKey: key, model };
   }, []);
 
-  // GitHub Trending (使用 search API 模拟)
+  // GitHub Trending (使用 search API 模拟 - 优化版)
   const fetchGitHub = useCallback(async (loadMore = false) => {
     const currentPage = loadMore ? page.github + 1 : 1;
     setLoading(prev => ({ ...prev, github: true }));
     setError(prev => ({ ...prev, github: null }));
 
     try {
-      const date = new Date();
-      date.setDate(date.getDate() - 30); // 扩大搜索范围到一个月，保证有足够数据排序
-      const since = date.toISOString().split('T')[0];
-
       // 如果 loadLimit 是 -1 (全部)，则 per_page 设为 100 (API 限制)
-      const perPage = loadLimit === -1 ? 100 : loadLimit;
+      const perPage = loadLimit === -1 ? 100 : Math.min(loadLimit * 2, 100); // 多获取一些用于排序筛选
 
+      // 策略：获取最近7天内有 push 活动的热门仓库
+      const date = new Date();
+      date.setDate(date.getDate() - 7);
+      const pushedSince = date.toISOString().split('T')[0];
+
+      // 使用 pushed 而不是 created，确保获取活跃项目
       const res = await fetch(
-        `https://api.github.com/search/repositories?q=created:>${since}&sort=stars&order=desc&per_page=${perPage}&page=${currentPage}`
+        `https://api.github.com/search/repositories?q=pushed:>${pushedSince}+stars:>500&sort=stars&order=desc&per_page=${perPage}&page=${currentPage}`
       );
 
       if (!res.ok) throw new Error(res.status === 403 ? 'API 请求限制，请稍后再试' : '请求失败');
 
       const data = await res.json();
-      let repos = data.items || [];
+      let repos: GitHubRepo[] = data.items || [];
 
-      // 多维度综合评分排序
-      // 考虑因素: 1. star 数 2. 近期更新频率 3. fork 数 (反映活跃度)
+      // 综合评分排序算法 - 权衡热度、活跃度、趋势
       const now = Date.now();
-      repos.sort((a: GitHubRepo, b: GitHubRepo) => {
-        // star 分数 (对数化处理，避免头部项目占据过大权重)
-        const starScoreA = Math.log10(a.stargazers_count + 1) * 30;
-        const starScoreB = Math.log10(b.stargazers_count + 1) * 30;
+      repos = repos.map(repo => {
+        // 1. Star 热度分 (对数化，权重 35%)
+        const starScore = Math.log10(repo.stargazers_count + 1) * 35;
 
-        // 更新时间分数 (越近越高)
-        const daysAgoA = (now - new Date(a.updated_at).getTime()) / (1000 * 60 * 60 * 24);
-        const daysAgoB = (now - new Date(b.updated_at).getTime()) / (1000 * 60 * 60 * 24);
-        const updateScoreA = Math.max(0, 40 - daysAgoA * 2);
-        const updateScoreB = Math.max(0, 40 - daysAgoB * 2);
+        // 2. 最近更新分 (越近越高，权重 30%)
+        const daysSincePush = (now - new Date(repo.pushed_at).getTime()) / (1000 * 60 * 60 * 24);
+        const freshnessScore = Math.max(0, 30 - daysSincePush * 4); // 7天内满分
 
-        // fork 分数 (反映社区活跃度)
-        const forkScoreA = Math.log10(a.forks_count + 1) * 20;
-        const forkScoreB = Math.log10(b.forks_count + 1) * 20;
+        // 3. Fork 活跃度分 (反映社区参与度，权重 15%)
+        const forkScore = Math.log10(repo.forks_count + 1) * 15;
 
-        const totalA = starScoreA + updateScoreA + forkScoreA;
-        const totalB = starScoreB + updateScoreB + forkScoreB;
-        return totalB - totalA;
+        // 4. Star/Fork 比率分 (高比率说明关注度高但门槛低，权重 10%)
+        const ratio = repo.stargazers_count / Math.max(repo.forks_count, 1);
+        const ratioScore = Math.min(ratio / 10, 1) * 10;
+
+        // 5. 新项目加成 (创建时间在6个月内的项目加分，权重 10%)
+        const daysSinceCreated = (now - new Date(repo.created_at).getTime()) / (1000 * 60 * 60 * 24);
+        const newProjectBonus = daysSinceCreated < 180 ? (1 - daysSinceCreated / 180) * 10 : 0;
+
+        const totalScore = starScore + freshnessScore + forkScore + ratioScore + newProjectBonus;
+
+        return { ...repo, _score: totalScore };
       });
+
+      // 按综合评分排序
+      repos.sort((a: any, b: any) => b._score - a._score);
+
+      // 限制返回数量
+      const finalLimit = loadLimit === -1 ? repos.length : loadLimit;
+      repos = repos.slice(0, finalLimit);
 
       if (loadMore) {
         setGithubRepos(prev => [...prev, ...repos]);
@@ -173,7 +185,7 @@ const DevCommunity: React.FC = () => {
       }
 
       setPage(prev => ({ ...prev, github: currentPage }));
-      setHasMore(prev => ({ ...prev, github: repos.length === perPage && loadLimit !== -1 }));
+      setHasMore(prev => ({ ...prev, github: repos.length === finalLimit && loadLimit !== -1 }));
     } catch (err) {
       setError(prev => ({ ...prev, github: String(err) }));
     } finally {

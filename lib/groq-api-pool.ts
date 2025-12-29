@@ -47,12 +47,14 @@ class GroqApiPool {
       if (data) {
         data.forEach((item: any) => {
           const id = `groq_${item.id}`;
+          // 从 settings 字段读取 isActive 状态，默认为 true
+          const isActive = item.settings?.isActive !== false;
           this.apiKeys.set(id, {
             id,
             key: item.api_key,
             name: item.custom_model_name || `Groq API ${item.id}`,
             modelId: item.model_id || 'whisper-large-v3', // 保存模型 ID
-            isActive: true,
+            isActive,
             requestCount: 0,
             totalRequests: 0,
             lastUsed: 0,

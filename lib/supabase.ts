@@ -267,6 +267,7 @@ export async function createLearningLog(userId: string, params: CreateLearningLo
       user_id: userId,
       video_url: params.video_url,
       video_title: params.video_title || '',
+      video_cover: params.video_cover || '',
       summary: params.summary || '',
     })
     .select()

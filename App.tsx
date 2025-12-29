@@ -72,7 +72,7 @@ const App = () => {
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
   const [isLearningLogOpen, setIsLearningLogOpen] = useState(false);
-  const [learningLogInitialData, setLearningLogInitialData] = useState<{ url: string; title: string }>({ url: '', title: '' });
+  const [learningLogInitialData, setLearningLogInitialData] = useState<{ url: string; title: string; cover: string }>({ url: '', title: '', cover: '' });
   const [isResourceCenterOpen, setIsResourceCenterOpen] = useState(false);
   const [isVideoAnalyzerOpen, setIsVideoAnalyzerOpen] = useState(false);
   const [deleteConfirmVideo, setDeleteConfirmVideo] = useState<{ bvid: string; title: string; url: string } | null>(null);
@@ -476,7 +476,8 @@ const App = () => {
     if (shouldLog && video) {
       setLearningLogInitialData({
         url: `https://www.bilibili.com/video/${bvid}`,
-        title: video.title
+        title: video.title,
+        cover: video.pic || ''
       });
       subPageSourceRef.current = activeTab; // 记录当前页面作为来源
       setIsLearningLogOpen(true);
@@ -744,42 +745,67 @@ const App = () => {
           </div>
         )}
 
-        {/* Spotify风格渐变背景 */}
+        {/* 绿色渐变灯光弥散背景 - 与顶栏融为一体 */}
         <div className="fixed inset-0 pointer-events-none overflow-hidden">
           {/* 基础深色 */}
-          <div className="absolute inset-0 bg-[#0a0a0f]" />
+          <div className="absolute inset-0 bg-[#050a08]" />
 
-          {/* 动态渐变光斑 */}
+          {/* 顶部绿色弥散光 - 与顶栏融合 */}
+          <div className="absolute -top-20 left-0 right-0 h-[400px]">
+            {/* 主绿色光晕 */}
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120%] h-full bg-gradient-to-b from-emerald-500/40 via-emerald-600/20 to-transparent blur-3xl" />
+            {/* 左侧青绿光斑 */}
+            <div className="absolute -top-10 -left-20 w-80 h-80 bg-emerald-400/30 rounded-full blur-[100px] animate-glow-pulse" />
+            {/* 右侧翠绿光斑 */}
+            <div className="absolute -top-10 -right-10 w-72 h-72 bg-lime-500/25 rounded-full blur-[80px] animate-glow-pulse" style={{ animationDelay: '2s' }} />
+            {/* 中间亮点 */}
+            <div className="absolute top-10 left-1/2 -translate-x-1/2 w-96 h-48 bg-emerald-300/20 rounded-full blur-[60px] animate-glow-pulse" style={{ animationDelay: '1s' }} />
+          </div>
+
+          {/* 动态渐变光斑 - 根据Tab变化 */}
           <div className="absolute inset-0">
-            {/* 主色调光斑 - 根据Tab变化 */}
             <div
-              className={`absolute -top-1/4 -left-1/4 w-[80%] h-[60%] rounded-full blur-[120px] transition-all duration-1000 ${activeTab === 'home' ? 'bg-emerald-600/30' :
-                activeTab === 'watchLater' ? 'bg-amber-500/25' :
-                  activeTab === 'rss' ? 'bg-blue-500/25' :
-                    'bg-purple-500/25'
+              className={`absolute top-1/4 -left-1/4 w-[60%] h-[50%] rounded-full blur-[120px] transition-all duration-1000 ${activeTab === 'home' ? 'bg-emerald-600/20' :
+                activeTab === 'watchLater' ? 'bg-amber-500/15' :
+                  activeTab === 'rss' ? 'bg-blue-500/15' :
+                    'bg-purple-500/15'
                 }`}
             />
-            {/* 次要光斑 */}
-            <div className="absolute top-1/3 -right-1/4 w-[60%] h-[50%] bg-cyan-500/15 rounded-full blur-[100px]" />
-            <div className="absolute -bottom-1/4 left-1/4 w-[50%] h-[40%] bg-fuchsia-500/10 rounded-full blur-[80px]" />
+            {/* 底部微弱光斑 */}
+            <div className="absolute -bottom-1/4 right-1/4 w-[40%] h-[30%] bg-cyan-500/10 rounded-full blur-[100px]" />
           </div>
 
           {/* 噪点纹理 */}
-          <div className="absolute inset-0 opacity-[0.015]" style={{
+          <div className="absolute inset-0 opacity-[0.02]" style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
           }} />
-
-          {/* 顶部渐变遮罩 */}
-          <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-black/40 to-transparent" />
         </div>
+
+        {/* 绿色光晕动画样式 */}
+        <style>{`
+          @keyframes glow-pulse {
+            0%, 100% { opacity: 0.6; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.1); }
+          }
+          .animate-glow-pulse {
+            animation: glow-pulse 6s ease-in-out infinite;
+          }
+        `}</style>
 
         {/* 主内容区域容器 - PC端在侧边栏右侧 */}
         <div className="flex-1 flex flex-col min-w-0 min-h-0 lg:ml-56 overflow-hidden">
 
           {/* Header & Sticky Filter */}
           <header className="sticky top-0 z-40 w-full transition-all duration-300">
-            {/* Top Bar - 毛玻璃效果 */}
-            <div className="bg-black/40 backdrop-blur-xl px-4 py-3 border-b border-white/10">
+            {/* 整体彩色弥散背景容器 - 与页面背景融合 */}
+            <div className="relative overflow-hidden">
+              {/* 彩色弥散背景 - 透明渐变，与背景融为一体 */}
+              <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/15 via-emerald-600/5 to-transparent" />
+              <div className="absolute -top-20 left-1/4 w-60 h-40 bg-emerald-400/20 rounded-full blur-3xl" />
+              <div className="absolute -top-10 right-1/3 w-48 h-32 bg-lime-500/15 rounded-full blur-3xl" />
+              
+              {/* Top Bar 内容层 */}
+              <div className="relative bg-black/10 backdrop-blur-md px-4 py-3">
               <div className="flex items-center gap-3">
                 <img src={LogoSvg} alt="FluxF" className="w-9 h-9 shrink-0" />
                 <div className="relative flex-1">
@@ -787,7 +813,7 @@ const App = () => {
                   <input
                     type="text"
                     placeholder={activeTab === 'watchLater' ? '搜索待看列表...' : '搜索视频或UP...'}
-                    className="w-full bg-white/5 border border-white/10 rounded-full pl-10 pr-10 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50 transition-colors"
+                    className="w-full bg-white/10 border border-white/20 rounded-full pl-10 pr-10 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-cyber-lime/50 transition-colors"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -834,9 +860,9 @@ const App = () => {
               </div>
             </div>
 
-            {/* Filter Chips - 毛玻璃效果 (RSS页面隐藏) */}
+            {/* Filter Chips - 融入彩色弥散背景 (RSS页面隐藏) */}
             {activeTab !== 'rss' && (
-              <div className="bg-black/30 backdrop-blur-xl border-b border-white/10 py-2 overflow-x-auto no-scrollbar touch-pan-x">
+              <div className="relative bg-black/10 backdrop-blur-sm py-2 overflow-x-auto no-scrollbar touch-pan-x">
                 <div className="flex px-4 gap-2 w-max">
                   {/* All 按钮 */}
                   <button
@@ -949,6 +975,7 @@ const App = () => {
                 </div>
               </div>
             )}
+            </div>
           </header>
 
 
@@ -980,7 +1007,7 @@ const App = () => {
                 onClose={() => setActiveTab(subPageSourceRef.current)}
                 initialView={settingsInitialView}
                 onOpenNotes={() => { subPageSourceRef.current = 'settings'; setIsNotesOpen(true); }}
-                onOpenLearningLog={() => { subPageSourceRef.current = 'settings'; setLearningLogInitialData({ url: '', title: '' }); setIsLearningLogOpen(true); }}
+                onOpenLearningLog={() => { subPageSourceRef.current = 'settings'; setLearningLogInitialData({ url: '', title: '', cover: '' }); setIsLearningLogOpen(true); }}
                 onOpenResourceCenter={() => { subPageSourceRef.current = 'settings'; setIsResourceCenterOpen(true); }}
               />
 
@@ -1012,6 +1039,7 @@ const App = () => {
                 }}
                 initialVideoUrl={learningLogInitialData.url}
                 initialVideoTitle={learningLogInitialData.title}
+                initialVideoCover={learningLogInitialData.cover}
               />
 
               {/* 资源中心 */}

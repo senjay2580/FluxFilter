@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
   isSupabaseConfigured, getResources, getResourceFolders,
@@ -11,6 +11,56 @@ import { useSwipeBack } from '../../hooks/useSwipeBack';
 
 interface ResourceCenterProps { isOpen: boolean; onClose: () => void; }
 interface FolderNode extends ResourceFolder { children: FolderNode[]; }
+
+// 卡片样式配置 - 更多随机性
+interface CardStyle {
+  size: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+  bgType: 'solid' | 'gradient' | 'glass' | 'glow';
+  colorScheme: string;
+  hasPattern: boolean;
+  iconStyle: 'circle' | 'rounded' | 'square';
+}
+
+// 基于 ID 生成稳定的随机数
+const seededRandom = (seed: number) => {
+  const x = Math.sin(seed * 9999) * 10000;
+  return x - Math.floor(x);
+};
+
+// 生成卡片样式
+const generateCardStyle = (id: number, nameLen: number): CardStyle => {
+  const r1 = seededRandom(id);
+  const r2 = seededRandom(id + 1);
+  const r3 = seededRandom(id + 2);
+  const r4 = seededRandom(id + 3);
+  const r5 = seededRandom(id + 4);
+  
+  // 尺寸 - 更多变化
+  const sizes: CardStyle['size'][] = ['xs', 'sm', 'sm', 'md', 'md', 'md', 'lg', 'lg', 'xl'];
+  let sizeIdx = Math.floor(r1 * sizes.length);
+  // 名称长的倾向于大卡片
+  if (nameLen > 20) sizeIdx = Math.min(sizeIdx + 2, sizes.length - 1);
+  else if (nameLen > 12) sizeIdx = Math.min(sizeIdx + 1, sizes.length - 1);
+  
+  // 背景类型
+  const bgTypes: CardStyle['bgType'][] = ['solid', 'solid', 'gradient', 'gradient', 'glass', 'glow'];
+  const bgType = bgTypes[Math.floor(r2 * bgTypes.length)];
+  
+  // 颜色方案 - 更丰富
+  const colorSchemes = [
+    'emerald', 'cyan', 'violet', 'amber', 'rose', 'blue', 'indigo', 'pink', 'teal', 'orange', 'lime', 'fuchsia'
+  ];
+  const colorScheme = colorSchemes[Math.floor(r3 * colorSchemes.length)];
+  
+  // 是否有图案
+  const hasPattern = r4 > 0.7;
+  
+  // 图标样式
+  const iconStyles: CardStyle['iconStyle'][] = ['circle', 'rounded', 'square'];
+  const iconStyle = iconStyles[Math.floor(r5 * iconStyles.length)];
+  
+  return { size: sizes[sizeIdx], bgType, colorScheme, hasPattern, iconStyle };
+};
 
 const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
   const [resources, setResources] = useState<Resource[]>([]);
@@ -304,6 +354,209 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
     return matchFolder && matchSearch;
   });
 
+  // 虚拟滚动相关
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(0);
+  const [containerWidth, setContainerWidth] = useState(0);
+  
+  // 计算列数
+  const columnCount = useMemo((): number => {
+    if (containerWidth < 400) return 2;
+    if (containerWidth < 640) return 2;
+    if (containerWidth < 900) return 3;
+    return 4;
+  }, [containerWidth]);
+  
+  // 卡片尺寸映射
+  const getSizeHeight = (size: CardStyle['size']): number => {
+    switch (size) {
+      case 'xs': return 100;
+      case 'sm': return 130;
+      case 'md': return 160;
+      case 'lg': return 200;
+      case 'xl': return 240;
+    }
+  };
+  
+  // 计算瀑布流布局
+  const layoutData = useMemo(() => {
+    if (!containerWidth || !columnCount) return { items: [], totalHeight: 0 };
+    
+    const gap = 16;
+    const columnWidth = (containerWidth - gap * (columnCount - 1)) / columnCount;
+    const columnHeights = new Array(columnCount).fill(0);
+    
+    const items = filteredResources.map((r, i) => {
+      const style = generateCardStyle(r.id, r.name.length);
+      const height = getSizeHeight(style.size);
+      
+      // 找最短的列
+      const minHeight = Math.min(...columnHeights);
+      const columnIndex = columnHeights.indexOf(minHeight);
+      
+      const x = columnIndex * (columnWidth + gap);
+      const y = columnHeights[columnIndex];
+      
+      columnHeights[columnIndex] = y + height + gap;
+      
+      return {
+        resource: r,
+        style,
+        x,
+        y,
+        width: columnWidth,
+        height,
+        index: i
+      };
+    });
+    
+    return {
+      items,
+      totalHeight: Math.max(...columnHeights)
+    };
+  }, [filteredResources, containerWidth, columnCount]);
+  
+  // 虚拟滚动 - 只渲染可见区域的卡片
+  const visibleItems = useMemo(() => {
+    const buffer = 200; // 缓冲区
+    const viewTop = scrollTop - buffer;
+    const viewBottom = scrollTop + containerHeight + buffer;
+    
+    return layoutData.items.filter(item => {
+      const itemBottom = item.y + item.height;
+      return itemBottom >= viewTop && item.y <= viewBottom;
+    });
+  }, [layoutData.items, scrollTop, containerHeight]);
+  
+  // 监听滚动和容器尺寸
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    
+    const handleScroll = () => {
+      setScrollTop(container.scrollTop);
+    };
+    
+    const updateSize = () => {
+      setContainerHeight(container.clientHeight);
+      setContainerWidth(container.clientWidth - 32); // 减去 padding
+    };
+    
+    updateSize();
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', updateSize);
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', updateSize);
+    };
+  }, [isOpen]);
+  
+  // 获取卡片背景样式
+  const getCardBgClass = (style: CardStyle, isSelected: boolean) => {
+    if (isSelected) return 'border-cyber-lime bg-cyber-lime/20 shadow-[0_0_20px_rgba(186,255,41,0.2)]';
+    
+    const colorMap: Record<string, { gradient: string; solid: string; glass: string; glow: string }> = {
+      emerald: {
+        gradient: 'bg-gradient-to-br from-emerald-500/25 to-emerald-700/10',
+        solid: 'bg-emerald-900/40',
+        glass: 'bg-emerald-500/10 backdrop-blur-sm',
+        glow: 'bg-emerald-950/60 shadow-[inset_0_0_20px_rgba(16,185,129,0.15)]'
+      },
+      cyan: {
+        gradient: 'bg-gradient-to-br from-cyan-500/25 to-cyan-700/10',
+        solid: 'bg-cyan-900/40',
+        glass: 'bg-cyan-500/10 backdrop-blur-sm',
+        glow: 'bg-cyan-950/60 shadow-[inset_0_0_20px_rgba(6,182,212,0.15)]'
+      },
+      violet: {
+        gradient: 'bg-gradient-to-br from-violet-500/25 to-violet-700/10',
+        solid: 'bg-violet-900/40',
+        glass: 'bg-violet-500/10 backdrop-blur-sm',
+        glow: 'bg-violet-950/60 shadow-[inset_0_0_20px_rgba(139,92,246,0.15)]'
+      },
+      amber: {
+        gradient: 'bg-gradient-to-br from-amber-500/25 to-amber-700/10',
+        solid: 'bg-amber-900/40',
+        glass: 'bg-amber-500/10 backdrop-blur-sm',
+        glow: 'bg-amber-950/60 shadow-[inset_0_0_20px_rgba(245,158,11,0.15)]'
+      },
+      rose: {
+        gradient: 'bg-gradient-to-br from-rose-500/25 to-rose-700/10',
+        solid: 'bg-rose-900/40',
+        glass: 'bg-rose-500/10 backdrop-blur-sm',
+        glow: 'bg-rose-950/60 shadow-[inset_0_0_20px_rgba(244,63,94,0.15)]'
+      },
+      blue: {
+        gradient: 'bg-gradient-to-br from-blue-500/25 to-blue-700/10',
+        solid: 'bg-blue-900/40',
+        glass: 'bg-blue-500/10 backdrop-blur-sm',
+        glow: 'bg-blue-950/60 shadow-[inset_0_0_20px_rgba(59,130,246,0.15)]'
+      },
+      indigo: {
+        gradient: 'bg-gradient-to-br from-indigo-500/25 to-indigo-700/10',
+        solid: 'bg-indigo-900/40',
+        glass: 'bg-indigo-500/10 backdrop-blur-sm',
+        glow: 'bg-indigo-950/60 shadow-[inset_0_0_20px_rgba(99,102,241,0.15)]'
+      },
+      pink: {
+        gradient: 'bg-gradient-to-br from-pink-500/25 to-pink-700/10',
+        solid: 'bg-pink-900/40',
+        glass: 'bg-pink-500/10 backdrop-blur-sm',
+        glow: 'bg-pink-950/60 shadow-[inset_0_0_20px_rgba(236,72,153,0.15)]'
+      },
+      teal: {
+        gradient: 'bg-gradient-to-br from-teal-500/25 to-teal-700/10',
+        solid: 'bg-teal-900/40',
+        glass: 'bg-teal-500/10 backdrop-blur-sm',
+        glow: 'bg-teal-950/60 shadow-[inset_0_0_20px_rgba(20,184,166,0.15)]'
+      },
+      orange: {
+        gradient: 'bg-gradient-to-br from-orange-500/25 to-orange-700/10',
+        solid: 'bg-orange-900/40',
+        glass: 'bg-orange-500/10 backdrop-blur-sm',
+        glow: 'bg-orange-950/60 shadow-[inset_0_0_20px_rgba(249,115,22,0.15)]'
+      },
+      lime: {
+        gradient: 'bg-gradient-to-br from-lime-500/25 to-lime-700/10',
+        solid: 'bg-lime-900/40',
+        glass: 'bg-lime-500/10 backdrop-blur-sm',
+        glow: 'bg-lime-950/60 shadow-[inset_0_0_20px_rgba(132,204,22,0.15)]'
+      },
+      fuchsia: {
+        gradient: 'bg-gradient-to-br from-fuchsia-500/25 to-fuchsia-700/10',
+        solid: 'bg-fuchsia-900/40',
+        glass: 'bg-fuchsia-500/10 backdrop-blur-sm',
+        glow: 'bg-fuchsia-950/60 shadow-[inset_0_0_20px_rgba(217,70,239,0.15)]'
+      }
+    };
+    
+    const colors = colorMap[style.colorScheme] || colorMap.emerald;
+    return colors[style.bgType];
+  };
+  
+  // 获取图标容器样式
+  const getIconContainerClass = (style: CardStyle) => {
+    const base = 'flex items-center justify-center bg-white/10';
+    switch (style.iconStyle) {
+      case 'circle': return `${base} rounded-full`;
+      case 'rounded': return `${base} rounded-xl`;
+      case 'square': return `${base} rounded-md`;
+    }
+  };
+  
+  // 获取图标尺寸
+  const getIconSize = (size: CardStyle['size']) => {
+    switch (size) {
+      case 'xs': return { container: 'w-8 h-8', icon: 'w-4 h-4', text: 'text-sm' };
+      case 'sm': return { container: 'w-10 h-10', icon: 'w-5 h-5', text: 'text-base' };
+      case 'md': return { container: 'w-12 h-12', icon: 'w-6 h-6', text: 'text-lg' };
+      case 'lg': return { container: 'w-14 h-14', icon: 'w-7 h-7', text: 'text-xl' };
+      case 'xl': return { container: 'w-16 h-16', icon: 'w-8 h-8', text: 'text-2xl' };
+    }
+  };
+
   // 文件夹长按标记
   const folderLongPressTriggered = useRef(false);
 
@@ -503,8 +756,8 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* 资源列表 */}
-        <div className="flex-1 overflow-y-auto p-3">
+        {/* 资源列表 - 虚拟滚动瀑布流 */}
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
           {loading || importing ? (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="w-10 h-10 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin mb-3" />
@@ -518,44 +771,73 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
               <p className="text-gray-500 text-sm">暂无资源</p>
             </div>
           ) : (
-            <div className="space-y-1.5">
-              {filteredResources.map((r, i) => (
-                <div
-                  key={r.id}
-                  className={`flex items-center gap-3 p-3 rounded-xl transition-all active:scale-[0.98] ${selectMode && selectedIds.has(r.id) ? 'bg-cyber-lime/15 border border-cyber-lime/30' : 'bg-white/[0.03] active:bg-white/[0.08]'}`}
-                  style={{ animation: `fadeIn 0.2s ease ${i * 20}ms both` }}
-                  onTouchStart={() => startLongPress(r.id)}
-                  onTouchEnd={endLongPress}
-                  onTouchMove={cancelLongPress}
-                  onClick={() => {
-                    if (resourceLongPressTriggered.current) {
-                      resourceLongPressTriggered.current = false;
-                      return;
-                    }
-                    if (selectMode) toggleSelect(r.id);
-                    else window.open(r.url, '_blank');
-                  }}
-                >
-                  {selectMode && (
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${selectedIds.has(r.id) ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'}`}>
-                      {selectedIds.has(r.id) && <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>}
-                    </div>
-                  )}
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center shrink-0 shadow-lg shadow-black/20">
-                    {r.icon ? <img src={r.icon} alt="" className="w-6 h-6" onError={e => (e.target as HTMLImageElement).style.display = 'none'} /> : null}
-                    <span className={`text-sm font-bold text-cyber-lime ${r.icon ? 'hidden' : ''}`}>{r.name[0]?.toUpperCase()}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white text-sm font-medium truncate">{r.name}</p>
-                    <p className="text-gray-500 text-xs truncate">{(() => { try { return new URL(r.url).hostname; } catch { return r.url; } })()}</p>
-                  </div>
-                  {!selectMode && (
-                    <button onClick={e => { e.stopPropagation(); setDeleteConfirmId(r.id); }} className="p-2 rounded-lg active:bg-red-500/20">
-                      <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+            <div className="relative" style={{ height: layoutData.totalHeight }}>
+              {visibleItems.map(({ resource: r, style, x, y, width, height, index }) => {
+                const iconSize = getIconSize(style.size);
+                const isSelected = selectMode && selectedIds.has(r.id);
+                
+                return (
+                  <div
+                    key={r.id}
+                    className="absolute transition-transform duration-200"
+                    style={{
+                      transform: `translate(${x}px, ${y}px)`,
+                      width,
+                      height,
+                    }}
+                  >
+                    <button
+                      className={`relative w-full h-full text-left cursor-pointer rounded-2xl border border-white/10 transition-all duration-300 hover:[transform:translateY(-3px)] hover:shadow-xl active:scale-[0.98] overflow-hidden ${getCardBgClass(style, isSelected)}`}
+                      onTouchStart={() => startLongPress(r.id)}
+                      onTouchEnd={endLongPress}
+                      onTouchMove={cancelLongPress}
+                      onClick={() => {
+                        if (resourceLongPressTriggered.current) {
+                          resourceLongPressTriggered.current = false;
+                          return;
+                        }
+                        if (selectMode) toggleSelect(r.id);
+                        else window.open(r.url, '_blank');
+                      }}
+                    >
+                      {/* 装饰图案 */}
+                      {style.hasPattern && (
+                        <div className="absolute inset-0 opacity-10 pointer-events-none">
+                          <div className="absolute -top-4 -right-4 w-24 h-24 border border-white/20 rounded-full" />
+                          <div className="absolute -bottom-6 -left-6 w-32 h-32 border border-white/10 rounded-full" />
+                        </div>
+                      )}
+                      
+                      {/* 选择模式复选框 */}
+                      {selectMode && (
+                        <div className={`absolute top-3 right-3 w-5 h-5 rounded-full border-2 flex items-center justify-center z-10 ${isSelected ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500 bg-black/50'}`}>
+                          {isSelected && <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>}
+                        </div>
+                      )}
+                      
+                      {/* 内容区 */}
+                      <div className={`relative z-10 h-full flex flex-col ${style.size === 'xs' ? 'p-3' : style.size === 'sm' ? 'p-3.5' : 'p-4'}`}>
+                        {/* 图标 */}
+                        <div className={`${iconSize.container} ${getIconContainerClass(style)} mb-auto`}>
+                          {r.icon ? (
+                            <img src={r.icon} alt="" className={iconSize.icon} onError={e => (e.target as HTMLImageElement).style.display = 'none'} />
+                          ) : (
+                            <span className={`font-bold text-cyber-lime ${iconSize.text}`}>{r.name[0]?.toUpperCase()}</span>
+                          )}
+                        </div>
+                        
+                        {/* 名称和域名 */}
+                        <div className="mt-auto">
+                          <p className={`text-white font-medium leading-snug ${style.size === 'xs' ? 'text-xs line-clamp-1' : style.size === 'sm' ? 'text-sm line-clamp-2' : 'text-base line-clamp-2'} mb-1`}>{r.name}</p>
+                          <p className={`text-gray-500 truncate ${style.size === 'xs' ? 'text-[10px]' : 'text-xs'}`}>
+                            {(() => { try { return new URL(r.url).hostname.replace('www.', ''); } catch { return r.url; } })()}
+                          </p>
+                        </div>
+                      </div>
                     </button>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

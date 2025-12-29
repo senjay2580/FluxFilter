@@ -12,13 +12,15 @@ interface LearningLogProps {
   onClose: () => void;
   initialVideoUrl?: string;
   initialVideoTitle?: string;
+  initialVideoCover?: string;
 }
 
 const LearningLog: React.FC<LearningLogProps> = ({
   isOpen,
   onClose,
   initialVideoUrl = '',
-  initialVideoTitle = ''
+  initialVideoTitle = '',
+  initialVideoCover = ''
 }) => {
   const [entries, setEntries] = useState<LearningLogType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,10 +34,21 @@ const LearningLog: React.FC<LearningLogProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set()); // 选中的 ID
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>({});
+  const [flippedIds, setFlippedIds] = useState<Set<number>>(new Set()); // 翻转的卡片 ID
   const longPressTimer = React.useRef<NodeJS.Timeout | null>(null);
 
   // 左滑返回手势
   const swipeHandlers = useSwipeBack({ onBack: onClose });
+
+  // 翻转卡片
+  const toggleFlip = (id: number) => {
+    setFlippedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -92,6 +105,7 @@ const LearningLog: React.FC<LearningLogProps> = ({
     createLearningLog(userId, {
       video_url: initialVideoUrl,
       video_title: initialVideoTitle,
+      video_cover: initialVideoCover,
     }).then((newEntry) => {
       createdUrlRef.current = initialVideoUrl;
       setEntries(prev => {
@@ -133,7 +147,7 @@ const LearningLog: React.FC<LearningLogProps> = ({
 
   // 保存编辑
   const handleSaveEdit = async (id: number) => {
-    const trimmed = editContent.trim().slice(0, 200);
+    const trimmed = editContent.trim().slice(0, 500);
     try {
       await updateLearningLog(id, { summary: trimmed });
       setEntries(prev => prev.map(e => e.id === id ? { ...e, summary: trimmed } : e));
@@ -456,35 +470,34 @@ const LearningLog: React.FC<LearningLogProps> = ({
         ) : (
           <div className="relative pl-8">
             {/* 时间轴中间线 */}
-            <div className="absolute left-[11px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-cyber-lime/50 via-cyber-lime/20 to-transparent" />
+            <div className="absolute left-[11px] top-0 bottom-0 w-[2px] bg-gradient-to-b from-cyber-lime/50 via-cyber-lime/20 to-transparent" />
 
             {Object.entries(groupedEntries).map(([date, dateEntries], groupIndex) => (
-              <div key={date} className="mb-10 last:mb-4">
+              <div key={date} className="mb-8 last:mb-4 relative">
                 {/* 日期标题 */}
-                <div className="py-2 mb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-5 h-5 rounded-full bg-black border-2 border-cyber-lime flex items-center justify-center">
-                        <div className="w-1 h-1 rounded-full bg-cyber-lime animate-pulse" />
-                      </div>
-                      <span className="text-xs font-bold text-cyber-lime bg-cyber-dark/80 backdrop-blur-md px-2.5 py-0.5 rounded-full border border-cyber-lime/20">
-                        {date}
-                      </span>
+                <div className="relative flex items-center justify-between mb-4">
+                  {/* 时间轴节点 */}
+                  <div className="absolute -left-8 top-1/2 -translate-y-1/2 flex items-center">
+                    <div className="w-6 h-6 rounded-full bg-cyber-dark border-2 border-cyber-lime flex items-center justify-center z-10">
+                      <div className="w-2 h-2 rounded-full bg-cyber-lime" />
                     </div>
-                    <button
-                      onClick={() => handleArchiveToNote(date, dateEntries)}
-                      className="text-[10px] px-2 py-1 bg-cyber-lime/10 hover:bg-cyber-lime/20 text-cyber-lime border border-cyber-lime/20 rounded-lg transition-all flex items-center gap-1 group/btn"
-                    >
-                      <svg className="w-3 h-3 group-hover/btn:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-                      </svg>
-                      归档至笔记
-                    </button>
                   </div>
+                  <span className="text-xs font-bold text-cyber-lime bg-cyber-dark/80 backdrop-blur-md px-3 py-1 rounded-full border border-cyber-lime/20 ml-1">
+                    {date}
+                  </span>
+                  <button
+                    onClick={() => handleArchiveToNote(date, dateEntries)}
+                    className="text-[10px] px-2 py-1 bg-cyber-lime/10 hover:bg-cyber-lime/20 text-cyber-lime border border-cyber-lime/20 rounded-lg transition-all flex items-center gap-1 group/btn"
+                  >
+                    <svg className="w-3 h-3 group-hover/btn:scale-110 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                    归档至笔记
+                  </button>
                 </div>
 
                 {/* 条目列表 */}
-                <div className="space-y-4">
+                <div className="space-y-3 ml-1">
                   {dateEntries.map((entry, index) => (
                     <div
                       key={entry.id}
@@ -496,6 +509,9 @@ const LearningLog: React.FC<LearningLogProps> = ({
                       onTouchStart={() => startLongPressTimer(entry.id)}
                       onTouchEnd={clearLongPressTimer}
                     >
+                      {/* 时间轴连接线 */}
+                      <div className="absolute -left-[29px] top-0 bottom-0 w-[2px] bg-cyber-lime/10" />
+                      
                       {/* 选择框 */}
                       {selectionMode && (
                         <div
@@ -518,105 +534,149 @@ const LearningLog: React.FC<LearningLogProps> = ({
                         </div>
                       )}
 
-                      {/* 连接点 */}
-                      <div className={`absolute top-6 w-4 h-[2px] bg-cyber-lime/20 group-hover:bg-cyber-lime/50 transition-colors ${selectionMode ? '-left-[15px]' : '-left-[25px]'
-                        }`} />
-
-                      <div
-                        onClick={() => selectionMode && handleToggleSelect(entry.id)}
-                        className={`bg-[#151921] border rounded-xl p-2.5 transition-all animate-list-item cursor-pointer ${selectionMode && selectedIds.has(entry.id)
-                          ? 'border-cyber-lime/60 bg-cyber-lime/[0.03] shadow-[0_0_15px_rgba(186,255,41,0.05)]'
-                          : 'border-white/5 hover:border-cyber-lime/30'
-                          }`}
-                      >
-                        <div className="flex gap-4">
-                          <div className="shrink-0 flex flex-col items-center">
-                            <div className="w-8 h-8 rounded-lg bg-cyber-lime/10 border border-cyber-lime/20 flex items-center justify-center hover:bg-cyber-lime/20 transition-all hover:scale-110 active:scale-95 shadow-inner cursor-pointer"
-                              title={entry.video_url}
-                              onClick={(e) => {
-                                if (selectionMode) {
-                                  e.stopPropagation();
-                                  handleToggleSelect(entry.id);
-                                } else {
-                                  window.open(entry.video_url, '_blank');
-                                }
-                              }}
-                            >
-                              <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                                <polyline points="15 3 21 3 21 9" />
-                                <line x1="10" y1="14" x2="21" y2="3" />
-                              </svg>
-                            </div>
-                            <span className="mt-1.5 text-[9px] text-gray-600 font-mono">
-                              {new Date(entry.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-2">
-                              <p className="text-[10px] text-cyber-lime/60 font-medium uppercase tracking-widest">Focused Study</p>
-                              {!selectionMode && (
-                                <div className="flex gap-1">
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); handleClearSummary(entry.id); }}
-                                    className="p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-white/5 transition-all text-[10px]"
-                                    title="清空"
-                                  >
-                                    清空
-                                  </button>
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(entry.id); }}
-                                    className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-500/5 transition-all text-[10px]"
-                                    title="删除"
-                                  >
-                                    删除
-                                  </button>
+                      {/* 翻转卡片容器 */}
+                      <div className="relative h-[180px]" style={{ perspective: '1000px' }}>
+                        <div 
+                          className={`relative w-full h-full transition-transform duration-500 ${flippedIds.has(entry.id) ? '[transform:rotateY(180deg)]' : ''}`}
+                          style={{ transformStyle: 'preserve-3d' }}
+                        >
+                          {/* 正面 - 学习笔记 */}
+                          <div 
+                            className={`absolute inset-0 bg-[#1a1a1a] border rounded-2xl overflow-hidden ${selectionMode && selectedIds.has(entry.id)
+                              ? 'border-cyber-lime/60 shadow-[0_0_15px_rgba(186,255,41,0.1)]'
+                              : 'border-white/5'
+                              }`}
+                            style={{ backfaceVisibility: 'hidden' }}
+                          >
+                            {/* 内容区域 */}
+                            <div className="p-4 h-full flex flex-col">
+                              {editingId === entry.id ? (
+                                <div className="flex-1 flex flex-col" onClick={e => e.stopPropagation()}>
+                                  <textarea
+                                    value={editContent}
+                                    onChange={(e) => setEditContent(e.target.value.slice(0, 500))}
+                                    placeholder={entry.video_title || '输入学习心得...'}
+                                    className="flex-1 w-full px-3 py-2 bg-black/40 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/30 transition-all resize-none"
+                                    autoFocus
+                                  />
+                                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
+                                    <span className="text-[10px] font-mono text-gray-600">{editContent.length}/500</span>
+                                    <div className="flex gap-2">
+                                      <button onClick={() => setEditingId(null)} className="px-3 py-1.5 text-xs text-gray-500 hover:text-white transition-colors">放弃</button>
+                                      <button onClick={() => handleSaveEdit(entry.id)} className="px-4 py-1.5 text-xs bg-cyber-lime text-black font-bold rounded-lg transition-all">保存</button>
+                                    </div>
+                                  </div>
                                 </div>
+                              ) : (
+                                <>
+                                  <div
+                                    onClick={(e) => {
+                                      if (selectionMode) {
+                                        e.stopPropagation();
+                                        handleToggleSelect(entry.id);
+                                      } else {
+                                        startEdit(entry);
+                                      }
+                                    }}
+                                    className={`flex-1 text-sm leading-relaxed line-clamp-4 cursor-pointer ${entry.summary ? 'text-gray-300' : 'text-gray-500 italic'}`}
+                                  >
+                                    {entry.summary || entry.video_title || '点击记录学习心得...'}
+                                  </div>
+                            
+                                  {/* 底部信息栏 */}
+                                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-white/5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] text-gray-500 font-mono">
+                                        {new Date(entry.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {!selectionMode && (
+                                        <>
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleClearSummary(entry.id); }}
+                                            className="text-[10px] text-gray-500 hover:text-white transition-colors"
+                                          >
+                                            清空
+                                          </button>
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(entry.id); }}
+                                            className="text-[10px] text-gray-500 hover:text-red-400 transition-colors"
+                                          >
+                                            删除
+                                          </button>
+                                        </>
+                                      )}
+                                      {/* 翻转按钮 */}
+                                      {(entry.video_cover || entry.video_title) && (
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); toggleFlip(entry.id); }}
+                                          className="p-1 rounded hover:bg-white/5 transition-colors ml-1"
+                                          title="查看视频信息"
+                                        >
+                                          <svg className="w-4 h-4 text-gray-500 hover:text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <rect x="2" y="3" width="20" height="14" rx="2" />
+                                            <polygon points="10 8 16 11 10 14 10 8" fill="currentColor" />
+                                          </svg>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </>
                               )}
                             </div>
+                          </div>
 
-                            {editingId === entry.id ? (
-                              <div className="space-y-3" onClick={e => e.stopPropagation()}>
-                                <textarea
-                                  value={editContent}
-                                  onChange={(e) => setEditContent(e.target.value.slice(0, 500))}
-                                  placeholder={entry.video_title || '输入学习心得...'}
-                                  className="w-full h-28 px-4 py-3 bg-black/40 border border-cyber-lime/30 rounded-xl text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-1 ring-cyber-lime/50 transition-all resize-none shadow-inner"
-                                  autoFocus
+                          {/* 背面 - 视频信息 */}
+                          <div 
+                            className="absolute inset-0 bg-[#1a1a1a] border border-white/5 rounded-2xl overflow-hidden cursor-pointer"
+                            style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
+                            onClick={() => entry.video_url && window.open(entry.video_url, '_blank')}
+                          >
+                            {/* 视频封面 */}
+                            {entry.video_cover ? (
+                              <div className="relative h-[120px] overflow-hidden">
+                                <img 
+                                  src={entry.video_cover} 
+                                  alt={entry.video_title}
+                                  className="w-full h-full object-cover"
                                 />
-                                <div className="flex items-center justify-between">
-                                  <span className="text-[10px] font-mono text-gray-600">{editContent.length}/500</span>
-                                  <div className="flex gap-3">
-                                    <button onClick={() => setEditingId(null)} className="px-4 py-1.5 text-xs text-gray-500 hover:text-white transition-colors">放弃</button>
-                                    <button onClick={() => handleSaveEdit(entry.id)} className="px-5 py-1.5 text-xs bg-cyber-lime text-black font-bold rounded-lg hover:shadow-[0_0_15px_rgba(186,255,41,0.4)] transition-all">保存更变</button>
+                                <div className="absolute inset-0 bg-gradient-to-t from-[#1a1a1a] via-transparent to-transparent" />
+                                {/* 播放图标 */}
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                  <div className="w-12 h-12 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center">
+                                    <svg className="w-5 h-5 text-white ml-1" viewBox="0 0 24 24" fill="currentColor">
+                                      <polygon points="5 3 19 12 5 21 5 3" />
+                                    </svg>
                                   </div>
                                 </div>
                               </div>
                             ) : (
-                              <div
-                                onClick={(e) => {
-                                  if (selectionMode) {
-                                    e.stopPropagation();
-                                    handleToggleSelect(entry.id);
-                                  } else {
-                                    startEdit(entry);
-                                  }
-                                }}
-                                className={`group/text relative text-sm rounded-xl p-3 border border-transparent hover:border-white/5 hover:bg-white/[0.02] transition-all cursor-pointer ${entry.summary ? 'text-gray-200' : 'text-gray-500 italic'
-                                  }`}
-                              >
-                                {entry.summary || entry.video_title || '点击此处记录今日所学...'}
-                                {!selectionMode && (
-                                  <div className="absolute right-2 bottom-2 opacity-0 group-hover/text:opacity-100 transition-opacity">
-                                    <svg className="w-3.5 h-3.5 text-cyber-lime/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                    </svg>
-                                  </div>
-                                )}
+                              <div className="h-[120px] bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+                                <svg className="w-12 h-12 text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                                  <polygon points="10 8 16 11 10 14 10 8" fill="currentColor" />
+                                </svg>
                               </div>
                             )}
+                            
+                            {/* 视频标题 */}
+                            <div className="p-3">
+                              <p className="text-sm text-white font-medium line-clamp-2 leading-tight">
+                                {entry.video_title || '未知视频'}
+                              </p>
+                            </div>
+
+                            {/* 翻转回去按钮 */}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); toggleFlip(entry.id); }}
+                              className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 backdrop-blur-sm hover:bg-black/70 transition-colors"
+                              title="返回笔记"
+                            >
+                              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M19 12H5M12 19l-7-7 7-7" />
+                              </svg>
+                            </button>
                           </div>
                         </div>
                       </div>

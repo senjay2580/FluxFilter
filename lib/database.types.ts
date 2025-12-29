@@ -193,6 +193,7 @@ export interface LearningLog {
   user_id: string;
   video_url: string;
   video_title: string;
+  video_cover: string;
   summary: string;
   created_at: string;
   updated_at: string;
@@ -201,11 +202,13 @@ export interface LearningLog {
 export interface CreateLearningLogParams {
   video_url: string;
   video_title?: string;
+  video_cover?: string;
   summary?: string;
 }
 
 export interface UpdateLearningLogParams {
   video_title?: string;
+  video_cover?: string;
   summary?: string;
 }
 
