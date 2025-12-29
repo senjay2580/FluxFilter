@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReminderTask, ReminderPriority, PausedState } from '../../types';
 
-// 动态导入 assets 目录下所有 mp3 文件
-const audioModules = import.meta.glob('../assets/*.mp3', { eager: true, import: 'default' }) as Record<string, string>;
-const RING_SOUNDS = Object.values(audioModules);
+// 直接导入音频文件
+import ring1 from '../../assets/ring1.mp3';
+import ring2 from '../../assets/ring2.mp3';
+
+const RING_SOUNDS = [ring1, ring2];
 
 // 优先级配置
 const PRIORITY_CONFIG: Record<ReminderPriority, { label: string; color: string; bgColor: string; borderColor: string }> = {
@@ -78,6 +80,8 @@ const IntervalReminder: React.FC = () => {
   const [completionData, setCompletionData] = useState<{ taskName: string; ringCount: number } | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [showBreakModal, setShowBreakModal] = useState(false);
+  const [, setAudioPermission] = useState<'unknown' | 'granted' | 'denied'>('unknown');
+  const [showAudioTip, setShowAudioTip] = useState(false);
 
   // 暂停状态保存
   const [pausedState, setPausedState] = useState<PausedState | null>(loadPausedState);
@@ -98,7 +102,32 @@ const IntervalReminder: React.FC = () => {
     saveTasks(tasks);
   }, [tasks]);
 
-  // 保存暂停状态到本地存储
+  // 检测音频播放权限（移动端需要用户交互才能播放）
+  const checkAudioPermission = useCallback(async () => {
+    if (RING_SOUNDS.length === 0) return;
+    
+    try {
+      const audio = new Audio(RING_SOUNDS[0]);
+      audio.volume = 0.01; // 极小音量测试
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+      setAudioPermission('granted');
+      setShowAudioTip(false);
+    } catch (e) {
+      setAudioPermission('denied');
+      setShowAudioTip(true);
+    }
+  }, []);
+
+  // 组件挂载时检测音频权限
+  useEffect(() => {
+    // 延迟检测，避免阻塞渲染
+    const timer = setTimeout(() => {
+      checkAudioPermission();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [checkAudioPermission]);  // 保存暂停状态到本地存储
   useEffect(() => {
     savePausedState(pausedState);
   }, [pausedState]);
@@ -143,21 +172,52 @@ const IntervalReminder: React.FC = () => {
 
   // 请求通知权限
   const requestNotificationPermission = useCallback(async () => {
+    // Web Notification API
     if ('Notification' in window && Notification.permission === 'default') {
       await Notification.requestPermission();
     }
   }, []);
 
-  // 发送浏览器通知
+  // 发送通知（适配移动端）
   const sendNotification = useCallback((title: string, body: string) => {
+    // 1. 尝试 Web Notification（桌面端和部分移动端）
     if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification(title, {
-        body,
-        icon: '/favicon.ico',
-        tag: 'interval-reminder',
-        requireInteraction: true,
-      });
+      try {
+        new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          tag: 'interval-reminder',
+          requireInteraction: true,
+          silent: false, // 允许系统声音
+        });
+      } catch (e) {
+        console.warn('Notification failed:', e);
+      }
     }
+
+    // 2. 移动端震动（长震动模式引起注意）
+    if (navigator.vibrate) {
+      navigator.vibrate([300, 100, 300, 100, 300, 100, 500]);
+    }
+
+    // 3. 尝试唤醒屏幕（部分浏览器支持）
+    if ('wakeLock' in navigator) {
+      (navigator as any).wakeLock.request('screen').catch(() => {});
+    }
+
+    // 4. 修改页面标题闪烁提醒
+    const originalTitle = document.title;
+    let isOriginal = true;
+    const titleInterval = setInterval(() => {
+      document.title = isOriginal ? `🔔 ${title}` : originalTitle;
+      isOriginal = !isOriginal;
+    }, 500);
+    
+    // 10秒后恢复标题
+    setTimeout(() => {
+      clearInterval(titleInterval);
+      document.title = originalTitle;
+    }, 10000);
   }, []);
 
   // 播放提示音 - 防止重复播放
@@ -167,6 +227,16 @@ const IntervalReminder: React.FC = () => {
     isPlayingRef.current = true;
 
     setIsRinging(true);
+    setRingCount(c => c + 1); // 增加提醒次数
+
+    // 立即暂停计时器
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // 立即弹出选择窗口
+    setShowBreakModal(true);
 
     // 发送浏览器通知（后台也能提醒）
     const runningTask = tasksRef.current.find(t => t.id === runningTaskId);
@@ -202,28 +272,13 @@ const IntervalReminder: React.FC = () => {
       console.warn('Audio playback failed:', e);
     }
 
-    // 震动反馈
-    if (navigator.vibrate) {
-      navigator.vibrate([200, 100, 200, 100, 200]);
-    }
-
-    // 清除上一个定时器
+    // 5秒后关闭响铃状态
     if (ringTimerRef.current) {
       clearTimeout(ringTimerRef.current);
     }
-
-    // 5秒后关闭响铃状态并暂停计时
     ringTimerRef.current = setTimeout(() => {
       setIsRinging(false);
       isPlayingRef.current = false;
-
-      // 暂停计时并弹出选择窗口
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      setIsPaused(true);
-      setShowBreakModal(true);
     }, 5000);
   }, []);
 
@@ -244,7 +299,7 @@ const IntervalReminder: React.FC = () => {
     } else {
       // 新开始
       setRunningTaskId(task.id);
-      setRemainingSeconds(task.totalMinutes * 60);
+      setRemainingSeconds(Math.round(task.totalMinutes * 60));
       setRingCount(0);
       setIsPaused(false);
       setPausedState(null);
@@ -366,7 +421,7 @@ const IntervalReminder: React.FC = () => {
                 }
                 // 启动后续任务
                 setRunningTaskId(followingTask.id);
-                setRemainingSeconds(followingTask.totalMinutes * 60);
+                setRemainingSeconds(Math.round(followingTask.totalMinutes * 60));
                 setRingCount(0);
                 const randomIndex = Math.floor(Math.random() * followingTask.intervalOptions.length);
                 setNextIntervalSeconds(followingTask.intervalOptions[randomIndex] * 60);
@@ -382,9 +437,8 @@ const IntervalReminder: React.FC = () => {
 
       setNextIntervalSeconds(prev => {
         if (prev <= 1) {
-          // 触发响铃
+          // 触发响铃（ringCount 在 playRing 内部增加）
           playRing();
-          setRingCount(c => c + 1);
           // 设置下一个随机间隔
           const randomIndex = Math.floor(Math.random() * intervalOptions.length);
           return intervalOptions[randomIndex] * 60;
@@ -460,6 +514,30 @@ const IntervalReminder: React.FC = () => {
         </h1>
         <p className="text-gray-500 text-sm">设定时间段，随机间隔提醒专注</p>
       </div>
+
+      {/* 音频权限提示 */}
+      {showAudioTip && (
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-start gap-3">
+          <svg className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <div className="flex-1">
+            <p className="text-red-400 text-sm font-medium">浏览器未开启声音权限</p>
+            <p className="text-red-400/70 text-xs mt-0.5">请点击任意位置或开始任务来开启声音权限</p>
+          </div>
+          <button
+            onClick={() => setShowAudioTip(false)}
+            className="text-red-400/50 hover:text-red-400 transition-colors"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       {/* 当前运行状态卡片 */}
       {runningTask && (
@@ -651,24 +729,24 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, isRunning, hasPausedState, pa
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 22c1.1 0 2-.9 2-2h-4a2 2 0 0 0 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
           </svg>
-          {task.intervalOptions.join('/')} 分钟
+          {task.intervalOptions.map(v => v < 1 ? `${Math.round(v * 60)}秒` : `${v}分钟`).join('/')}
         </span>
       </div>
 
       {/* 暂停状态显示 */}
       {hasPausedState && pausedSeconds !== undefined && (
-        <div className="flex items-center justify-between mb-3 px-3 py-2.5 bg-amber-700 rounded-lg">
+        <div className="flex items-center justify-between mb-3 px-3 py-2.5 bg-orange-500/30 backdrop-blur-sm border border-orange-500/40 rounded-lg">
           <div className="flex items-center gap-2">
-            <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="w-4 h-4 text-orange-300" viewBox="0 0 24 24" fill="currentColor">
               <rect x="6" y="4" width="4" height="16" rx="1" />
               <rect x="14" y="4" width="4" height="16" rx="1" />
             </svg>
-            <span className="text-white text-sm font-bold">已暂停</span>
+            <span className="text-orange-200 text-sm font-bold">已暂停</span>
             {pausedRingCount !== undefined && pausedRingCount > 0 && (
-              <span className="text-black/70 text-xs">· 已提醒 {pausedRingCount} 次</span>
+              <span className="text-orange-300/70 text-xs">· 已提醒 {pausedRingCount} 次</span>
             )}
           </div>
-          <span className="text-white font-mono font-bold text-lg">
+          <span className="text-orange-100 font-mono font-bold text-lg">
             {formatTime(pausedSeconds)}
           </span>
         </div>
@@ -772,13 +850,28 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, tasks, onClose, onSave }) =
   const [description, setDescription] = useState(task?.description || '');
   const [priority, setPriority] = useState<ReminderPriority>(task?.priority || 'medium');
   const [totalMinutes, setTotalMinutes] = useState(task?.totalMinutes || 30);
-  const [intervalOptions, setIntervalOptions] = useState<number[]>(task?.intervalOptions || DEFAULT_INTERVALS);
+  // intervalOptions 现在存储秒数（兼容旧数据：如果值 >= 1 且 <= 60，认为是分钟数，转换为秒）
+  const [intervalOptions, setIntervalOptions] = useState<number[]>(() => {
+    const opts = task?.intervalOptions || DEFAULT_INTERVALS;
+    // 兼容旧数据：如果所有值都 <= 60，认为是分钟数，转换为秒
+    const needsConvert = opts.every(v => v <= 60);
+    return needsConvert ? opts.map(v => v * 60) : opts;
+  });
   const [customInterval, setCustomInterval] = useState('');
+  const [intervalUnit, setIntervalUnit] = useState<'seconds' | 'minutes'>('minutes');
   const [followTaskId, setFollowTaskId] = useState<string | undefined>(task?.followTaskId);
   const [followDelayMinutes, setFollowDelayMinutes] = useState(task?.followDelayMinutes || 1);
 
   // 可选择的前置任务（排除自己）
   const availableTasks = tasks.filter(t => t.id !== task?.id);
+
+  // 格式化间隔显示
+  const formatInterval = (seconds: number): string => {
+    if (seconds < 60) {
+      return `${seconds}秒`;
+    }
+    return `${seconds / 60}分钟`;
+  };
 
   const handleSubmit = () => {
     if (!name.trim()) return;
@@ -787,17 +880,24 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, tasks, onClose, onSave }) =
       description: description.trim() || undefined,
       priority,
       totalMinutes,
-      intervalOptions: intervalOptions.length > 0 ? intervalOptions : DEFAULT_INTERVALS,
+      // 保存时转换回分钟数（兼容旧逻辑）
+      intervalOptions: intervalOptions.length > 0 
+        ? intervalOptions.map(s => s / 60) // 存储为分钟
+        : DEFAULT_INTERVALS,
       followTaskId: followTaskId || undefined,
       followDelayMinutes: followTaskId ? followDelayMinutes : undefined,
     });
   };
 
   const addInterval = () => {
-    const num = parseInt(customInterval);
-    if (num > 0 && !intervalOptions.includes(num)) {
-      setIntervalOptions(prev => [...prev, num].sort((a, b) => a - b));
-      setCustomInterval('');
+    const num = parseFloat(customInterval);
+    if (num > 0) {
+      // 根据单位转换为秒
+      const seconds = intervalUnit === 'minutes' ? num * 60 : num;
+      if (!intervalOptions.includes(seconds)) {
+        setIntervalOptions(prev => [...prev, seconds].sort((a, b) => a - b));
+        setCustomInterval('');
+      }
     }
   };
 
@@ -870,37 +970,46 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, tasks, onClose, onSave }) =
 
           {/* 总时长 */}
           <div className="mb-4">
-            <label className="text-sm text-gray-400 mb-1.5 block">总时长（分钟）</label>
+            <label className="text-sm text-gray-400 mb-1.5 block">总时长</label>
+            {/* 快捷选项 */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {[5, 15, 30, 60].map(min => (
+                <button
+                  key={min}
+                  onClick={() => setTotalMinutes(min)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${totalMinutes === min ? 'bg-cyber-lime/20 text-cyber-lime border border-cyber-lime/50' : 'bg-white/5 text-gray-400 border border-white/10 hover:border-white/20'}`}
+                >
+                  {min}分钟
+                </button>
+              ))}
+            </div>
             <div className="flex items-center gap-3">
               <input
                 type="range"
                 min="5"
                 max="180"
                 step="5"
-                value={totalMinutes}
+                value={Math.max(5, totalMinutes)}
                 onChange={e => setTotalMinutes(Number(e.target.value))}
                 className="flex-1 accent-cyber-lime"
               />
-              <div className="w-16 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-center text-white font-mono">
-                {totalMinutes}
+              <div className="w-20 px-3 py-2 border rounded-lg text-center font-mono text-sm bg-white/5 border-white/10 text-white">
+                {totalMinutes}分
               </div>
-            </div>
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
-              <span>5分钟</span>
-              <span>3小时</span>
             </div>
           </div>
 
           {/* 随机间隔选项 */}
           <div className="mb-6">
-            <label className="text-sm text-gray-400 mb-1.5 block">随机间隔（分钟）</label>
-            <div className="flex flex-wrap gap-2 mb-2">
+            <label className="text-sm text-gray-400 mb-1.5 block">随机间隔</label>
+            {/* 已添加的间隔 */}
+            <div className="flex flex-wrap gap-2 mb-3">
               {intervalOptions.map(val => (
                 <span
                   key={val}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-cyber-lime/20 text-cyber-lime rounded-full text-sm"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm bg-cyber-lime/20 text-cyber-lime"
                 >
-                  {val}
+                  {formatInterval(val)}
                   <button onClick={() => removeInterval(val)} className="hover:text-white">
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <line x1="18" y1="6" x2="6" y2="18" />
@@ -910,21 +1019,48 @@ const TaskModal: React.FC<TaskModalProps> = ({ task, tasks, onClose, onSave }) =
                 </span>
               ))}
             </div>
+            {/* 添加新间隔 */}
             <div className="flex gap-2">
               <input
                 type="number"
                 min="1"
-                max="60"
                 value={customInterval}
                 onChange={e => setCustomInterval(e.target.value)}
-                placeholder="添加间隔"
+                placeholder="输入数值"
                 className="flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-500 focus:border-cyber-lime/50 focus:outline-none text-sm"
               />
+              {/* 单位选择 */}
+              <div className="flex rounded-lg overflow-hidden border border-white/10">
+                <button
+                  onClick={() => setIntervalUnit('seconds')}
+                  className={`px-3 py-2 transition-colors ${intervalUnit === 'seconds' ? 'bg-cyber-lime/20 text-cyber-lime' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                  title="秒"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setIntervalUnit('minutes')}
+                  className={`px-3 py-2 transition-colors ${intervalUnit === 'minutes' ? 'bg-cyber-lime/20 text-cyber-lime' : 'bg-white/5 text-gray-400 hover:text-white'}`}
+                  title="分钟"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" />
+                    <polyline points="12 6 12 12 16 14" />
+                  </svg>
+                </button>
+              </div>
               <button
                 onClick={addInterval}
-                className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-white text-sm transition-colors"
+                className="px-3 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-white transition-colors"
+                title="添加"
               >
-                添加
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
               </button>
             </div>
           </div>

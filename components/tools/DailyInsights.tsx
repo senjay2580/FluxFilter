@@ -48,6 +48,18 @@ const DailyInsights: React.FC = () => {
   const savedCardsContainerRef = useRef<HTMLDivElement>(null);
   // 用于存储滑动状态的 ref（避免闭包问题）
   const dragStateRef = useRef({ isDragging: false, startX: 0 });
+  // 用于存储 currentIndex 和 offsetX 的 ref
+  const currentIndexRef = useRef(currentIndex);
+  const offsetXRef = useRef(offsetX);
+  
+  // 同步 ref 值
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
+  
+  useEffect(() => {
+    offsetXRef.current = offsetX;
+  }, [offsetX]);
 
   // 加载已归档卡片
   useEffect(() => {
@@ -246,6 +258,7 @@ const DailyInsights: React.FC = () => {
       setStartX(touch.clientX);
       setIsDragging(false);
       dragStateRef.current.isDragging = false;
+      dragStateRef.current.startX = touch.clientX;
     };
     
     const handleNativeTouchMove = (e: TouchEvent) => {
@@ -265,10 +278,10 @@ const DailyInsights: React.FC = () => {
       
       // 水平滑动时阻止默认行为并更新状态
       if (swipeDirectionRef.current === 'horizontal') {
-        const displayCards = showSaved ? savedCards : cards;
+        const displayCards = showSavedRef.current ? savedCardsRef.current : cardsRef.current;
         // 第一页不能向右滑，最后一页不能向左滑
-        const isFirstPage = currentIndex === 0;
-        const isLastPage = currentIndex >= displayCards.length - 1;
+        const isFirstPage = currentIndexRef.current === 0;
+        const isLastPage = currentIndexRef.current >= displayCards.length - 1;
         
         // 如果是边界情况，限制滑动
         if ((isFirstPage && deltaX > 0) || (isLastPage && deltaX < 0)) {
@@ -301,13 +314,14 @@ const DailyInsights: React.FC = () => {
         dragStateRef.current.isDragging = false;
         
         const threshold = 80;
-        const displayCards = showSaved ? savedCards : cards;
-        const currentOffset = offsetX;
+        const displayCards = showSavedRef.current ? savedCardsRef.current : cardsRef.current;
+        const currentOffset = offsetXRef.current;
+        const idx = currentIndexRef.current;
         
-        if (currentOffset > threshold && currentIndex > 0) {
-          setCurrentIndex(prev => prev - 1);
-        } else if (currentOffset < -threshold && currentIndex < displayCards.length - 1) {
-          setCurrentIndex(prev => prev + 1);
+        if (currentOffset > threshold && idx > 0) {
+          setCurrentIndex(idx - 1);
+        } else if (currentOffset < -threshold && idx < displayCards.length - 1) {
+          setCurrentIndex(idx + 1);
         }
         
         setOffsetX(0);
@@ -340,7 +354,7 @@ const DailyInsights: React.FC = () => {
         container2.removeEventListener('touchend', handleNativeTouchEnd);
       }
     };
-  }, [currentIndex, offsetX, copyCard, deleteCard, archiveCard, removeSavedCard]);
+  }, [copyCard, deleteCard, archiveCard, removeSavedCard, showSaved, cards.length, savedCards.length]);
   
   // PC 端鼠标事件处理
   const handleMouseDown = (e: React.MouseEvent) => { 
@@ -720,7 +734,7 @@ const DailyInsights: React.FC = () => {
           <div
             ref={cardsContainerRef}
             className="relative h-[480px] overflow-hidden select-none"
-            style={{ perspective: '1200px', perspectiveOrigin: 'center center' }}
+            style={{ perspective: '1200px', perspectiveOrigin: 'center center', touchAction: 'none' }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
@@ -759,7 +773,7 @@ const DailyInsights: React.FC = () => {
             <div
               ref={savedCardsContainerRef}
               className="relative h-[480px] overflow-hidden select-none"
-              style={{ perspective: '1200px', perspectiveOrigin: 'center center' }}
+              style={{ perspective: '1200px', perspectiveOrigin: 'center center', touchAction: 'none' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
