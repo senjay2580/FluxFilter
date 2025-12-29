@@ -59,8 +59,23 @@ export function clearCookieCache(): void {
   cachedCookie = null;
 }
 
+/**
+ * 清除字幕缓存（调试用）
+ */
+export function clearSubtitleCache(): void {
+  const keysToRemove: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && (key.startsWith('bili_sub_') || key.startsWith('bili_subtitle_'))) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach(key => localStorage.removeItem(key));
+  console.log(`[bilibili] 已清除 ${keysToRemove.length} 个字幕缓存`);
+}
+
 // 请求头配置（Cookie 可选）
-const getHeaders = async () => {
+const getHeaders = async (): Promise<Record<string, string>> => {
   const cookie = await getBilibiliCookie();
   const headers: Record<string, string> = {
     'Accept': 'application/json, text/plain, */*',
@@ -68,9 +83,9 @@ const getHeaders = async () => {
     'Referer': 'https://www.bilibili.com',
   };
   
-  // 只在有 Cookie 时才添加
-  if (cookie) {
-    headers['Cookie'] = cookie;
+  // 只在有有效 Cookie 字符串时才添加
+  if (cookie && typeof cookie === 'string' && cookie.trim()) {
+    headers['Cookie'] = cookie.trim();
   }
   
   return headers;
@@ -398,6 +413,328 @@ export function handleVideoClick(bvid: string): void {
   } else {
     window.open(webUrl, '_blank');
   }
+}
+
+// ============================================
+// AI总结和字幕相关类型
+// ============================================
+
+export interface AISummary {
+  summary: string;
+  outline: {
+    title: string;
+    timestamp: number;
+    part_outline: {
+      timestamp: number;
+      content: string;
+    }[];
+  }[];
+  // AI识别的字幕（从AI总结API获取）
+  aiSubtitle?: {
+    content: string;
+    start_timestamp: number;
+    end_timestamp: number;
+  }[];
+}
+
+export interface SubtitleInfo {
+  lan: string;
+  lan_doc: string;
+  subtitle_url: string;
+}
+
+export interface SubtitleContent {
+  body: {
+    from: number;
+    to: number;
+    content: string;
+  }[];
+}
+
+// 缓存配置
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24小时
+
+/**
+ * 获取视频CID（用于后续API调用）
+ */
+export async function getVideoCid(bvid: string): Promise<{ cid: number; mid: number } | null> {
+  const apiPath = `/x/web-interface/view`;
+  const url = import.meta.env.DEV
+    ? `${BILIBILI_API_BASE}${apiPath}?bvid=${bvid}`
+    : `${BILIBILI_API_BASE}${apiPath}&bvid=${bvid}`;
+
+  try {
+    const response = await fetch(url, { headers: await getHeaders() });
+    const data = await response.json();
+
+    if (data.code !== 0 || !data.data) {
+      console.warn(`获取视频CID失败: ${data.message}`);
+      return null;
+    }
+
+    return {
+      cid: data.data.cid,
+      mid: data.data.owner?.mid || 0,
+    };
+  } catch (error) {
+    console.error('获取视频CID失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 获取B站AI视频总结
+ * 注意：此API需要登录Cookie才能访问
+ * 返回的数据中也包含AI识别的字幕
+ */
+export async function getVideoAISummary(bvid: string): Promise<AISummary | null> {
+  // 检查缓存
+  const cacheKey = `bili_summary_${bvid}`;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < CACHE_TTL) {
+        return data;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // 获取CID
+  const videoInfo = await getVideoCid(bvid);
+  if (!videoInfo) return null;
+
+  const { cid, mid } = videoInfo;
+  
+  // AI总结需要WBI签名
+  const params = { bvid, cid, up_mid: mid };
+  const signedQuery = await encWbi(params);
+  
+  const apiPath = `/x/web-interface/view/conclusion/get`;
+  const url = import.meta.env.DEV
+    ? `${BILIBILI_API_BASE}${apiPath}?${signedQuery}`
+    : `${BILIBILI_API_BASE}${apiPath}&${signedQuery}`;
+
+  try {
+    const response = await fetch(url, { headers: await getHeaders() });
+    const data = await response.json();
+
+    // -403 表示需要登录或Cookie无效
+    // -101 表示账号未登录
+    if (data.code === -403 || data.code === -101) {
+      console.warn('AI总结需要登录，请在设置中配置B站Cookie。错误码:', data.code, data.message);
+      return null;
+    }
+
+    if (data.code !== 0) {
+      console.warn(`获取AI总结失败: [${data.code}] ${data.message}`);
+      return null;
+    }
+
+    // 检查内部code
+    // -1: 不支持AI摘要（敏感内容等）
+    // 0: 有摘要
+    // 1: 无摘要（未识别到语音）
+    const innerCode = data.data?.code;
+    if (innerCode === -1) {
+      console.warn('该视频不支持AI摘要');
+      return null;
+    }
+    if (innerCode === 1) {
+      console.warn('该视频暂无AI摘要（未识别到语音）');
+      return null;
+    }
+
+    const modelResult = data.data?.model_result;
+    if (!modelResult || !modelResult.summary) {
+      return null;
+    }
+
+    // 提取AI字幕
+    let aiSubtitle: AISummary['aiSubtitle'] = undefined;
+    if (modelResult.subtitle?.[0]?.part_subtitle) {
+      aiSubtitle = modelResult.subtitle[0].part_subtitle.map((item: any) => ({
+        content: item.content,
+        start_timestamp: item.start_timestamp,
+        end_timestamp: item.end_timestamp,
+      }));
+    }
+
+    const summary: AISummary = {
+      summary: modelResult.summary || '',
+      outline: (modelResult.outline || []).map((section: any) => ({
+        title: section.title,
+        timestamp: section.timestamp || 0,
+        part_outline: section.part_outline || [],
+      })),
+      aiSubtitle,
+    };
+
+    // 缓存结果
+    localStorage.setItem(cacheKey, JSON.stringify({
+      data: summary,
+      timestamp: Date.now(),
+    }));
+
+    return summary;
+  } catch (error) {
+    console.error('获取AI总结失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 获取视频字幕列表
+ * 注意：此API可能需要WBI签名
+ */
+export async function getVideoSubtitleList(bvid: string): Promise<SubtitleInfo[]> {
+  // 获取CID
+  const videoInfo = await getVideoCid(bvid);
+  if (!videoInfo) return [];
+
+  const { cid } = videoInfo;
+  
+  // 使用WBI签名
+  const params = { bvid, cid };
+  const signedQuery = await encWbi(params);
+  
+  const apiPath = `/x/player/wbi/v2`;
+  const url = import.meta.env.DEV
+    ? `${BILIBILI_API_BASE}${apiPath}?${signedQuery}`
+    : `${BILIBILI_API_BASE}${apiPath}&${signedQuery}`;
+
+  try {
+    const response = await fetch(url, { headers: await getHeaders() });
+    const data = await response.json();
+
+    if (data.code !== 0) {
+      console.warn(`获取字幕列表失败: [${data.code}] ${data.message}`);
+      return [];
+    }
+
+    const subtitles = data.data?.subtitle?.subtitles || [];
+    return subtitles.map((s: any) => ({
+      lan: s.lan,
+      lan_doc: s.lan_doc,
+      subtitle_url: s.subtitle_url?.startsWith('//') 
+        ? `https:${s.subtitle_url}` 
+        : s.subtitle_url,
+    }));
+  } catch (error) {
+    console.error('获取字幕列表失败:', error);
+    return [];
+  }
+}
+
+/**
+ * 获取字幕内容
+ */
+export async function getSubtitleContent(subtitleUrl: string): Promise<SubtitleContent | null> {
+  // 使用完整 URL 的 hash 作为缓存 key，避免冲突
+  const urlHash = Array.from(subtitleUrl).reduce((hash, char) => {
+    return ((hash << 5) - hash) + char.charCodeAt(0);
+  }, 0).toString(36);
+  const cacheKey = `bili_subtitle_${urlHash}`;
+  
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const { data, timestamp, url } = JSON.parse(cached);
+      // 验证 URL 匹配且未过期
+      if (url === subtitleUrl && Date.now() - timestamp < CACHE_TTL) {
+        return data;
+      }
+    } catch { /* ignore */ }
+  }
+
+  try {
+    // 字幕URL需要通过代理访问
+    const proxyUrl = import.meta.env.DEV
+      ? `/bili-subtitle?url=${encodeURIComponent(subtitleUrl)}`
+      : `/api/bilibili?subtitle_url=${encodeURIComponent(subtitleUrl)}`;
+
+    const response = await fetch(proxyUrl);
+    const data = await response.json();
+
+    if (!data.body) {
+      return null;
+    }
+
+    const content: SubtitleContent = {
+      body: data.body.map((item: any) => ({
+        from: item.from,
+        to: item.to,
+        content: item.content,
+      })),
+    };
+
+    // 缓存结果，包含原始 URL 用于验证
+    localStorage.setItem(cacheKey, JSON.stringify({
+      data: content,
+      timestamp: Date.now(),
+      url: subtitleUrl,
+    }));
+
+    return content;
+  } catch (error) {
+    console.error('获取字幕内容失败:', error);
+    return null;
+  }
+}
+
+/**
+ * 获取视频字幕（优先中文）
+ */
+export async function getVideoSubtitles(bvid: string): Promise<{ content: SubtitleContent; language: string } | null> {
+  // 检查缓存 - 使用 bvid 作为唯一标识
+  const cacheKey = `bili_sub_full_${bvid}`;
+  const cached = localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      const { data, timestamp, vid } = JSON.parse(cached);
+      // 验证 bvid 匹配且未过期
+      if (vid === bvid && Date.now() - timestamp < CACHE_TTL) {
+        return data;
+      }
+    } catch { /* ignore */ }
+  }
+
+  const subtitleList = await getVideoSubtitleList(bvid);
+  if (subtitleList.length === 0) {
+    return null;
+  }
+
+  // 优先选择中文字幕
+  const zhSubtitle = subtitleList.find(s => s.lan.startsWith('zh') || s.lan === 'ai-zh');
+  const selectedSubtitle = zhSubtitle || subtitleList[0];
+
+  const content = await getSubtitleContent(selectedSubtitle.subtitle_url);
+  if (!content) {
+    return null;
+  }
+
+  const result = {
+    content,
+    language: selectedSubtitle.lan_doc,
+  };
+
+  // 缓存结果，包含 bvid 用于验证
+  localStorage.setItem(cacheKey, JSON.stringify({
+    data: result,
+    timestamp: Date.now(),
+    vid: bvid,
+  }));
+
+  return result;
+}
+
+/**
+ * 格式化时间戳为 MM:SS 格式
+ */
+export function formatTimestamp(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
 // 工具函数

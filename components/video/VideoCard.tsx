@@ -18,6 +18,7 @@ interface VideoCardProps {
   onDelete?: (bvid: string) => void;
   onDeleteWithLog?: (bvid: string, title: string) => void;
   onTranscript?: (videoUrl: string) => void;
+  onAISummary?: (bvid: string, title: string) => void;
 }
 
 // 类型守卫：检查是否为数据库视频类型
@@ -44,7 +45,7 @@ const formatPubdate = (pubdate: string | number): string => {
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 };
 
-const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete, onDeleteWithLog, onTranscript }) => {
+const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemoveFromWatchlist, isInWatchlist, openMenuId, onMenuToggle, onDelete, onDeleteWithLog, onTranscript, onAISummary }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEmbeddedPlayer, setShowEmbeddedPlayer] = useState(false);
   const [showTitleTooltip, setShowTitleTooltip] = useState(false);
@@ -407,6 +408,30 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                     <span className="text-[15px] text-white font-medium">分享</span>
                     <p className="text-xs text-gray-500 mt-0.5">分享给好友或复制链接</p>
                   </div>
+                </button>
+
+                {/* AI总结 & 字幕 */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAISummary?.(bvid, title);
+                    onMenuToggle?.(null);
+                  }}
+                  className="w-full flex items-center gap-4 px-4 py-3.5 active:bg-white/5 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500/20 to-cyan-500/20 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      <path d="M9 12h6M9 16h6" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 text-left">
+                    <span className="text-[15px] text-white font-medium">AI总结 & 字幕</span>
+                    <p className="text-xs text-gray-500 mt-0.5">获取视频摘要和字幕文本</p>
+                  </div>
+                  <svg className="w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
                 </button>
 
                 {/* 视频下载 - 跳转到下载页面并复制链接 */}

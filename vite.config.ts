@@ -20,7 +20,40 @@ export default defineConfig(({ mode }) => {
                 proxyReq.setHeader('Referer', 'https://www.bilibili.com');
                 proxyReq.setHeader('Origin', 'https://www.bilibili.com');
                 proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-                proxyReq.setHeader('Cookie', 'SESSDATA=fa467b9c%2C1780929296%2C50bfd%2Ac1CjBGzWTOiqwnp6oOR6a0-Px4JRr9mH17Qhsjzg1zmjO0YOerD2ctH9qpG1Oqjigs0CISVlIwRUFWVm9HaC1VM0ZWdlFySHZILTVWbGtrX2xPNHFMVkhiempIeVkwSWZpbm9Yd1dJTWI5U2dtSjE0Ujl5VG16TUxfR2tMQ0UwMExvVnYzbGxjOFpnIIEC; bili_jct=88f200cde521bb50e6defb7e2215749c; DedeUserID=662516002; buvid3=7D3E7DEA-3FC6-98AB-E527-F6F887AB4C8646440infoc');
+                proxyReq.setHeader('Cookie', 'SESSDATA=379b39ae%2C1782354995%2C79d85%2Ac1CjBiVB6g09HZDj-0tjriajuEqtXykP0WmeS8RzkoSBwHOufRDuGkmG3Myqd1TkX_7k0SVmVNYXZPeEpfNmV1V2xqQ18yN29VS0h3cFpmczlkMnh1SXItZ0VISTRacElvVklvNHlOTTVHanAzajIzcnA5cWx2LVB3UTRpaV9fR3ROZGxMbm9Db0x3IIEC; bili_jct=e1956bd5ced997f01672f3bdda5f9c17; DedeUserID=662516002; buvid3=7D3E7DEA-3FC6-98AB-E527-F6F887AB4C8646440infoc; buvid4=7EAD0507-AE3E-0BFB-6918-E4115A2948B048703-025120221-EKhqaSaVQALswh5n44O87A%3D%3D');
+              });
+            },
+          },
+          // 字幕代理
+          '/bili-subtitle': {
+            target: 'https://i0.hdslb.com',
+            changeOrigin: true,
+            rewrite: (path) => {
+              const url = new URL(path, 'http://localhost');
+              const subtitleUrl = url.searchParams.get('url');
+              if (subtitleUrl) {
+                try {
+                  const parsed = new URL(subtitleUrl);
+                  return parsed.pathname;
+                } catch {
+                  return path;
+                }
+              }
+              return path;
+            },
+            configure: (proxy) => {
+              proxy.on('proxyReq', (proxyReq, req) => {
+                // 从查询参数获取实际的字幕URL并设置正确的host
+                const url = new URL(req.url || '', 'http://localhost');
+                const subtitleUrl = url.searchParams.get('url');
+                if (subtitleUrl) {
+                  try {
+                    const parsed = new URL(subtitleUrl);
+                    proxyReq.setHeader('Host', parsed.host);
+                  } catch { /* ignore */ }
+                }
+                proxyReq.setHeader('Referer', 'https://www.bilibili.com');
+                proxyReq.setHeader('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
               });
             },
           },

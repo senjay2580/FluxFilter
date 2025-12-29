@@ -13,7 +13,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  const { path } = req.query;
+  const { path, subtitle_url } = req.query;
+
+  // 处理字幕URL代理请求
+  if (subtitle_url && typeof subtitle_url === 'string') {
+    try {
+      const response = await fetch(subtitle_url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Referer': 'https://www.bilibili.com',
+        },
+      });
+      const data = await response.json();
+      return res.status(200).json(data);
+    } catch (error) {
+      console.error('Subtitle fetch error:', error);
+      return res.status(500).json({ error: 'Failed to fetch subtitle' });
+    }
+  }
   
   if (!path || typeof path !== 'string') {
     return res.status(400).json({ error: 'Missing path parameter' });
@@ -25,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 转发查询参数
   const url = new URL(biliUrl);
   Object.entries(req.query).forEach(([key, value]) => {
-    if (key !== 'path' && typeof value === 'string') {
+    if (key !== 'path' && key !== 'subtitle_url' && typeof value === 'string') {
       url.searchParams.set(key, value);
     }
   });

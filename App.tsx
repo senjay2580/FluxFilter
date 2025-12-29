@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback, useSyncExternalStore 
 import { createPortal } from 'react-dom';
 import { Tab, FilterType, DateFilter } from './types';
 import VideoCard from './components/video/VideoCard';
+import AISummaryModal from './components/video/AISummaryModal';
 import { HomeIcon, ClockIcon, SearchIcon, CalendarIcon, SlidersIcon } from './components/shared/Icons';
 import CustomDatePicker from './components/layout/CustomDatePicker';
 import DateFilterPicker from './components/layout/DateFilterPicker';
@@ -76,6 +77,9 @@ const App = () => {
   const [isResourceCenterOpen, setIsResourceCenterOpen] = useState(false);
   const [isVideoAnalyzerOpen, setIsVideoAnalyzerOpen] = useState(false);
   const [deleteConfirmVideo, setDeleteConfirmVideo] = useState<{ bvid: string; title: string; url: string } | null>(null);
+
+  // AI总结弹窗状态 - 全局单例
+  const [aiSummaryVideo, setAiSummaryVideo] = useState<{ bvid: string; title: string } | null>(null);
 
   // 记录子页面打开时的来源 Tab，用于返回（使用 ref 避免闭包问题）
   const subPageSourceRef = React.useRef<Tab>('home');
@@ -1056,6 +1060,16 @@ const App = () => {
                 }}
               />
 
+              {/* 全局 AI总结弹窗 - 单例 */}
+              {aiSummaryVideo && (
+                <AISummaryModal
+                  key={aiSummaryVideo.bvid}
+                  bvid={aiSummaryVideo.bvid}
+                  title={aiSummaryVideo.title}
+                  onClose={() => setAiSummaryVideo(null)}
+                />
+              )}
+
               {/* AI 视频分析 */}
               <VideoAnalyzer
                 isOpen={isVideoAnalyzerOpen}
@@ -1718,6 +1732,7 @@ const App = () => {
                               onDelete={(bvid) => executeDeleteVideo(bvid, false)}
                               onDeleteWithLog={(bvid, title) => executeDeleteVideo(bvid, true)}
                               onTranscript={handleTranscript}
+                              onAISummary={(bvid, title) => setAiSummaryVideo({ bvid, title })}
                             />
                           ))}
                         </div>
