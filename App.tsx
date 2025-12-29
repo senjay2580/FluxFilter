@@ -25,12 +25,13 @@ import NotesPage from './components/pages/NotesPage';
 import LearningLog from './components/pages/LearningLog';
 import ResourceCenter from './components/pages/ResourceCenter';
 import VideoAnalyzer from './components/tools/VideoAnalyzer';
-import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid } from './lib/supabase';
+import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid, getAIConfigs } from './lib/supabase';
 import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
 import { clearCookieCache } from './lib/bilibili';
 import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 import { insightService } from './lib/insight-service';
 import InsightFloatingBall from './components/shared/InsightFloatingBall';
+import { setModelApiKey } from './lib/ai-models';
 
 const App = () => {
   // 全局策展状态
@@ -100,6 +101,33 @@ const App = () => {
     localStorage.setItem('activeTab', activeTab);
   }, [activeTab]);
 
+  // 从数据库加载 AI 配置到 localStorage（全局统一加载）
+  const loadAIConfigFromDB = useCallback(async () => {
+    const userId = getStoredUserId();
+    if (!isSupabaseConfigured || !userId) return;
+
+    try {
+      const configs = await getAIConfigs(userId);
+      if (configs && configs.length > 0) {
+        configs.forEach(config => {
+          if (config.model_id === 'groq-whisper') {
+            localStorage.setItem('groq_api_key', config.api_key);
+          } else {
+            setModelApiKey(config.model_id, config.api_key);
+            if (config.model_id === 'custom') {
+              if (config.base_url) localStorage.setItem('ai_base_url', config.base_url);
+              if (config.custom_model_name) localStorage.setItem('ai_custom_model', config.custom_model_name);
+            }
+          }
+        });
+        // 通知其他组件配置已更新
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch (err) {
+      console.error('加载 AI 配置失败:', err);
+    }
+  }, []);
+
   // 检查登录状态 - 支持游客模式
   useEffect(() => {
     const checkAuth = async () => {
@@ -114,6 +142,8 @@ const App = () => {
           if (user) {
             setCurrentUser(user);
             setIsAuthenticated(true);
+            // 加载 AI 配置
+            loadAIConfigFromDB();
             return;
           }
         } catch (err) {
@@ -126,7 +156,7 @@ const App = () => {
       setIsAuthenticated(false);
     };
     checkAuth();
-  }, []);
+  }, [loadAIConfigFromDB]);
 
   // 登录成功回调
   const handleLoginSuccess = async () => {
@@ -134,6 +164,8 @@ const App = () => {
     setCurrentUser(user);
     setIsAuthenticated(true);
     clearCookieCache(); // 清除Cookie缓存，使用新用户的Cookie
+    // 加载 AI 配置
+    await loadAIConfigFromDB();
   };
 
   // 退出登录

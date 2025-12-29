@@ -1,9 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { AI_MODELS, type AIModel, getModelApiKey } from '../../lib/ai-models';
+import { AI_MODELS, getModelApiKey } from '../../lib/ai-models';
 import { AIMarkdown } from '../common/AIMarkdown';
-import { getAIConfigs, isSupabaseConfigured } from '../../lib/supabase';
-import { getStoredUserId } from '../../lib/auth';
 
 interface GitHubRepo {
   id: number;
@@ -21,6 +19,21 @@ interface GitHubRepo {
   pushed_at: string;
 }
 
+// GitHub Trending 项目类型
+interface TrendingRepo {
+  author: string;
+  name: string;
+  avatar: string;
+  url: string;
+  description: string;
+  language: string;
+  languageColor: string;
+  stars: number;
+  forks: number;
+  currentPeriodStars: number;
+  builtBy: { username: string; avatar: string }[];
+}
+
 interface StackOverflowQuestion {
   question_id: number;
   title: string;
@@ -33,7 +46,7 @@ interface StackOverflowQuestion {
   creation_date: number;
 }
 
-type TabType = 'github' | 'stackoverflow' | 'hellogithub' | 'v2ex' | 'linuxdo';
+type TabType = 'github' | 'trending' | 'stackoverflow' | 'hellogithub' | 'v2ex' | 'linuxdo';
 
 const LANGUAGE_COLORS: Record<string, string> = {
   JavaScript: '#f1e05a', TypeScript: '#3178c6', Python: '#3572A5', Java: '#b07219',
@@ -47,6 +60,11 @@ const DevCommunity: React.FC = () => {
   const [githubRepos, setGithubRepos] = useState<GitHubRepo[]>([]);
   const [soQuestions, setSoQuestions] = useState<StackOverflowQuestion[]>([]);
 
+  // GitHub Trending 状态
+  const [trendingRepos, setTrendingRepos] = useState<TrendingRepo[]>([]);
+  const [trendingLanguage, setTrendingLanguage] = useState<string>('');
+  const [trendingSince, setTrendingSince] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+
   // 长按添加待办
   const [showTodoMenu, setShowTodoMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
@@ -55,14 +73,14 @@ const DevCommunity: React.FC = () => {
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
   const longPressTriggered = useRef(false);
 
-  const [loading, setLoading] = useState<Record<TabType, boolean>>({ github: false, stackoverflow: false, hellogithub: false, v2ex: false, linuxdo: false });
-  const [error, setError] = useState<Record<TabType, string | null>>({ github: null, stackoverflow: null, hellogithub: null, v2ex: null, linuxdo: null });
-  const [page, setPage] = useState<Record<TabType, number>>({ github: 1, stackoverflow: 1, hellogithub: 1, v2ex: 1, linuxdo: 1 });
-  const [hasMore, setHasMore] = useState<Record<TabType, boolean>>({ github: true, stackoverflow: true, hellogithub: true, v2ex: true, linuxdo: true });
+  const [loading, setLoading] = useState<Record<TabType, boolean>>({ github: false, trending: false, stackoverflow: false, hellogithub: false, v2ex: false, linuxdo: false });
+  const [error, setError] = useState<Record<TabType, string | null>>({ github: null, trending: null, stackoverflow: null, hellogithub: null, v2ex: null, linuxdo: null });
+  const [page, setPage] = useState<Record<TabType, number>>({ github: 1, trending: 1, stackoverflow: 1, hellogithub: 1, v2ex: 1, linuxdo: 1 });
+  const [hasMore, setHasMore] = useState<Record<TabType, boolean>>({ github: true, trending: false, stackoverflow: true, hellogithub: true, v2ex: true, linuxdo: true });
 
   // 数据加载与 AI 总结状态
   const AI_SUMMARY_CACHE_KEY = 'dev_community_ai_summary';
-  const [aiSummary, setAiSummary] = useState<Record<'github' | 'stackoverflow', string>>(() => {
+  const [aiSummary, setAiSummary] = useState<Record<'github' | 'trending' | 'stackoverflow', string>>(() => {
     // 从 localStorage 加载缓存
     if (typeof window !== 'undefined') {
       const cached = localStorage.getItem(AI_SUMMARY_CACHE_KEY);
@@ -72,9 +90,9 @@ const DevCommunity: React.FC = () => {
         } catch { }
       }
     }
-    return { github: '', stackoverflow: '' };
+    return { github: '', trending: '', stackoverflow: '' };
   });
-  const [isSummarizing, setIsSummarizing] = useState<Record<'github' | 'stackoverflow', boolean>>({ github: false, stackoverflow: false });
+  const [isSummarizing, setIsSummarizing] = useState<Record<'github' | 'trending' | 'stackoverflow', boolean>>({ github: false, trending: false, stackoverflow: false });
   // 如果有缓存内容，自动显示 AI 结果区域
   const [showAIResult, setShowAIResult] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -82,7 +100,7 @@ const DevCommunity: React.FC = () => {
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          return !!(parsed.github || parsed.stackoverflow);
+          return !!(parsed.github || parsed.trending || parsed.stackoverflow);
         } catch { }
       }
     }
@@ -94,6 +112,7 @@ const DevCommunity: React.FC = () => {
   // 获取全局 AI 配置 (由 SettingsModal 维护)
   // AI 相关配置 (添加监听逻辑以实时同步)
   const [configVersion, setConfigVersion] = useState(0);
+
   useEffect(() => {
     const handleStorageChange = () => setConfigVersion(v => v + 1);
     window.addEventListener('storage', handleStorageChange);
@@ -118,7 +137,7 @@ const DevCommunity: React.FC = () => {
 
     const model = AI_MODELS.find(m => m.id === modelId) || AI_MODELS[0];
     return { apiKey: key, model };
-  }, []);
+  }, [configVersion]); // 依赖 configVersion 确保配置更新后重新获取
 
   // GitHub Trending (使用 search API 模拟 - 优化版)
   const fetchGitHub = useCallback(async (loadMore = false) => {
@@ -230,6 +249,71 @@ const DevCommunity: React.FC = () => {
     }
   }, [page.stackoverflow, loadLimit]);
 
+  // GitHub Trending (使用 GitHub Search API)
+  const fetchTrending = useCallback(async () => {
+    setLoading(prev => ({ ...prev, trending: true }));
+    setError(prev => ({ ...prev, trending: null }));
+
+    try {
+      // 计算日期范围
+      const date = new Date();
+      if (trendingSince === 'daily') date.setDate(date.getDate() - 1);
+      else if (trendingSince === 'weekly') date.setDate(date.getDate() - 7);
+      else date.setMonth(date.getMonth() - 1);
+      
+      const dateStr = date.toISOString().split('T')[0];
+      const langQuery = trendingLanguage ? `+language:${encodeURIComponent(trendingLanguage)}` : '';
+      
+      // 使用 pushed 而不是 created，加上 stars 过滤减少结果数量
+      const minStars = trendingSince === 'daily' ? 10 : trendingSince === 'weekly' ? 50 : 100;
+      const res = await fetch(
+        `https://api.github.com/search/repositories?q=pushed:>${dateStr}+stars:>${minStars}${langQuery}&sort=stars&order=desc&per_page=25`,
+        {
+          headers: {
+            'Accept': 'application/vnd.github.v3+json',
+          }
+        }
+      );
+      
+      if (!res.ok) {
+        if (res.status === 403) {
+          const resetTime = res.headers.get('X-RateLimit-Reset');
+          const resetDate = resetTime ? new Date(parseInt(resetTime) * 1000).toLocaleTimeString() : '稍后';
+          throw new Error(`GitHub API 请求限制，请 ${resetDate} 后再试`);
+        }
+        throw new Error('请求失败');
+      }
+      
+      const data = await res.json();
+      const repos: TrendingRepo[] = (data.items || []).map((r: any) => ({
+        author: r.owner.login,
+        name: r.name,
+        avatar: r.owner.avatar_url,
+        url: r.html_url,
+        description: r.description || '',
+        language: r.language || '',
+        languageColor: LANGUAGE_COLORS[r.language] || '#888',
+        stars: r.stargazers_count,
+        forks: r.forks_count,
+        currentPeriodStars: r.stargazers_count,
+        builtBy: [],
+      }));
+      
+      setTrendingRepos(repos);
+    } catch (err) {
+      setError(prev => ({ ...prev, trending: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setLoading(prev => ({ ...prev, trending: false }));
+    }
+  }, [trendingLanguage, trendingSince]);
+
+  // 监听 trending 筛选条件变化
+  useEffect(() => {
+    if (activeTab === 'trending') {
+      fetchTrending();
+    }
+  }, [trendingLanguage, trendingSince, activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // iframe 加载状态
   const [iframeLoaded, setIframeLoaded] = useState<Record<string, boolean>>({
     hellogithub: false,
@@ -265,7 +349,7 @@ const DevCommunity: React.FC = () => {
       prompt = `你是一个资深的开源社区观察员和技术趋势分析专家。请分析以下 GitHub 项目 (共 ${repos.length} 个)。
 
 项目数据：
-${repos.map((r, i) => `${i + 1}. [${r.full_name}] ⭐${r.stargazers_count} �${r.forks_count} | ${r.language || '未知语言'}
+${repos.map((r, i) => `${i + 1}. [${r.full_name}] ⭐${r.stargazers_count} 🍴${r.forks_count} | ${r.language || '未知语言'}
    描述: ${r.description || '无描述'}`).join('\n')}
 
 你的任务（必须严格按照以下格式输出，不得自创结构）：
@@ -305,6 +389,52 @@ ${repos.map((r, i) => `${i + 1}. [${r.full_name}] ⭐${r.stargazers_count} �${
 - 必须用 **双星号** 高亮技术名词
 - 适当使用 Emoji 增加可读性
 - 严禁输出任何开场白或结束语`;
+    } else if (activeTab === 'trending') {
+      const repos = trendingRepos;
+      const periodText = trendingSince === 'daily' ? '今日' : trendingSince === 'weekly' ? '本周' : '本月';
+      const langText = trendingLanguage ? `${trendingLanguage} 语言` : '全语言';
+      prompt = `分析以下 GitHub Trending ${periodText}热门项目 (${langText}，共 ${repos.length} 个)。
+
+数据：
+${repos.map((r, i) => `${i + 1}. ${r.author}/${r.name} | ⭐${r.stars} | ${r.language || '-'} | ${r.description || '无'}`).join('\n')}
+
+严格按以下格式输出（禁止修改结构）：
+
+# 📈 ${periodText} Trending 洞察
+
+## 🔥 趋势总结
+> 一句话总结本期热点方向
+
+## 🏆 重点项目（TOP 5 详解）
+
+### 1. \`作者/项目名\`
+| 属性 | 内容 |
+|------|------|
+| 简介 | 一句话说明是什么 |
+| 技术栈 | 使用的主要技术 |
+| 亮点 | 为什么值得关注 |
+| 场景 | 适合谁用 |
+| 上手 | 如何快速开始（一句话） |
+
+### 2. \`作者/项目名\`
+（同上表格格式）
+
+### 3. \`作者/项目名\`
+（同上表格格式）
+
+## 📋 其他项目速览
+| 项目 | 语言 | Stars | 一句话简介 |
+|------|------|-------|-----------|
+| 作者/名称 | XX | ⭐数 | 简介 |
+（列出剩余项目，每行一个）
+
+## 🎯 行动建议
+- **立即尝试**: 项目名 - 原因
+- **值得收藏**: 项目名 - 原因
+- **适合学习**: 项目名 - 原因
+
+---
+约束：TOP 3 必须用表格详解，其他项目用表格速览，禁止开场白和结束语。`;
     } else if (activeTab === 'stackoverflow') {
       const questions = soQuestions;
       prompt = `你是一个资深的全栈工程师和技术专家。请分析以下当前加载的 Stack Overflow 热门问题 (共 ${questions.length} 个)，总结出当前开发者遇到的痛点和技术难点。
@@ -530,8 +660,17 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
   // 外链类型的 tab（V2EX 和 LINUX DO 禁止 iframe 嵌入）
   const isExternalTab = (tab: TabType) => ['v2ex', 'linuxdo'].includes(tab);
 
+  // Trending 图标
+  const TrendingIcon = () => (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+      <polyline points="17 6 23 6 23 12" />
+    </svg>
+  );
+
   const tabs = [
     { id: 'github' as TabType, label: 'GitHub', icon: <GitHubIcon /> },
+    { id: 'trending' as TabType, label: 'Trending', icon: <TrendingIcon /> },
     { id: 'stackoverflow' as TabType, label: 'Stack', icon: <StackOverflowIcon /> },
     { id: 'hellogithub' as TabType, label: 'Hello', icon: <HelloGitHubIcon /> },
     { id: 'v2ex' as TabType, label: 'V2EX', icon: <V2EXIcon />, url: 'https://v2ex.com/' },
@@ -584,74 +723,78 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
       </div>
 
       {/* 操作与配置区域 */}
-      {['github', 'stackoverflow'].includes(activeTab) && (
+      {['github', 'trending', 'stackoverflow'].includes(activeTab) && (
         <div className="space-y-3 mb-6">
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">当前列表项:</span>
               <span className="text-xs font-bold text-cyber-lime bg-cyber-lime/10 px-2 py-0.5 rounded-full border border-cyber-lime/20">
-                {activeTab === 'github' ? githubRepos.length : soQuestions.length} Items
+                {activeTab === 'github' ? githubRepos.length : activeTab === 'trending' ? trendingRepos.length : soQuestions.length} Items
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">加载:</span>
-              <div className="relative group/select">
-                <select
-                  value={loadLimit}
-                  onChange={(e) => setLoadLimit(Number(e.target.value))}
-                  className="appearance-none bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 pr-8 text-[11px] font-bold text-cyber-lime hover:bg-white/10 transition-all cursor-pointer focus:outline-none focus:border-cyber-lime/40"
-                >
-                  {[10, 20, 50, -1].map((count) => (
-                    <option key={count} value={count} className="bg-[#0c0c14] text-gray-300">
-                      {count === -1 ? '全部' : `${count} 项`}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 group-hover/select:text-cyber-lime transition-colors">
-                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
+            {activeTab !== 'trending' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-500">加载:</span>
+                <div className="relative group/select">
+                  <select
+                    value={loadLimit}
+                    onChange={(e) => setLoadLimit(Number(e.target.value))}
+                    className="appearance-none bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 pr-8 text-[11px] font-bold text-cyber-lime hover:bg-white/10 transition-all cursor-pointer focus:outline-none focus:border-cyber-lime/40"
+                  >
+                    {[10, 20, 50, -1].map((count) => (
+                      <option key={count} value={count} className="bg-[#0c0c14] text-gray-300">
+                        {count === -1 ? '全部' : `${count} 项`}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500 group-hover/select:text-cyber-lime transition-colors">
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="flex gap-3">
-            <button
-              onClick={handleRefresh}
-              disabled={currentLoading}
-              className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300 font-medium transition-all hover:bg-white/10 disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              {currentLoading ? (
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
-                </svg>
-              )}
-              <span>最新刷新</span>
-            </button>
+            {activeTab !== 'trending' && (
+              <button
+                onClick={handleRefresh}
+                disabled={currentLoading}
+                className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300 font-medium transition-all hover:bg-white/10 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {currentLoading ? (
+                  <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+                  </svg>
+                )}
+                <span>最新刷新</span>
+              </button>
+            )}
 
             <button
               onClick={handleAISummarize}
-              disabled={currentLoading || isSummarizing[activeTab as 'github' | 'stackoverflow'] || (activeTab === 'github' ? githubRepos.length === 0 : soQuestions.length === 0)}
-              className="flex-[1.5] py-3 bg-gradient-to-r from-blue-600/20 to-cyan-500/20 hover:from-blue-600/30 hover:to-cyan-500/30 border border-blue-500/30 rounded-xl text-cyan-400 font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.1)] group"
+              disabled={currentLoading || isSummarizing[activeTab as 'github' | 'trending' | 'stackoverflow'] || (activeTab === 'github' ? githubRepos.length === 0 : activeTab === 'trending' ? trendingRepos.length === 0 : soQuestions.length === 0)}
+              className={`${activeTab === 'trending' ? 'flex-1' : 'flex-[1.5]'} py-3 bg-gradient-to-r from-blue-600/20 to-cyan-500/20 hover:from-blue-600/30 hover:to-cyan-500/30 border border-blue-500/30 rounded-xl text-cyan-400 font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(59,130,246,0.1)] group`}
             >
-              {isSummarizing[activeTab as 'github' | 'stackoverflow'] ? (
+              {isSummarizing[activeTab as 'github' | 'trending' | 'stackoverflow'] ? (
                 <div className="w-5 h-5 border-2 border-cyan-400/30 border-t-cyan-400 rounded-full animate-spin" />
               ) : (
                 <svg className="w-5 h-5 group-hover:rotate-12 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
                 </svg>
               )}
-              <span>AI 洞察 ({(activeTab === 'github' ? githubRepos.length : soQuestions.length)}项)</span>
+              <span>AI 洞察 ({activeTab === 'github' ? githubRepos.length : activeTab === 'trending' ? trendingRepos.length : soQuestions.length}项)</span>
             </button>
           </div>
         </div>
       )}
 
       {/* AI 总结展示区域 */}
-      {showAIResult && ['github', 'stackoverflow'].includes(activeTab) && (
+      {showAIResult && ['github', 'trending', 'stackoverflow'].includes(activeTab) && (
         <div className="mb-6 animate-fade-in">
           <div className="relative p-6 rounded-2xl bg-gradient-to-br from-blue-500/10 to-purple-500/5 border border-white/10 shadow-2xl overflow-hidden group">
             <div className="absolute top-0 right-0 p-3">
@@ -675,21 +818,21 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
               <h4 className="text-white font-bold">AI 实时洞察结果</h4>
             </div>
 
-            {aiSummary[activeTab as 'github' | 'stackoverflow'] ? (
+            {aiSummary[activeTab as 'github' | 'trending' | 'stackoverflow'] ? (
               <AIMarkdown
-                content={aiSummary[activeTab as 'github' | 'stackoverflow']}
+                content={aiSummary[activeTab as 'github' | 'trending' | 'stackoverflow']}
                 variant="info"
-                title={activeTab === 'github' ? 'GitHub热门项目分析' : 'StackOverflow热门问题分析'}
+                title={activeTab === 'github' ? 'GitHub热门项目分析' : activeTab === 'trending' ? 'GitHub Trending 趋势分析' : 'StackOverflow热门问题分析'}
               />
             ) : (
               <div className="text-sm text-gray-400 text-center py-4">
-                {isSummarizing[activeTab as 'github' | 'stackoverflow']
+                {isSummarizing[activeTab as 'github' | 'trending' | 'stackoverflow']
                   ? 'AI 正在思考并梳理当前热门内容，请稍候...'
                   : '暂无分析结果'}
               </div>
             )}
 
-            {isSummarizing[activeTab as 'github' | 'stackoverflow'] && (
+            {isSummarizing[activeTab as 'github' | 'trending' | 'stackoverflow'] && (
               <div className="mt-4 flex items-center justify-center gap-2 text-xs text-blue-400/60 animate-pulse">
                 <span>AI Deep Analysis in progress</span>
                 <span className="flex gap-1">
@@ -825,6 +968,118 @@ ${questions.map((q, i) => `${i + 1}. ${q.title} (标签: ${q.tags.join(', ')}, �
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* GitHub Trending 列表 */}
+      {activeTab === 'trending' && (
+        <div className="space-y-4">
+          {/* 筛选器 */}
+          <div className="flex flex-wrap gap-3 mb-4">
+            {/* 时间范围 */}
+            <div className="flex bg-white/5 rounded-xl p-1">
+              {(['daily', 'weekly', 'monthly'] as const).map(period => (
+                <button
+                  key={period}
+                  onClick={() => setTrendingSince(period)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                    trendingSince === period 
+                      ? 'bg-cyber-lime text-black' 
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  {period === 'daily' ? '今日' : period === 'weekly' ? '本周' : '本月'}
+                </button>
+              ))}
+            </div>
+            
+            {/* 语言筛选 */}
+            <select
+              value={trendingLanguage}
+              onChange={(e) => setTrendingLanguage(e.target.value)}
+              className="bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-gray-300 focus:outline-none focus:border-cyber-lime/40"
+            >
+              <option value="">所有语言</option>
+              {['JavaScript', 'TypeScript', 'Python', 'Java', 'Go', 'Rust', 'C++', 'C', 'Ruby', 'PHP', 'Swift', 'Kotlin'].map(lang => (
+                <option key={lang} value={lang}>{lang}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 加载状态 */}
+          {loading.trending && (
+            <div className="flex justify-center py-12">
+              <div className="w-8 h-8 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {/* 项目列表 */}
+          {!loading.trending && trendingRepos.length > 0 && (
+            <div className="space-y-4">
+              {trendingRepos.map((repo, idx) => (
+                <div
+                  key={`${repo.author}-${repo.name}`}
+                  className="block p-5 bg-gradient-to-br from-[#1a2634] to-[#162029] hover:from-[#1f2d3d] hover:to-[#1a2634] rounded-2xl transition-all group cursor-pointer select-none shadow-lg border border-white/5"
+                  onClick={() => window.open(repo.url, '_blank')}
+                >
+                  <div className="flex items-start gap-4">
+                    {/* 排名 */}
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm ${
+                      idx < 3 ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white' : 'bg-white/10 text-gray-400'
+                    }`}>
+                      {idx + 1}
+                    </div>
+                    
+                    <img src={repo.avatar} alt="" className="w-10 h-10 rounded-xl" />
+                    
+                    <div className="flex-1 min-w-0">
+                      <h3 className="text-white font-semibold group-hover:text-amber-400 transition-colors truncate text-base">
+                        <span className="text-gray-500">{repo.author}/</span>{repo.name}
+                      </h3>
+                      <p className="text-gray-400 text-sm line-clamp-2 mt-1.5">{repo.description || '暂无描述'}</p>
+                      
+                      <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-500">
+                        {repo.language && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: repo.languageColor || LANGUAGE_COLORS[repo.language] || '#888' }} />
+                            {repo.language}
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1 text-amber-500/80">
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" /></svg>
+                          {formatNumber(repo.stars)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 18V6h10l-5 6 5 6H7z" /></svg>
+                          {formatNumber(repo.forks)}
+                        </span>
+                        {repo.currentPeriodStars > 0 && (
+                          <span className="flex items-center gap-1 text-green-400">
+                            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                            </svg>
+                            +{formatNumber(repo.currentPeriodStars)} {trendingSince === 'daily' ? '今日' : trendingSince === 'weekly' ? '本周' : '本月'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 空状态 */}
+          {!loading.trending && trendingRepos.length === 0 && !error.trending && (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 mx-auto mb-4 bg-white/5 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+                </svg>
+              </div>
+              <p className="text-gray-500">暂无 Trending 数据</p>
+            </div>
+          )}
         </div>
       )}
 

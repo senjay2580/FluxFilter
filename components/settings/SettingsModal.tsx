@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../../lib/supabase';
-import { getCurrentUser, updateBilibiliCookie, logout, type User } from '../../lib/auth';
+import { supabase, isSupabaseConfigured, getAIConfigs, upsertAIConfig } from '../../lib/supabase';
+import { getCurrentUser, updateBilibiliCookie, logout, getStoredUserId, type User } from '../../lib/auth';
 import { clearCookieCache } from '../../lib/bilibili';
 import { invalidateCache, CACHE_KEYS } from '../../lib/cache';
 import { ClockIcon } from '../shared/Icons';
@@ -82,11 +82,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   const [apiPoolLoading, setApiPoolLoading] = useState(false);
 
   // AI 模型配置
-  const [selectedAIModel, setSelectedAIModel] = useState(() => localStorage.getItem('ai_model') || 'deepseek-chat');
-  const [aiModelKey, setAiModelKey] = useState(() => getModelApiKey(localStorage.getItem('ai_model') || 'deepseek-chat'));
-  const [aiBaseUrl, setAiBaseUrl] = useState(() => localStorage.getItem('ai_base_url') || '');
-  const [customModelName, setCustomModelName] = useState(() => localStorage.getItem('ai_custom_model') || '');
+  const [selectedAIModel, setSelectedAIModel] = useState('deepseek-chat');
+  const [aiModelKey, setAiModelKey] = useState('');
+  const [aiBaseUrl, setAiBaseUrl] = useState('');
+  const [customModelName, setCustomModelName] = useState('');
   const [showAIKey, setShowAIKey] = useState(false);
+  const [aiConfigLoading, setAiConfigLoading] = useState(false);
 
   // 当前打开菜单的视频
   const menuVideo = useMemo(() => {
@@ -149,14 +150,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
     }
   }, []);
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchData();
-      loadApiPool();
-      setCookieMessage(null);
-    }
-  }, [isOpen, fetchData]);
-
   // 加载 API 池
   const loadApiPool = useCallback(async () => {
     try {
@@ -170,6 +163,64 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       setApiPoolLoading(false);
     }
   }, []);
+
+  // 从数据库加载 AI 模型配置
+  const loadAIConfig = useCallback(async () => {
+    setAiConfigLoading(true);
+    try {
+      // 先从 localStorage 加载（作为默认值）
+      const localModelId = localStorage.getItem('ai_model') || 'deepseek-chat';
+      setSelectedAIModel(localModelId);
+      setAiModelKey(getModelApiKey(localModelId));
+      setAiBaseUrl(localStorage.getItem('ai_base_url') || '');
+      setCustomModelName(localStorage.getItem('ai_custom_model') || '');
+
+      // 然后从数据库加载（覆盖本地值）
+      const userId = getStoredUserId();
+      if (isSupabaseConfigured && userId) {
+        const configs = await getAIConfigs(userId);
+        if (configs && configs.length > 0) {
+          // 找到当前选中模型的配置
+          const currentConfig = configs.find(c => c.model_id === localModelId);
+          if (currentConfig) {
+            setAiModelKey(currentConfig.api_key);
+            setModelApiKey(localModelId, currentConfig.api_key); // 同步到 localStorage
+          }
+
+          // 同步所有配置到 localStorage
+          configs.forEach(config => {
+            if (config.model_id !== 'groq-whisper') {
+              setModelApiKey(config.model_id, config.api_key);
+              if (config.model_id === 'custom') {
+                if (config.base_url) {
+                  setAiBaseUrl(config.base_url);
+                  localStorage.setItem('ai_base_url', config.base_url);
+                }
+                if (config.custom_model_name) {
+                  setCustomModelName(config.custom_model_name);
+                  localStorage.setItem('ai_custom_model', config.custom_model_name);
+                }
+              }
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('加载 AI 配置失败:', err);
+    } finally {
+      setAiConfigLoading(false);
+    }
+  }, []);
+
+  // 打开设置时加载数据
+  useEffect(() => {
+    if (isOpen) {
+      fetchData();
+      loadApiPool();
+      loadAIConfig();
+      setCookieMessage(null);
+    }
+  }, [isOpen, fetchData, loadApiPool, loadAIConfig]);
 
   // 添加 API Key
   const handleAddApiKey = async () => {
@@ -218,17 +269,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   // 保存 API 配置（AI 模型 + Groq）
   const handleSaveAPIConfig = async () => {
     try {
-      // 保存到 localStorage
+      // 1. 保存到 localStorage
       localStorage.setItem('ai_model', selectedAIModel);
       setModelApiKey(selectedAIModel, aiModelKey);
       localStorage.setItem('ai_base_url', aiBaseUrl);
       localStorage.setItem('ai_custom_model', customModelName);
 
-      // 触发全局存储事件
+      // 2. 保存到数据库
+      const userId = getStoredUserId();
+      if (isSupabaseConfigured && userId) {
+        await upsertAIConfig(userId, {
+          model_id: selectedAIModel,
+          api_key: aiModelKey,
+          base_url: selectedAIModel === 'custom' ? aiBaseUrl : undefined,
+          custom_model_name: selectedAIModel === 'custom' ? customModelName : undefined,
+        });
+      }
+
+      // 3. 触发全局存储事件
       window.dispatchEvent(new Event('storage'));
       
-      alert('API 配置已保存');
+      alert('API 配置已保存' + (isSupabaseConfigured ? '并同步至云端' : ''));
     } catch (err) {
+      console.error('保存 API 配置失败:', err);
       alert('保存失败: ' + (err instanceof Error ? err.message : '未知错误'));
     }
   };
@@ -958,7 +1021,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                     <span className="text-xs text-gray-400 ml-1">选择模型</span>
                     <select
                       value={selectedAIModel}
-                      onChange={(e) => setSelectedAIModel(e.target.value)}
+                      onChange={(e) => {
+                        const modelId = e.target.value;
+                        setSelectedAIModel(modelId);
+                        // 切换模型时加载对应的 API Key
+                        setAiModelKey(getModelApiKey(modelId));
+                        localStorage.setItem('ai_model', modelId);
+                      }}
                       className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white appearance-none focus:outline-none focus:border-emerald-500/50"
                     >
                       {AI_MODELS.map(m => (
