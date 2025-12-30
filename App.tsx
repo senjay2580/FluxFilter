@@ -240,13 +240,13 @@ const App = () => {
   }, [activeTab]);
 
   // Infinite Scroll State
-  const [visibleCount, setVisibleCount] = useState(40); // 首页初始加载更多，避免快速滑动瞬时黑屏
+  const [visibleCount, setVisibleCount] = useState(48); // 初始渲染 48 个，配合虚拟化占位实现极致流畅
   const mainRef = React.useRef<HTMLDivElement>(null);
 
 
   // 筛选条件变化时重置 visibleCount
   useEffect(() => {
-    setVisibleCount(40);
+    setVisibleCount(48);
   }, [activeFilter, selectedUploader, searchTerm, activeTab]);
 
   // 滑动切换Tab - B站式交互体验
@@ -683,11 +683,11 @@ const App = () => {
       if (!ticking) {
         requestAnimationFrame(() => {
           const { scrollTop, scrollHeight, clientHeight } = mainElement;
-          // 无限滚动加载 - 增加触发距离到 1200px，极致提前加载
-          if (scrollTop + clientHeight >= scrollHeight - 1200) {
+          // 无限滚动加载 - 增加触发距离到 1500px，极致超前加载
+          if (scrollTop + clientHeight >= scrollHeight - 1500) {
             setVisibleCount(prev => {
               if (prev >= filteredVideos.length) return prev;
-              return Math.min(prev + 30, filteredVideos.length); // 每次追加 30 个
+              return Math.min(prev + 36, filteredVideos.length); // 每次追加 3 组
             });
           }
           ticking = false;
@@ -1030,14 +1030,15 @@ const App = () => {
           </header>
 
 
-          {/* Main Content Feed - 优化滑动性能 */}
+          {/* Main Content Feed - 仿B站虚拟化容器逻辑 */}
           <main
             ref={mainRef}
-            className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-3 lg:px-6 xl:px-8 py-4 pb-24 lg:pb-6 transform-gpu"
+            className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-3 lg:px-6 xl:px-8 py-4 pb-24 lg:pb-6"
             style={{
               willChange: 'scroll-position',
               WebkitOverflowScrolling: 'touch',
-              contain: 'size layout style'
+              contain: 'layout size style',
+              transform: 'translateZ(0)'
             }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
