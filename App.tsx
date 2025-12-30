@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Tab, FilterType, DateFilter } from './types';
 import VideoCard from './components/video/VideoCard';
 import AISummaryModal from './components/video/AISummaryModal';
-import { HomeIcon, ClockIcon, SearchIcon, CalendarIcon, SlidersIcon } from './components/shared/Icons';
+import { HomeIcon, ClockIcon, SearchIcon, CalendarIcon, SlidersIcon, SettingsIcon, RssIcon, PlusIcon } from './components/shared/Icons';
 import CustomDatePicker from './components/layout/CustomDatePicker';
 import DateFilterPicker from './components/layout/DateFilterPicker';
 import SyncButton from './components/layout/SyncButton';
@@ -813,8 +813,8 @@ const App = () => {
             <div className="absolute top-10 left-1/2 -translate-x-1/2 w-96 h-48 bg-emerald-300/20 rounded-full blur-[60px] animate-glow-pulse" style={{ animationDelay: '1s' }} />
           </div>
 
-          {/* 动态渐变光斑 - 根据Tab变化 */}
-          <div className="absolute inset-0">
+          {/* 动态渐变光斑 - 仅在 PC 端渲染 */}
+          <div className="hidden lg:block absolute inset-0">
             <div
               className={`absolute top-1/4 -left-1/4 w-[60%] h-[50%] rounded-full blur-[120px] transition-all duration-1000 ${activeTab === 'home' ? 'bg-emerald-600/20' :
                 activeTab === 'watchLater' ? 'bg-amber-500/15' :
@@ -848,17 +848,16 @@ const App = () => {
 
           {/* Header & Sticky Filter */}
           <header className="sticky top-0 z-40 w-full transition-all duration-300">
-            {/* 整体彩色弥散背景容器 - 与页面背景融合 */}
-            <div className="relative overflow-hidden">
-              {/* 彩色弥散背景 - 透明渐变，与背景融为一体 */}
-              <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/15 via-emerald-600/5 to-transparent" />
-              <div className="absolute -top-20 left-1/4 w-60 h-40 bg-emerald-400/20 rounded-full blur-3xl" />
-              <div className="absolute -top-10 right-1/3 w-48 h-32 bg-lime-500/15 rounded-full blur-3xl" />
+            {/* 整体彩色弥散背景容器 - 移动端禁用复杂背景以保证流畅 */}
+            <div className={`relative overflow-hidden transition-colors duration-500 ${activeTab === 'home' ? 'bg-[#050a08]' : 'bg-black'}`}>
+              {/* PC端(lg)彩色弥散背景 */}
+              <div className="hidden lg:block absolute inset-0 bg-gradient-to-b from-emerald-500/15 via-emerald-600/5 to-transparent" />
 
-              {/* Top Bar 内容层 - 移动端降低模糊半径提升性能 */}
-              <div className="relative bg-black/10 backdrop-blur-md lg:backdrop-blur-xl px-4 py-3">
-                <div className="flex items-center gap-3">
+              <div className="relative backdrop-blur-none lg:backdrop-blur-xl bg-black/40 lg:bg-transparent border-b border-white/[1%]">
+                {/* Top Bar 内容层 */}
+                <div className="px-4 py-3 flex items-center gap-3">
                   <img src={LogoSvg} alt="FluxF" className="w-9 h-9 shrink-0" />
+
                   <div className="relative flex-1">
                     <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                     <input
@@ -868,11 +867,10 @@ const App = () => {
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                     />
-                    {/* 清除按钮 */}
                     {searchTerm && (
                       <button
                         onClick={() => setSearchTerm('')}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"
                       >
                         <svg className="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M18 6L6 18M6 6l12 12" />
@@ -880,152 +878,46 @@ const App = () => {
                       </button>
                     )}
                   </div>
-                  <SyncButton compact />
-                  {/* 时间轴按钮 */}
-                  <button
-                    onClick={() => setShowTimeline(true)}
-                    className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 hover:bg-cyber-lime/10 transition-colors"
-                    title="时间轴"
-                  >
-                    <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="12" y1="20" x2="12" y2="10" />
-                      <line x1="18" y1="20" x2="18" y2="4" />
-                      <line x1="6" y1="20" x2="6" y2="16" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setIsCalendarOpen(true)}
-                    className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 transition-colors"
-                    title="视频日历"
-                  >
-                    <CalendarIcon className="w-4 h-4 text-gray-400" />
-                  </button>
-                  {/* 个人头像/设置 */}
-                  <button
-                    onClick={() => setIsSettingsOpen(true)}
-                    className="w-8 h-8 rounded-full bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center text-black font-bold text-xs hover:scale-110 transition-transform"
-                    title="设置"
-                  >
-                    {currentUser?.username?.[0]?.toUpperCase() || 'U'}
-                  </button>
-                </div>
-              </div>
 
-              {/* Filter Chips - 融入彩色弥散背景 (RSS页面隐藏) - 移动端降低模糊半径提升性能 */}
-              {activeTab !== 'rss' && (
-                <div className="relative bg-black/10 backdrop-blur-sm lg:backdrop-blur-md py-2 overflow-x-auto no-scrollbar touch-pan-x">
-                  <div className="flex px-4 gap-2 w-max">
-                    {/* All 按钮 */}
-                    <button
-                      onClick={() => {
-                        setActiveFilter('all');
-                        mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${activeFilter === 'all'
-                        ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
-                        : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
-                        }`}
-                    >
-                      All
-                    </button>
-
-                    {/* 时间筛选按钮 */}
-                    <button
-                      ref={timeFilterBtnRef}
-                      onClick={() => {
-                        if (timeFilterBtnRef.current) {
-                          const rect = timeFilterBtnRef.current.getBoundingClientRect();
-                          setTimeFilterPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-                        }
-                        setIsTimeFilterOpen(true);
-                      }}
-                      className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 ${['today', 'week', 'month'].includes(activeFilter)
-                        ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
-                        : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
-                        }`}
-                    >
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                        <line x1="16" y1="2" x2="16" y2="6" />
-                        <line x1="8" y1="2" x2="8" y2="6" />
-                        <line x1="3" y1="10" x2="21" y2="10" />
-                      </svg>
-                      {activeFilter === 'today' ? '今天' : activeFilter === 'week' ? '本周' : activeFilter === 'month' ? '本月' : '时间'}
-                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="6 9 12 15 18 9" />
+                  <div className="flex items-center gap-2">
+                    <SyncButton compact />
+                    <button onClick={() => setShowTimeline(true)} className="hidden sm:flex w-8 h-8 rounded-full bg-white/5 border border-white/10 items-center justify-center">
+                      <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="12" y1="20" x2="12" y2="10" /><line x1="18" y1="20" x2="18" y2="4" /><line x1="6" y1="20" x2="6" y2="16" />
                       </svg>
                     </button>
-
-                    {/* 高级筛选组合按钮 */}
-                    <div className={`flex items-center rounded-full border overflow-hidden ${activeFilter === 'custom' || selectedUploader
-                      ? 'border-cyber-lime/50 bg-white/5'
-                      : 'border-white/10 bg-white/5'
-                      }`}>
-                      {/* 自定义日期 */}
-                      <button
-                        onClick={() => setIsFilterOpen(true)}
-                        className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${activeFilter === 'custom'
-                          ? 'bg-cyber-lime text-black'
-                          : 'text-gray-400 hover:text-white hover:bg-white/10'
-                          }`}
-                      >
-                        <SlidersIcon className="w-3 h-3" />
-                        {activeFilter === 'custom'
-                          ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}${customDateFilter.day !== undefined ? `/${customDateFilter.day}` : ''}`
-                          : '日期'}
-                      </button>
-
-                      {/* 分隔线 */}
-                      <div className="w-px h-4 bg-white/20" />
-
-                      {/* UP主筛选 */}
-                      <button
-                        onClick={() => setIsUploaderPickerOpen(true)}
-                        className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${selectedUploader
-                          ? 'bg-violet-500 text-white'
-                          : 'text-gray-400 hover:text-white hover:bg-white/10'
-                          }`}
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        {selectedUploader ? selectedUploader.name : '关注'}
-                      </button>
-
-                      {/* 清除按钮 */}
-                      {(selectedUploader || activeFilter === 'custom') && (
-                        <>
-                          <div className="w-px h-4 bg-white/20" />
-                          <button
-                            onClick={() => {
-                              setSelectedUploader(null);
-                              if (activeFilter === 'custom') setActiveFilter('today');
-                            }}
-                            className="px-2 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                            title="清除筛选"
-                          >
-                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M18 6L6 18M6 6l12 12" />
-                            </svg>
-                          </button>
-                        </>
-                      )}
-                    </div>
-
-                    {/* AI 分析按钮 */}
-                    <button
-                      onClick={() => setIsVideoAnalyzerOpen(true)}
-                      className="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white"
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
-                      </svg>
-                      AI
+                    <button onClick={() => setIsSettingsOpen(true)} className="w-8 h-8 rounded-full bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center text-black font-bold text-xs">
+                      {currentUser?.username?.[0]?.toUpperCase() || 'U'}
                     </button>
                   </div>
                 </div>
-              )}
+
+                {/* Filter Chips (RSS页面隐藏) */}
+                {activeTab !== 'rss' && (
+                  <div className="pb-2 overflow-x-auto no-scrollbar touch-pan-x">
+                    <div className="flex px-4 gap-2 w-max">
+                      <button
+                        onClick={() => { setActiveFilter('all'); mainRef.current?.scrollTo({ top: 0 }); }}
+                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all ${activeFilter === 'all' ? 'bg-cyber-lime text-black' : 'bg-white/5 text-gray-400 border border-white/5'}`}
+                      >
+                        All
+                      </button>
+                      <button
+                        onClick={() => setIsTimeFilterOpen(true)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${['today', 'week', 'month'].includes(activeFilter) ? 'bg-cyber-lime text-black' : 'bg-white/5 text-gray-400 border border-white/5'}`}
+                      >
+                        时间
+                      </button>
+                      <button
+                        onClick={() => setIsUploaderPickerOpen(true)}
+                        className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${selectedUploader ? 'bg-violet-500 text-white' : 'bg-white/5 text-gray-400 border border-white/5'}`}
+                      >
+                        关注
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -1046,16 +938,11 @@ const App = () => {
           >
             {/* 页面内容容器 */}
             <div>
-
               {/* RSS 阅读界面 */}
-              {activeTab === 'rss' && (
-                <RssFeed scrollContainerRef={mainRef} timeFilter={activeFilter} />
-              )}
+              {activeTab === 'rss' && <RssFeed scrollContainerRef={mainRef} timeFilter={activeFilter} />}
 
               {/* TODO 待办事项界面 */}
-              {activeTab === 'todo' && (
-                <TodoList embedded timeFilter={activeFilter} />
-              )}
+              {activeTab === 'todo' && <TodoList embedded timeFilter={activeFilter} />}
 
               {/* 设置页面 */}
               <SettingsPage
@@ -1072,12 +959,8 @@ const App = () => {
                 isOpen={isNotesOpen}
                 onClose={() => {
                   setIsNotesOpen(false);
-                  // 返回到打开时的来源页面
                   setActiveTab(subPageSourceRef.current);
-                  // 如果是从设置返回，恢复设置页面的来源
-                  if (subPageSourceRef.current === 'settings') {
-                    subPageSourceRef.current = settingsSourceRef.current;
-                  }
+                  if (subPageSourceRef.current === 'settings') subPageSourceRef.current = settingsSourceRef.current;
                 }}
               />
 
@@ -1086,12 +969,8 @@ const App = () => {
                 isOpen={isLearningLogOpen}
                 onClose={() => {
                   setIsLearningLogOpen(false);
-                  // 返回到打开时的来源页面
                   setActiveTab(subPageSourceRef.current);
-                  // 如果是从设置返回，恢复设置页面的来源
-                  if (subPageSourceRef.current === 'settings') {
-                    subPageSourceRef.current = settingsSourceRef.current;
-                  }
+                  if (subPageSourceRef.current === 'settings') subPageSourceRef.current = settingsSourceRef.current;
                 }}
                 initialVideoUrl={learningLogInitialData.url}
                 initialVideoTitle={learningLogInitialData.title}
@@ -1103,24 +982,22 @@ const App = () => {
                 isOpen={isResourceCenterOpen}
                 onClose={() => {
                   setIsResourceCenterOpen(false);
-                  // 返回到打开时的来源页面
                   setActiveTab(subPageSourceRef.current);
-                  // 如果是从设置返回，恢复设置页面的来源
-                  if (subPageSourceRef.current === 'settings') {
-                    subPageSourceRef.current = settingsSourceRef.current;
-                  }
+                  if (subPageSourceRef.current === 'settings') subPageSourceRef.current = settingsSourceRef.current;
                 }}
               />
 
               {/* 全局 AI总结弹窗 - 单例 */}
-              {aiSummaryVideo && (
-                <AISummaryModal
-                  key={aiSummaryVideo.bvid}
-                  bvid={aiSummaryVideo.bvid}
-                  title={aiSummaryVideo.title}
-                  onClose={() => setAiSummaryVideo(null)}
-                />
-              )}
+              {
+                aiSummaryVideo && (
+                  <AISummaryModal
+                    key={aiSummaryVideo.bvid}
+                    bvid={aiSummaryVideo.bvid}
+                    title={aiSummaryVideo.title}
+                    onClose={() => setAiSummaryVideo(null)}
+                  />
+                )
+              }
 
               {/* AI 视频分析 */}
               <VideoAnalyzer
@@ -1139,381 +1016,491 @@ const App = () => {
               />
 
               {/* 删除确认框 */}
-              {deleteConfirmVideo && createPortal(
-                <div
-                  className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
-                  onClick={(e) => { if (e.target === e.currentTarget) setDeleteConfirmVideo(null); }}
-                >
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+              {
+                deleteConfirmVideo && createPortal(
                   <div
-                    className="relative w-full max-w-sm rounded-2xl overflow-hidden p-6"
-                    style={{
-                      backgroundColor: 'rgba(30,30,35,0.98)',
-                      backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      animation: 'scaleIn 0.2s ease-out'
-                    }}
+                    className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
+                    onClick={(e) => { if (e.target === e.currentTarget) setDeleteConfirmVideo(null); }}
                   >
-                    {/* 右上角关闭按钮 */}
-                    <button
-                      onClick={() => setDeleteConfirmVideo(null)}
-                      className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-colors"
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                    <div
+                      className="relative w-full max-w-sm rounded-2xl overflow-hidden p-6"
+                      style={{
+                        backgroundColor: 'rgba(30,30,35,0.98)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        animation: 'scaleIn 0.2s ease-out'
+                      }}
                     >
-                      <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-
-                    <h3 className="text-lg font-semibold text-white mb-2">删除视频</h3>
-                    <p className="text-sm text-gray-400 mb-1 line-clamp-2">{deleteConfirmVideo.title}</p>
-                    <p className="text-xs text-gray-500 mb-6">确定要删除这个视频吗？</p>
-
-                    <div className="space-y-3">
-                      {/* 记录并删除 */}
+                      {/* 右上角关闭按钮 */}
                       <button
-                        onClick={() => executeDeleteVideo(deleteConfirmVideo.bvid, true)}
-                        className="w-full py-3 bg-cyber-lime text-black font-medium rounded-xl hover:bg-cyber-lime/90 transition-colors flex items-center justify-center gap-2"
+                        onClick={() => setDeleteConfirmVideo(null)}
+                        className="absolute top-3 right-3 w-6 h-6 rounded-full bg-red-500 flex items-center justify-center hover:bg-red-600 transition-colors"
                       >
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                        </svg>
-                        记录到学习日志
-                      </button>
-
-                      {/* 直接删除 - 红色 */}
-                      <button
-                        onClick={() => executeDeleteVideo(deleteConfirmVideo.bvid, false)}
-                        className="w-full py-3 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors"
-                      >
-                        直接删除
-                      </button>
-                    </div>
-                  </div>
-                </div>,
-                document.body
-              )}
-
-              {/* 应用九宫格模态框 - Portal到body确保居中 */}
-              {isAppsModalOpen && createPortal(
-                <div
-                  className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
-                  onClick={(e) => { if (e.target === e.currentTarget) setIsAppsModalOpen(false); }}
-                >
-                  {/* 背景遮罩 */}
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-
-                  {/* 模态框内容 */}
-                  <div
-                    className="relative w-full max-w-sm rounded-3xl overflow-hidden"
-                    style={{
-                      backgroundColor: 'rgba(20,20,25,0.95)',
-                      backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(163,230,53,0.2)',
-                      animation: 'scaleIn 0.25s ease-out'
-                    }}
-                  >
-
-                    {/* 标题 */}
-                    <div className="px-6 pt-5 pb-4 flex items-center justify-between">
-                      <h2 className="text-lg font-semibold text-white">应用</h2>
-                      <button
-                        onClick={() => setIsAppsModalOpen(false)}
-                        className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                      >
-                        <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
                           <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
                       </button>
+
+                      <h3 className="text-lg font-semibold text-white mb-2">删除视频</h3>
+                      <p className="text-sm text-gray-400 mb-1 line-clamp-2">{deleteConfirmVideo.title}</p>
+                      <p className="text-xs text-gray-500 mb-6">确定要删除这个视频吗？</p>
+
+                      <div className="space-y-3">
+                        {/* 记录并删除 */}
+                        <button
+                          onClick={() => executeDeleteVideo(deleteConfirmVideo.bvid, true)}
+                          className="w-full py-3 bg-cyber-lime text-black font-medium rounded-xl hover:bg-cyber-lime/90 transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                          </svg>
+                          记录到学习日志
+                        </button>
+
+                        {/* 直接删除 - 红色 */}
+                        <button
+                          onClick={() => executeDeleteVideo(deleteConfirmVideo.bvid, false)}
+                          className="w-full py-3 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors"
+                        >
+                          直接删除
+                        </button>
+                      </div>
+                    </div>
+                  </div>,
+                  document.body
+                )
+              }
+
+              {/* 应用九宫格模态框 - Portal到body确保居中 */}
+              {
+                isAppsModalOpen && createPortal(
+                  <div
+                    className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
+                    onClick={(e) => { if (e.target === e.currentTarget) setIsAppsModalOpen(false); }}
+                  >
+                    {/* 背景遮罩 */}
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+
+                    {/* 模态框内容 */}
+                    <div
+                      className="relative w-full max-w-sm rounded-3xl overflow-hidden"
+                      style={{
+                        backgroundColor: 'rgba(20,20,25,0.95)',
+                        backdropFilter: 'blur(20px)',
+                        border: '1px solid rgba(163,230,53,0.2)',
+                        animation: 'scaleIn 0.25s ease-out'
+                      }}
+                    >
+
+                      {/* 标题 */}
+                      <div className="px-6 pt-5 pb-4 flex items-center justify-between">
+                        <h2 className="text-lg font-semibold text-white">应用</h2>
+                        <button
+                          onClick={() => setIsAppsModalOpen(false)}
+                          className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                        >
+                          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* 应用网格 */}
+                      <div className="px-6 pb-8 grid grid-cols-3 gap-5">
+                        {/* Reddit - 官方图标 */}
+                        <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.reddit.com', '_blank')}>
+                          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FF4500' }}>
+                            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
+                              <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.34.34 0 0 1 .414-.261l2.92.615a1.248 1.248 0 0 1 1.057-.177z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Reddit</span>
+                        </button>
+
+                        {/* 知乎 - 官方图标 */}
+                        <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.zhihu.com', '_blank')}>
+                          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#0066FF' }}>
+                            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
+                              <path d="M5.378 15.503c.854 0 1.708.068 2.562.138.614.05 1.229.1 1.776.15l1.639 4.743c.273.819.341 1.092.682 1.092.41 0 .615-.41.615-.887 0-.341-.069-.683-.205-1.024l-1.57-4.232c1.432.069 2.865.137 4.298.137 1.706 0 2.593-.683 2.593-2.048V5.326c0-1.843-1.092-2.799-3.208-2.799H5.992C3.809 2.527 2.717 3.483 2.717 5.326v8.125c0 1.365.887 2.052 2.661 2.052zm0-10.72h8.739v8.601H5.378V4.783zm13.109 8.601c0 .41.341.683.751.683.41 0 .683-.341.683-.751V4.783c0-.41.273-.683.682-.683.41 0 .683.273.683.683v8.601c0 1.57-1.161 2.799-2.799 2.799-.41 0-.683-.273-.683-.683v-.068c.205 0 .41-.068.614-.205.069-.068.069-.136.069-.205v-1.638z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs text-gray-400 group-hover:text-white transition-colors">知乎</span>
+                        </button>
+
+                        {/* 小红书 - 官方图标 */}
+                        <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.xiaohongshu.com', '_blank')}>
+                          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FE2C55' }}>
+                            <svg className="w-10 h-10" viewBox="0 0 1024 1024" fill="white">
+                              <path d="M211.5 358.5c0 0 49-65 149-65 59 0 71.5 28.5 71.5 28.5s-5.5-23-45.5-62.5c-44-43.5-31-89-31-89s32-9 66.5 23c22.5 21 39 52 46.5 86.5 6-39.5 26.5-121 82.5-142 66-24.5 96.5 2 96.5 2s-31.5 13-43 64c-11 48.5 1 106 1 106s82-27.5 130 19c62 60 41 155.5 41 155.5s92.5 12 119 72.5c24 55 10 103 10 103s-8.5 17-27 20c-15.5 2.5-19.5-6-27.5-25-10.5-24.5-54-46.5-54-46.5s-23 105.5-64 163c-39 54.5-98.5 72.5-131.5 76-85.5 9-106-44.5-106-44.5s-24 55-108 50.5c-97-5-115.5-70-115.5-70S77 826.5 64 772.5c-7-29.5 18-36.5 36.5-36 19 .5 21.5 13 22 20.5 1.5 29.5 23 75.5 75.5 84.5 48.5 8 72-13.5 76-32.5 3-13.5-10-27-24.5-35-51.5-28.5-88-82.5-89-142.5-.5-30.5 7-60.5 18.5-86.5-30.5 8.5-67 29.5-80.5 67-15 41.5-9.5 54-9.5 54s-26.5 1-35.5-22.5c-5.5-14-3.5-29-3.5-29s-4.5-75.5 48.5-138c41.5-49 112.5-118 112.5-118zm320.5 107c0 0-33-8-47.5 34.5-20.5 60.5 5 137.5 5 137.5s38-16 57.5-65.5c15-38.5-15-106.5-15-106.5z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs text-gray-400 group-hover:text-white transition-colors">小红书</span>
+                        </button>
+
+                        {/* 百度贴吧 - 官方图标 */}
+                        <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://tieba.baidu.com', '_blank')}>
+                          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#4A90E2' }}>
+                            <svg className="w-10 h-10" viewBox="0 0 1024 1024" fill="white">
+                              <path d="M497.6 150.4c-97.6 0-185.6 30.4-230.4 75.2v25.6h52.8c115.2 0 166.4 56 166.4 121.6 0 54.4-44.8 113.6-136 123.2-12.8 1.6-14.4 3.2-14.4 4.8 0 1.6 3.2 4.8 9.6 4.8 24 0 76.8 0 108.8 3.2 44.8 4.8 73.6 20.8 91.2 51.2 12.8 22.4 17.6 51.2 16 86.4h112v-104c0-22.4 17.6-40 40-40h96V193.6c-67.2-27.2-184-43.2-312-43.2zM216 289.6V560h80c75.2 0 120 28.8 120 73.6 0 19.2-9.6 35.2-40 56-27.2 19.2-80 30.4-150.4 30.4H176C78.4 720 0 641.6 0 544V292.8c30.4-14.4 76.8-24 128-24 35.2 0 65.6 3.2 88 20.8z m564.8 0V464h206.4c19.2-25.6 33.6-59.2 33.6-100.8 0-41.6-9.6-76.8-28.8-100.8-27.2-36.8-84.8-59.2-156.8-59.2-19.2 0-36.8 1.6-54.4 4.8V289.6z m-126.4 73.6v96h62.4c65.6 0 104-32 104-81.6 0-33.6-20.8-57.6-67.2-57.6h-59.2c-22.4 0-40 19.2-40 43.2z m206.4 196.8h-72v160h176c12.8 0 25.6-3.2 36.8-8-1.6-38.4-12.8-67.2-32-88-25.6-27.2-64-46.4-108.8-64z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs text-gray-400 group-hover:text-white transition-colors">贴吧</span>
+                        </button>
+
+                        {/* Obsidian - 官方图标 */}
+                        <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://obsidian.md', '_blank')}>
+                          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#7C3AED' }}>
+                            <svg className="w-9 h-9" viewBox="0 0 500 500" fill="white">
+                              <path d="M 218.667 0 C 218.667 0 167.318 64.922 138.646 117.812 C 109.974 170.703 68.646 226.042 35.833 286.979 C 2.99 347.917 0.005 353.125 0.005 353.125 L 75.005 470.833 L 138.026 500 L 297.385 464.583 L 386.411 381.25 L 366.667 186.458 L 294.021 78.646 L 218.667 0 Z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Obsidian</span>
+                        </button>
+
+                        {/* LinuxDo - Linux Penguin 图标 */}
+                        <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://linux.do', '_blank')}>
+                          <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#F1592A' }}>
+                            <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
+                              <path d="M12 0c-4.97 0-9 4.03-9 9 0 2.27.85 4.34 2.25 5.92-.48 2.05-1.57 3.55-3.08 4.35 1.48 2.12 4.19 3.73 7.82 3.73s6.34-1.61 7.82-3.73c-1.51-.8-2.6-2.3-3.08-4.35C19.15 13.34 20 11.27 20 9c0-4.97-4.03-9-9-9zM7.5 7c.83 0 1.5.67 1.5 1.5S8.33 10 7.5 10 6 9.33 6 8.5 6.67 7 7.5 7zm9 0c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5-1.5-.67-1.5-1.5.67-1.5 1.5-1.5z" />
+                            </svg>
+                          </div>
+                          <span className="text-xs text-gray-400 group-hover:text-white transition-colors">LinuxDo</span>
+                        </button>
+                      </div>
                     </div>
 
-                    {/* 应用网格 */}
-                    <div className="px-6 pb-8 grid grid-cols-3 gap-5">
-                      {/* Reddit - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.reddit.com', '_blank')}>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FF4500' }}>
-                          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
-                            <path d="M12 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 0 1-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 0 1 .042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 0 1 4.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.34.34 0 0 1 .414-.261l2.92.615a1.248 1.248 0 0 1 1.057-.177z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Reddit</span>
-                      </button>
-
-                      {/* 知乎 - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.zhihu.com', '_blank')}>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#0066FF' }}>
-                          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
-                            <path d="M5.378 15.503c.854 0 1.708.068 2.562.138.614.05 1.229.1 1.776.15l1.639 4.743c.273.819.341 1.092.682 1.092.41 0 .615-.41.615-.887 0-.341-.069-.683-.205-1.024l-1.57-4.232c1.432.069 2.865.137 4.298.137 1.706 0 2.593-.683 2.593-2.048V5.326c0-1.843-1.092-2.799-3.208-2.799H5.992C3.809 2.527 2.717 3.483 2.717 5.326v8.125c0 1.365.887 2.052 2.661 2.052zm0-10.72h8.739v8.601H5.378V4.783zm13.109 8.601c0 .41.341.683.751.683.41 0 .683-.341.683-.751V4.783c0-.41.273-.683.682-.683.41 0 .683.273.683.683v8.601c0 1.57-1.161 2.799-2.799 2.799-.41 0-.683-.273-.683-.683v-.068c.205 0 .41-.068.614-.205.069-.068.069-.136.069-.205v-1.638z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs text-gray-400 group-hover:text-white transition-colors">知乎</span>
-                      </button>
-
-                      {/* 小红书 - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://www.xiaohongshu.com', '_blank')}>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#FE2C55' }}>
-                          <svg className="w-10 h-10" viewBox="0 0 1024 1024" fill="white">
-                            <path d="M211.5 358.5c0 0 49-65 149-65 59 0 71.5 28.5 71.5 28.5s-5.5-23-45.5-62.5c-44-43.5-31-89-31-89s32-9 66.5 23c22.5 21 39 52 46.5 86.5 6-39.5 26.5-121 82.5-142 66-24.5 96.5 2 96.5 2s-31.5 13-43 64c-11 48.5 1 106 1 106s82-27.5 130 19c62 60 41 155.5 41 155.5s92.5 12 119 72.5c24 55 10 103 10 103s-8.5 17-27 20c-15.5 2.5-19.5-6-27.5-25-10.5-24.5-54-46.5-54-46.5s-23 105.5-64 163c-39 54.5-98.5 72.5-131.5 76-85.5 9-106-44.5-106-44.5s-24 55-108 50.5c-97-5-115.5-70-115.5-70S77 826.5 64 772.5c-7-29.5 18-36.5 36.5-36 19 .5 21.5 13 22 20.5 1.5 29.5 23 75.5 75.5 84.5 48.5 8 72-13.5 76-32.5 3-13.5-10-27-24.5-35-51.5-28.5-88-82.5-89-142.5-.5-30.5 7-60.5 18.5-86.5-30.5 8.5-67 29.5-80.5 67-15 41.5-9.5 54-9.5 54s-26.5 1-35.5-22.5c-5.5-14-3.5-29-3.5-29s-4.5-75.5 48.5-138c41.5-49 112.5-118 112.5-118zm320.5 107c0 0-33-8-47.5 34.5-20.5 60.5 5 137.5 5 137.5s38-16 57.5-65.5c15-38.5-15-106.5-15-106.5z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs text-gray-400 group-hover:text-white transition-colors">小红书</span>
-                      </button>
-
-                      {/* 百度贴吧 - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://tieba.baidu.com', '_blank')}>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#4A90E2' }}>
-                          <svg className="w-10 h-10" viewBox="0 0 1024 1024" fill="white">
-                            <path d="M497.6 150.4c-97.6 0-185.6 30.4-230.4 75.2v25.6h52.8c115.2 0 166.4 56 166.4 121.6 0 54.4-44.8 113.6-136 123.2-12.8 1.6-14.4 3.2-14.4 4.8 0 1.6 3.2 4.8 9.6 4.8 24 0 76.8 0 108.8 3.2 44.8 4.8 73.6 20.8 91.2 51.2 12.8 22.4 17.6 51.2 16 86.4h112v-104c0-22.4 17.6-40 40-40h96V193.6c-67.2-27.2-184-43.2-312-43.2zM216 289.6V560h80c75.2 0 120 28.8 120 73.6 0 19.2-9.6 35.2-40 56-27.2 19.2-80 30.4-150.4 30.4H176C78.4 720 0 641.6 0 544V292.8c30.4-14.4 76.8-24 128-24 35.2 0 65.6 3.2 88 20.8z m564.8 0V464h206.4c19.2-25.6 33.6-59.2 33.6-100.8 0-41.6-9.6-76.8-28.8-100.8-27.2-36.8-84.8-59.2-156.8-59.2-19.2 0-36.8 1.6-54.4 4.8V289.6z m-126.4 73.6v96h62.4c65.6 0 104-32 104-81.6 0-33.6-20.8-57.6-67.2-57.6h-59.2c-22.4 0-40 19.2-40 43.2z m206.4 196.8h-72v160h176c12.8 0 25.6-3.2 36.8-8-1.6-38.4-12.8-67.2-32-88-25.6-27.2-64-46.4-108.8-64z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs text-gray-400 group-hover:text-white transition-colors">贴吧</span>
-                      </button>
-
-                      {/* Obsidian - 官方图标 */}
-                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://obsidian.md', '_blank')}>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#7C3AED' }}>
-                          <svg className="w-9 h-9" viewBox="0 0 500 500" fill="white">
-                            <path d="M 218.667 0 C 218.667 0 167.318 64.922 138.646 117.812 C 109.974 170.703 68.646 226.042 35.833 286.979 C 2.99 347.917 0.005 353.125 0.005 353.125 L 75.005 470.833 L 138.026 500 L 297.385 464.583 L 386.411 381.25 L 366.667 186.458 L 294.021 78.646 L 218.667 0 Z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs text-gray-400 group-hover:text-white transition-colors">Obsidian</span>
-                      </button>
-
-                      {/* LinuxDo - Linux Penguin 图标 */}
-                      <button className="flex flex-col items-center gap-2 group" onClick={() => window.open('https://linux.do', '_blank')}>
-                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform" style={{ backgroundColor: '#F1592A' }}>
-                          <svg className="w-10 h-10" viewBox="0 0 24 24" fill="white">
-                            <path d="M12 0c-4.97 0-9 4.03-9 9 0 2.27.85 4.34 2.25 5.92-.48 2.05-1.57 3.55-3.08 4.35 1.48 2.12 4.19 3.73 7.82 3.73s6.34-1.61 7.82-3.73c-1.51-.8-2.6-2.3-3.08-4.35C19.15 13.34 20 11.27 20 9c0-4.97-4.03-9-9-9zM7.5 7c.83 0 1.5.67 1.5 1.5S8.33 10 7.5 10 6 9.33 6 8.5 6.67 7 7.5 7zm9 0c.83 0 1.5.67 1.5 1.5s-.67 1.5-1.5 1.5-1.5-.67-1.5-1.5.67-1.5 1.5-1.5z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs text-gray-400 group-hover:text-white transition-colors">LinuxDo</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <style>{`
+                    <style>{`
               @keyframes scaleIn {
                 from { transform: scale(0.9); opacity: 0; }
                 to { transform: scale(1); opacity: 1; }
               }
             `}</style>
-                </div>,
-                document.body
-              )}
+                  </div>,
+                  document.body
+                )
+              }
 
               {/* 视频内容 */}
-              {(activeTab === 'home' || activeTab === 'watchLater') && (
-                <>
-                  {/* 搜索结果提示 */}
-                  {searchTerm && (
-                    <div className="mb-4 flex items-center justify-between">
-                      <p className="text-sm text-gray-400">
-                        {activeTab === 'watchLater' ? '待看列表中' : ''}搜索 "<span className="text-cyber-lime">{searchTerm}</span>"
-                        <span className="ml-1">找到 <span className="text-white font-medium">{filteredVideos.length}</span> 个结果</span>
-                      </p>
-                      <button
-                        onClick={() => setSearchTerm('')}
-                        className="text-xs text-gray-500 hover:text-white transition-colors"
-                      >
-                        清除搜索
-                      </button>
-                    </div>
-                  )}
+              {
+                (activeTab === 'home' || activeTab === 'watchLater') && (
+                  <>
+                    {/* 搜索结果提示 */}
+                    {searchTerm && (
+                      <div className="mb-4 flex items-center justify-between">
+                        <p className="text-sm text-gray-400">
+                          {activeTab === 'watchLater' ? '待看列表中' : ''}搜索 "<span className="text-cyber-lime">{searchTerm}</span>"
+                          <span className="ml-1">找到 <span className="text-white font-medium">{filteredVideos.length}</span> 个结果</span>
+                        </p>
+                        <button
+                          onClick={() => setSearchTerm('')}
+                          className="text-xs text-gray-500 hover:text-white transition-colors"
+                        >
+                          清除搜索
+                        </button>
+                      </div>
+                    )}
 
-                  {/* PC端：轮播图和快捷入口左右排布 */}
-                  {activeTab === 'home' && !searchTerm && (
-                    <div className="flex flex-col lg:flex-row lg:gap-6 mb-6">
-                      {/* 热门轮播图 - PC端占 70% */}
-                      {activeFilter === 'all' && videos.length > 0 && (
-                        <div className="lg:w-[70%] lg:shrink-0">
-                          <HotCarousel videos={hotVideos} />
-                        </div>
-                      )}
+                    {/* PC端：轮播图和快捷入口左右排布 */}
+                    {activeTab === 'home' && !searchTerm && (
+                      <div className="flex flex-col lg:flex-row lg:gap-6 mb-6">
+                        {/* 热门轮播图 - PC端占 70% */}
+                        {activeFilter === 'all' && videos.length > 0 && (
+                          <div className="lg:w-[70%] lg:shrink-0">
+                            <HotCarousel videos={hotVideos} />
+                          </div>
+                        )}
 
-                      {/* 快捷入口 - PC端占 30%，网格布局 */}
-                      <div className="mt-4 lg:mt-0 lg:flex-1">
-                        {/* 标题 - 仅PC端显示，用于对齐 */}
-                        <div className="hidden lg:flex items-center gap-2 mb-3">
-                          <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <rect x="3" y="3" width="7" height="7" rx="1" />
-                            <rect x="14" y="3" width="7" height="7" rx="1" />
-                            <rect x="3" y="14" width="7" height="7" rx="1" />
-                            <rect x="14" y="14" width="7" height="7" rx="1" />
-                          </svg>
-                          <span className="text-sm font-semibold text-white">快捷访问</span>
-                        </div>
-
-                        <div className="flex justify-center gap-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start">
-                          {/* 收藏夹 */}
-                          <button
-                            onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('collector'); setActiveTab('settings'); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1a1c20] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#252830] transition-all active:scale-[0.98]"
-                          >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-                            </svg>
-                            <span className="hidden lg:block text-sm text-cyan-400 font-medium">收藏</span>
-                            {collectedCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-cyan-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
-                                {collectedCount > 99 ? '99+' : collectedCount}
-                              </span>
-                            )}
-                          </button>
-
-                          {/* 提醒 */}
-                          <button
-                            onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('reminder'); setActiveTab('settings'); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1f1b16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#2a241c] transition-all active:scale-[0.98]"
-                          >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <circle cx="12" cy="12" r="10" />
-                              <polyline points="12 6 12 12 16 14" />
-                            </svg>
-                            <span className="hidden lg:block text-sm text-amber-400 font-medium">提醒</span>
-                            {reminderCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-amber-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
-                                {reminderCount > 99 ? '99+' : reminderCount}
-                              </span>
-                            )}
-                          </button>
-
-                          {/* TODO */}
-                          <button
-                            onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('todo'); setActiveTab('settings'); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a22] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e232e] transition-all active:scale-[0.98]"
-                          >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M9 11l3 3L22 4" />
-                              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-                            </svg>
-                            <span className="hidden lg:block text-sm text-blue-400 font-medium">待办</span>
-                            {todoCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-blue-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
-                                {todoCount > 99 ? '99+' : todoCount}
-                              </span>
-                            )}
-                          </button>
-
-                          {/* 笔记 */}
-                          <button
-                            onClick={() => { subPageSourceRef.current = 'home'; setIsNotesOpen(true); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1d161d] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#271e27] transition-all active:scale-[0.98]"
-                            title="笔记"
-                          >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                              <polyline points="14 2 14 8 20 8" />
-                              <line x1="16" y1="13" x2="8" y2="13" />
-                              <line x1="16" y1="17" x2="8" y2="17" />
-                            </svg>
-                            <span className="hidden lg:block text-sm text-purple-300 font-medium">笔记</span>
-                            {notesCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-purple-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
-                                {notesCount > 99 ? '99+' : notesCount}
-                              </span>
-                            )}
-                          </button>
-
-                          {/* 音频转写 */}
-                          <button
-                            onClick={() => {
-                              subPageSourceRef.current = 'home';
-                              setSettingsInitialView('transcriber');
-                              setActiveTab('settings');
-                            }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#191621] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#211e2b] transition-all active:scale-[0.98]"
-                            title="音频转写"
-                          >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                              <line x1="12" y1="19" x2="12" y2="23" />
-                              <line x1="8" y1="23" x2="16" y2="23" />
-                            </svg>
-                            <span className="hidden lg:block text-sm text-violet-400 font-medium">转写</span>
-                          </button>
-
-                          {/* 应用 */}
-                          <button
-                            onClick={() => setIsAppsModalOpen(true)}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e231e] transition-all active:scale-[0.98]"
-                            title="应用"
-                          >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        {/* 快捷入口 - PC端占 30%，网格布局 */}
+                        <div className="mt-4 lg:mt-0 lg:flex-1">
+                          {/* 标题 - 仅PC端显示，用于对齐 */}
+                          <div className="hidden lg:flex items-center gap-2 mb-3">
+                            <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                               <rect x="3" y="3" width="7" height="7" rx="1" />
                               <rect x="14" y="3" width="7" height="7" rx="1" />
                               <rect x="3" y="14" width="7" height="7" rx="1" />
                               <rect x="14" y="14" width="7" height="7" rx="1" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-cyber-lime font-medium">应用</span>
-                          </button>
+                            <span className="text-sm font-semibold text-white">快捷访问</span>
+                          </div>
+
+                          <div className="flex justify-center gap-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start">
+                            {/* 收藏夹 */}
+                            <button
+                              onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('collector'); setActiveTab('settings'); }}
+                              className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1a1c20] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#252830] transition-all active:scale-[0.98]"
+                            >
+                              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+                              </svg>
+                              <span className="hidden lg:block text-sm text-cyan-400 font-medium">收藏</span>
+                              {collectedCount > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-cyan-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                  {collectedCount > 99 ? '99+' : collectedCount}
+                                </span>
+                              )}
+                            </button>
+
+                            {/* 提醒 */}
+                            <button
+                              onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('reminder'); setActiveTab('settings'); }}
+                              className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1f1b16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#2a241c] transition-all active:scale-[0.98]"
+                            >
+                              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              <span className="hidden lg:block text-sm text-amber-400 font-medium">提醒</span>
+                              {reminderCount > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-amber-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                  {reminderCount > 99 ? '99+' : reminderCount}
+                                </span>
+                              )}
+                            </button>
+
+                            {/* TODO */}
+                            <button
+                              onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('todo'); setActiveTab('settings'); }}
+                              className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a22] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e232e] transition-all active:scale-[0.98]"
+                            >
+                              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M9 11l3 3L22 4" />
+                                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                              </svg>
+                              <span className="hidden lg:block text-sm text-blue-400 font-medium">待办</span>
+                              {todoCount > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-blue-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                  {todoCount > 99 ? '99+' : todoCount}
+                                </span>
+                              )}
+                            </button>
+
+                            {/* 笔记 */}
+                            <button
+                              onClick={() => { subPageSourceRef.current = 'home'; setIsNotesOpen(true); }}
+                              className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1d161d] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#271e27] transition-all active:scale-[0.98]"
+                              title="笔记"
+                            >
+                              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                              </svg>
+                              <span className="hidden lg:block text-sm text-purple-300 font-medium">笔记</span>
+                              {notesCount > 0 && (
+                                <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-purple-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                  {notesCount > 99 ? '99+' : notesCount}
+                                </span>
+                              )}
+                            </button>
+
+                            {/* 音频转写 */}
+                            <button
+                              onClick={() => {
+                                subPageSourceRef.current = 'home';
+                                setSettingsInitialView('transcriber');
+                                setActiveTab('settings');
+                              }}
+                              className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#191621] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#211e2b] transition-all active:scale-[0.98]"
+                              title="音频转写"
+                            >
+                              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                                <line x1="12" y1="19" x2="12" y2="23" />
+                                <line x1="8" y1="23" x2="16" y2="23" />
+                              </svg>
+                              <span className="hidden lg:block text-sm text-violet-400 font-medium">转写</span>
+                            </button>
+
+                            {/* 应用 */}
+                            <button
+                              onClick={() => setIsAppsModalOpen(true)}
+                              className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e231e] transition-all active:scale-[0.98]"
+                              title="应用"
+                            >
+                              <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <rect x="3" y="3" width="7" height="7" rx="1" />
+                                <rect x="14" y="3" width="7" height="7" rx="1" />
+                                <rect x="3" y="14" width="7" height="7" rx="1" />
+                                <rect x="14" y="14" width="7" height="7" rx="1" />
+                              </svg>
+                              <span className="hidden lg:block text-sm text-cyber-lime font-medium">应用</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    {/* 区块标题 */}
-                    <h2 className="text-sm font-medium text-gray-400 flex items-center gap-2 mb-3">
-                      <div className="w-1.5 h-1.5 bg-cyber-lime rounded-full" />
-                      <span>{activeTab === 'watchLater' ? '待看列表' : '最新视频'}</span>
-                      {!loading && (
-                        <span className="text-cyber-lime text-xs">{filteredVideos.length}</span>
-                      )}
-                    </h2>
-
-                    {/* 加载状态 - 仅在已登录时显示 */}
-                    {loading && currentUser && <Loader text="正在加载视频..." />}
-
-                    {/* 错误提示 */}
-                    {error && (
-                      <div className="text-center py-10 text-red-400">
-                        <p>加载失败: {error}</p>
-                        <button onClick={fetchVideos} className="mt-2 text-cyber-lime underline">重试</button>
                       </div>
                     )}
 
-                    {/* 未登录CTA - 精美的登录提示 (仅在无视频缓存时显示) */}
-                    {!loading && !currentUser && videos.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-20 px-6">
-                        {/* 动画背景 */}
-                        <div className="relative w-full max-w-sm">
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-64 h-64 rounded-full bg-gradient-to-br from-cyber-lime/20 to-cyan-500/10 blur-3xl animate-pulse"></div>
-                          </div>
+                    <div className="space-y-3">
+                      {/* 区块标题 */}
+                      <h2 className="text-sm font-medium text-gray-400 flex items-center gap-2 mb-3">
+                        <div className="w-1.5 h-1.5 bg-cyber-lime rounded-full" />
+                        <span>{activeTab === 'watchLater' ? '待看列表' : '最新视频'}</span>
+                        {!loading && (
+                          <span className="text-cyber-lime text-xs">{filteredVideos.length}</span>
+                        )}
+                      </h2>
 
-                          {/* 主要插画 */}
-                          <div className="relative z-10 mb-8">
-                            <svg viewBox="0 0 200 150" className="w-full h-48">
-                              {/* 视频播放器框架 */}
-                              <rect x="30" y="25" width="140" height="90" rx="12"
-                                fill="none" stroke="url(#loginGrad)" strokeWidth="2" opacity="0.6">
-                                <animate attributeName="opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite" />
-                              </rect>
+                      {/* 加载状态 - 仅在已登录时显示 */}
+                      {loading && currentUser && <Loader text="正在加载视频..." />}
+
+                      {/* 错误提示 */}
+                      {error && (
+                        <div className="text-center py-10 text-red-400">
+                          <p>加载失败: {error}</p>
+                          <button onClick={fetchVideos} className="mt-2 text-cyber-lime underline">重试</button>
+                        </div>
+                      )}
+
+                      {/* 未登录CTA - 精美的登录提示 (仅在无视频缓存时显示) */}
+                      {!loading && !currentUser && videos.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-20 px-6">
+                          {/* 动画背景 */}
+                          <div className="relative w-full max-w-sm">
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-64 h-64 rounded-full bg-gradient-to-br from-cyber-lime/20 to-cyan-500/10 blur-3xl animate-pulse"></div>
+                            </div>
+
+                            {/* 主要插画 */}
+                            <div className="relative z-10 mb-8">
+                              <svg viewBox="0 0 200 150" className="w-full h-48">
+                                {/* 视频播放器框架 */}
+                                <rect x="30" y="25" width="140" height="90" rx="12"
+                                  fill="none" stroke="url(#loginGrad)" strokeWidth="2" opacity="0.6">
+                                  <animate attributeName="opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite" />
+                                </rect>
+
+                                {/* 播放按钮 */}
+                                <circle cx="100" cy="70" r="25" fill="none" stroke="#a3e635" strokeWidth="2.5" opacity="0.5" />
+                                <polygon points="92,60 92,80 112,70" fill="#a3e635" opacity="0.7">
+                                  <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite" />
+                                </polygon>
+
+                                {/* 用户图标 */}
+                                <circle cx="100" cy="120" r="15" fill="none" stroke="#22d3ee" strokeWidth="2" opacity="0.4" />
+                                <path d="M100 115 Q100 110, 105 110 Q110 110, 110 115" stroke="#22d3ee" strokeWidth="2" fill="none" opacity="0.4" />
+                                <circle cx="100" cy="108" r="3" fill="#22d3ee" opacity="0.4" />
+
+                                {/* 浮动装饰 */}
+                                <circle cx="50" cy="50" r="4" fill="#a3e635" opacity="0.5">
+                                  <animate attributeName="cy" values="50;45;50" dur="2s" repeatCount="indefinite" />
+                                </circle>
+                                <circle cx="150" cy="60" r="5" fill="#22d3ee" opacity="0.4">
+                                  <animate attributeName="cy" values="60;55;60" dur="2.5s" repeatCount="indefinite" />
+                                </circle>
+                                <rect x="160" y="90" width="8" height="8" rx="2" fill="#f472b6" opacity="0.3">
+                                  <animate attributeName="y" values="90;85;90" dur="2s" repeatCount="indefinite" />
+                                </rect>
+
+                                <defs>
+                                  <linearGradient id="loginGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" stopColor="#a3e635" />
+                                    <stop offset="100%" stopColor="#22d3ee" />
+                                  </linearGradient>
+                                </defs>
+                              </svg>
+                            </div>
+
+                            {/* 文字内容 */}
+                            <div className="relative z-10 text-center">
+                              <h3 className="text-2xl font-bold text-white mb-3 bg-gradient-to-r from-cyber-lime via-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                                开始你的视频之旅
+                              </h3>
+                              <p className="text-gray-400 text-sm mb-8 leading-relaxed max-w-xs mx-auto">
+                                登录后可以同步追踪你喜欢的 UP主，
+                                <br />
+                                永不错过精彩内容
+                              </p>
+
+                              {/* CTA按钮 */}
+                              <button
+                                onClick={() => setAuthExpired(true)}
+                                className="group relative px-8 py-4 bg-gradient-to-r from-cyber-lime via-lime-400 to-cyan-400 rounded-2xl font-bold text-black
+                                   shadow-[0_0_40px_rgba(163,230,53,0.5)] hover:shadow-[0_0_60px_rgba(163,230,53,0.7)]
+                                   transition-all duration-300 hover:scale-105 active:scale-100
+                                   overflow-hidden"
+                              >
+                                {/* 按钮内发光动画 */}
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent
+                                      translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
+
+                                <span className="relative flex items-center gap-2 text-base">
+                                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                                    <polyline points="10 17 15 12 10 7" />
+                                    <line x1="15" y1="12" x2="3" y2="12" />
+                                  </svg>
+                                  立即登录
+                                </span>
+                              </button>
+
+                              {/* 特性列表 */}
+                              <div className="mt-8 flex items-center justify-center gap-6 text-xs text-gray-500">
+                                <div className="flex items-center gap-1.5">
+                                  <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                                    <polyline points="22 4 12 14.01 9 11.01" />
+                                  </svg>
+                                  <span>云端同步</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <svg className="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                                  </svg>
+                                  <span>完全免费</span>
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <svg className="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                  </svg>
+                                  <span>安全可靠</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 空状态提示 - 已登录但无视频数据 */}
+                      {!loading && !error && currentUser && videos.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-16 px-6">
+                          {/* 插画 SVG */}
+                          <div className="relative w-64 h-48 mb-8">
+                            {/* 背景装饰圆 */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-40 h-40 rounded-full bg-gradient-to-br from-cyber-lime/10 to-cyan-500/10 blur-2xl"></div>
+                            </div>
+
+                            {/* 主体插画 */}
+                            <svg viewBox="0 0 200 150" className="w-full h-full relative z-10">
+                              {/* 视频播放器外框 */}
+                              <rect x="40" y="30" width="120" height="80" rx="8"
+                                fill="none" stroke="url(#emptyGrad)" strokeWidth="2" opacity="0.6" />
 
                               {/* 播放按钮 */}
-                              <circle cx="100" cy="70" r="25" fill="none" stroke="#a3e635" strokeWidth="2.5" opacity="0.5" />
-                              <polygon points="92,60 92,80 112,70" fill="#a3e635" opacity="0.7">
-                                <animate attributeName="opacity" values="0.7;1;0.7" dur="2s" repeatCount="indefinite" />
-                              </polygon>
+                              <circle cx="100" cy="70" r="20" fill="none" stroke="#a3e635" strokeWidth="2" opacity="0.4" />
+                              <polygon points="95,62 95,78 108,70" fill="#a3e635" opacity="0.6" />
 
-                              {/* 用户图标 */}
-                              <circle cx="100" cy="120" r="15" fill="none" stroke="#22d3ee" strokeWidth="2" opacity="0.4" />
-                              <path d="M100 115 Q100 110, 105 110 Q110 110, 110 115" stroke="#22d3ee" strokeWidth="2" fill="none" opacity="0.4" />
-                              <circle cx="100" cy="108" r="3" fill="#22d3ee" opacity="0.4" />
+                              {/* 装饰线条 */}
+                              <line x1="50" y1="120" x2="150" y2="120" stroke="#374151" strokeWidth="2" strokeDasharray="8 4" />
 
-                              {/* 浮动装饰 */}
-                              <circle cx="50" cy="50" r="4" fill="#a3e635" opacity="0.5">
-                                <animate attributeName="cy" values="50;45;50" dur="2s" repeatCount="indefinite" />
-                              </circle>
-                              <circle cx="150" cy="60" r="5" fill="#22d3ee" opacity="0.4">
-                                <animate attributeName="cy" values="60;55;60" dur="2.5s" repeatCount="indefinite" />
-                              </circle>
-                              <rect x="160" y="90" width="8" height="8" rx="2" fill="#f472b6" opacity="0.3">
-                                <animate attributeName="y" values="90;85;90" dur="2s" repeatCount="indefinite" />
+                              {/* 浮动的小方块 */}
+                              <rect x="25" y="50" width="12" height="12" rx="2" fill="#22d3ee" opacity="0.3">
+                                <animate attributeName="y" values="50;45;50" dur="3s" repeatCount="indefinite" />
                               </rect>
+                              <rect x="165" y="60" width="10" height="10" rx="2" fill="#a3e635" opacity="0.4">
+                                <animate attributeName="y" values="60;55;60" dur="2.5s" repeatCount="indefinite" />
+                              </rect>
+                              <circle cx="30" cy="90" r="5" fill="#f472b6" opacity="0.3">
+                                <animate attributeName="cy" values="90;85;90" dur="2s" repeatCount="indefinite" />
+                              </circle>
 
+                              {/* 渐变定义 */}
                               <defs>
-                                <linearGradient id="loginGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <linearGradient id="emptyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                                   <stop offset="0%" stopColor="#a3e635" />
                                   <stop offset="100%" stopColor="#22d3ee" />
                                 </linearGradient>
@@ -1522,307 +1509,200 @@ const App = () => {
                           </div>
 
                           {/* 文字内容 */}
-                          <div className="relative z-10 text-center">
-                            <h3 className="text-2xl font-bold text-white mb-3 bg-gradient-to-r from-cyber-lime via-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                              开始你的视频之旅
-                            </h3>
-                            <p className="text-gray-400 text-sm mb-8 leading-relaxed max-w-xs mx-auto">
-                              登录后可以同步追踪你喜欢的 UP主，
-                              <br />
-                              永不错过精彩内容
-                            </p>
+                          <h3 className="text-xl font-bold text-white mb-2">开始你的视频之旅</h3>
+                          <p className="text-gray-400 text-sm mb-6 text-center max-w-xs">
+                            添加你喜欢的 UP主，我们会帮你追踪他们的最新更新
+                          </p>
 
-                            {/* CTA按钮 */}
-                            <button
-                              onClick={() => setAuthExpired(true)}
-                              className="group relative px-8 py-4 bg-gradient-to-r from-cyber-lime via-lime-400 to-cyan-400 rounded-2xl font-bold text-black
-                                   shadow-[0_0_40px_rgba(163,230,53,0.5)] hover:shadow-[0_0_60px_rgba(163,230,53,0.7)]
-                                   transition-all duration-300 hover:scale-105 active:scale-100
-                                   overflow-hidden"
-                            >
-                              {/* 按钮内发光动画 */}
-                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent
-                                      translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
 
-                              <span className="relative flex items-center gap-2 text-base">
-                                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                                  <polyline points="10 17 15 12 10 7" />
-                                  <line x1="15" y1="12" x2="3" y2="12" />
-                                </svg>
-                                立即登录
-                              </span>
-                            </button>
 
-                            {/* 特性列表 */}
-                            <div className="mt-8 flex items-center justify-center gap-6 text-xs text-gray-500">
-                              <div className="flex items-center gap-1.5">
-                                <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                                  <polyline points="22 4 12 14.01 9 11.01" />
-                                </svg>
-                                <span>云端同步</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <svg className="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                                </svg>
-                                <span>完全免费</span>
-                              </div>
-                              <div className="flex items-center gap-1.5">
-                                <svg className="w-4 h-4 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                </svg>
-                                <span>安全可靠</span>
-                              </div>
+                        </div>
+                      )}
+
+                      {/* 筛选后无结果 / 待看列表为空 */}
+                      {!loading && !error && videos.length > 0 && filteredVideos.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-16 px-6">
+                          {/* 动态插画 */}
+                          <div className="relative w-72 h-56 mb-6">
+                            {/* 背景光晕 */}
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <div className="w-48 h-48 rounded-full bg-gradient-to-br from-cyber-lime/10 to-cyan-500/5 blur-3xl animate-pulse"></div>
                             </div>
+
+                            <svg viewBox="0 0 280 220" className="w-full h-full relative z-10">
+                              <defs>
+                                <linearGradient id="emptyGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+                                  <stop offset="0%" stopColor="#a3e635" />
+                                  <stop offset="100%" stopColor="#22d3ee" />
+                                </linearGradient>
+                                <filter id="glow2">
+                                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                                  <feMerge>
+                                    <feMergeNode in="coloredBlur" />
+                                    <feMergeNode in="SourceGraphic" />
+                                  </feMerge>
+                                </filter>
+                              </defs>
+
+                              {activeTab === 'watchLater' ? (
+                                <>
+                                  {/* 待看列表空状态 - 时钟主题 */}
+                                  <circle cx="140" cy="100" r="50" fill="none" stroke="url(#emptyGrad2)" strokeWidth="3" opacity="0.6" />
+                                  <circle cx="140" cy="100" r="42" fill="none" stroke="#374151" strokeWidth="1" strokeDasharray="4 4" />
+
+                                  {/* 时钟指针 */}
+                                  <line x1="140" y1="100" x2="140" y2="70" stroke="#a3e635" strokeWidth="3" strokeLinecap="round" filter="url(#glow2)">
+                                    <animateTransform attributeName="transform" type="rotate" from="0 140 100" to="360 140 100" dur="10s" repeatCount="indefinite" />
+                                  </line>
+                                  <line x1="140" y1="100" x2="160" y2="100" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round">
+                                    <animateTransform attributeName="transform" type="rotate" from="0 140 100" to="360 140 100" dur="60s" repeatCount="indefinite" />
+                                  </line>
+                                  <circle cx="140" cy="100" r="5" fill="#a3e635" filter="url(#glow2)" />
+
+                                  {/* 书签装饰 */}
+                                  <path d="M200 60 L200 100 L215 85 L230 100 L230 60 Z" fill="none" stroke="#a3e635" strokeWidth="2" opacity="0.4">
+                                    <animate attributeName="opacity" values="0.4;0.8;0.4" dur="2s" repeatCount="indefinite" />
+                                  </path>
+
+                                  {/* 浮动元素 */}
+                                  <rect x="60" y="70" width="16" height="16" rx="4" fill="#22d3ee" opacity="0.3">
+                                    <animate attributeName="y" values="70;60;70" dur="3s" repeatCount="indefinite" />
+                                  </rect>
+                                  <circle cx="80" cy="140" r="6" fill="#f472b6" opacity="0.25">
+                                    <animate attributeName="cy" values="140;130;140" dur="2.5s" repeatCount="indefinite" />
+                                  </circle>
+                                  <rect x="210" y="130" width="12" height="12" rx="2" fill="#a3e635" opacity="0.35">
+                                    <animate attributeName="y" values="130;120;130" dur="2s" repeatCount="indefinite" />
+                                  </rect>
+                                </>
+                              ) : (
+                                <>
+                                  {/* 搜索无结果 - 放大镜主题 */}
+                                  <circle cx="130" cy="90" r="40" fill="none" stroke="url(#emptyGrad2)" strokeWidth="3" opacity="0.6" />
+                                  <line x1="158" y1="118" x2="190" y2="150" stroke="url(#emptyGrad2)" strokeWidth="4" strokeLinecap="round" />
+
+                                  {/* 问号 */}
+                                  <text x="130" y="100" textAnchor="middle" fill="#a3e635" fontSize="32" fontWeight="bold" opacity="0.6">?</text>
+
+                                  {/* 浮动元素 */}
+                                  <rect x="70" y="50" width="14" height="14" rx="3" fill="#22d3ee" opacity="0.3">
+                                    <animate attributeName="y" values="50;40;50" dur="2.5s" repeatCount="indefinite" />
+                                  </rect>
+                                  <circle cx="200" cy="70" r="8" fill="#f472b6" opacity="0.25">
+                                    <animate attributeName="cy" values="70;60;70" dur="3s" repeatCount="indefinite" />
+                                  </circle>
+                                  <rect x="180" y="140" width="10" height="10" rx="2" fill="#a3e635" opacity="0.35">
+                                    <animate attributeName="y" values="140;130;140" dur="2s" repeatCount="indefinite" />
+                                  </rect>
+                                </>
+                              )}
+
+                              {/* 底部装饰线 */}
+                              <line x1="80" y1="190" x2="200" y2="190" stroke="#374151" strokeWidth="2" strokeDasharray="8 4" opacity="0.5" />
+                              <circle cx="90" cy="190" r="3" fill="#a3e635" opacity="0.6" />
+                              <circle cx="190" cy="190" r="3" fill="#22d3ee" opacity="0.6" />
+                            </svg>
                           </div>
-                        </div>
-                      </div>
-                    )}
 
-                    {/* 空状态提示 - 已登录但无视频数据 */}
-                    {!loading && !error && currentUser && videos.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-16 px-6">
-                        {/* 插画 SVG */}
-                        <div className="relative w-64 h-48 mb-8">
-                          {/* 背景装饰圆 */}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-40 h-40 rounded-full bg-gradient-to-br from-cyber-lime/10 to-cyan-500/10 blur-2xl"></div>
-                          </div>
+                          {/* 文字内容 */}
+                          <h3 className="text-xl font-bold text-white mb-2">
+                            {activeTab === 'watchLater'
+                              ? '暂无待看视频'
+                              : searchTerm
+                                ? '没有找到相关视频'
+                                : '当前筛选无结果'}
+                          </h3>
+                          <p className="text-gray-400 text-sm mb-6 text-center max-w-xs leading-relaxed">
+                            {activeTab === 'watchLater'
+                              ? '长按视频卡片可以快速添加到待看列表，开始收藏你感兴趣的内容吧'
+                              : searchTerm
+                                ? `未找到与"${searchTerm}"相关的视频，试试其他关键词`
+                                : '调整筛选条件或切换时间范围查看更多'}
+                          </p>
 
-                          {/* 主体插画 */}
-                          <svg viewBox="0 0 200 150" className="w-full h-full relative z-10">
-                            {/* 视频播放器外框 */}
-                            <rect x="40" y="30" width="120" height="80" rx="8"
-                              fill="none" stroke="url(#emptyGrad)" strokeWidth="2" opacity="0.6" />
-
-                            {/* 播放按钮 */}
-                            <circle cx="100" cy="70" r="20" fill="none" stroke="#a3e635" strokeWidth="2" opacity="0.4" />
-                            <polygon points="95,62 95,78 108,70" fill="#a3e635" opacity="0.6" />
-
-                            {/* 装饰线条 */}
-                            <line x1="50" y1="120" x2="150" y2="120" stroke="#374151" strokeWidth="2" strokeDasharray="8 4" />
-
-                            {/* 浮动的小方块 */}
-                            <rect x="25" y="50" width="12" height="12" rx="2" fill="#22d3ee" opacity="0.3">
-                              <animate attributeName="y" values="50;45;50" dur="3s" repeatCount="indefinite" />
-                            </rect>
-                            <rect x="165" y="60" width="10" height="10" rx="2" fill="#a3e635" opacity="0.4">
-                              <animate attributeName="y" values="60;55;60" dur="2.5s" repeatCount="indefinite" />
-                            </rect>
-                            <circle cx="30" cy="90" r="5" fill="#f472b6" opacity="0.3">
-                              <animate attributeName="cy" values="90;85;90" dur="2s" repeatCount="indefinite" />
-                            </circle>
-
-                            {/* 渐变定义 */}
-                            <defs>
-                              <linearGradient id="emptyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stopColor="#a3e635" />
-                                <stop offset="100%" stopColor="#22d3ee" />
-                              </linearGradient>
-                            </defs>
-                          </svg>
-                        </div>
-
-                        {/* 文字内容 */}
-                        <h3 className="text-xl font-bold text-white mb-2">开始你的视频之旅</h3>
-                        <p className="text-gray-400 text-sm mb-6 text-center max-w-xs">
-                          添加你喜欢的 UP主，我们会帮你追踪他们的最新更新
-                        </p>
-
-
-
-                      </div>
-                    )}
-
-                    {/* 筛选后无结果 / 待看列表为空 */}
-                    {!loading && !error && videos.length > 0 && filteredVideos.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-16 px-6">
-                        {/* 动态插画 */}
-                        <div className="relative w-72 h-56 mb-6">
-                          {/* 背景光晕 */}
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="w-48 h-48 rounded-full bg-gradient-to-br from-cyber-lime/10 to-cyan-500/5 blur-3xl animate-pulse"></div>
-                          </div>
-
-                          <svg viewBox="0 0 280 220" className="w-full h-full relative z-10">
-                            <defs>
-                              <linearGradient id="emptyGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stopColor="#a3e635" />
-                                <stop offset="100%" stopColor="#22d3ee" />
-                              </linearGradient>
-                              <filter id="glow2">
-                                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                                <feMerge>
-                                  <feMergeNode in="coloredBlur" />
-                                  <feMergeNode in="SourceGraphic" />
-                                </feMerge>
-                              </filter>
-                            </defs>
-
-                            {activeTab === 'watchLater' ? (
-                              <>
-                                {/* 待看列表空状态 - 时钟主题 */}
-                                <circle cx="140" cy="100" r="50" fill="none" stroke="url(#emptyGrad2)" strokeWidth="3" opacity="0.6" />
-                                <circle cx="140" cy="100" r="42" fill="none" stroke="#374151" strokeWidth="1" strokeDasharray="4 4" />
-
-                                {/* 时钟指针 */}
-                                <line x1="140" y1="100" x2="140" y2="70" stroke="#a3e635" strokeWidth="3" strokeLinecap="round" filter="url(#glow2)">
-                                  <animateTransform attributeName="transform" type="rotate" from="0 140 100" to="360 140 100" dur="10s" repeatCount="indefinite" />
-                                </line>
-                                <line x1="140" y1="100" x2="160" y2="100" stroke="#22d3ee" strokeWidth="2" strokeLinecap="round">
-                                  <animateTransform attributeName="transform" type="rotate" from="0 140 100" to="360 140 100" dur="60s" repeatCount="indefinite" />
-                                </line>
-                                <circle cx="140" cy="100" r="5" fill="#a3e635" filter="url(#glow2)" />
-
-                                {/* 书签装饰 */}
-                                <path d="M200 60 L200 100 L215 85 L230 100 L230 60 Z" fill="none" stroke="#a3e635" strokeWidth="2" opacity="0.4">
-                                  <animate attributeName="opacity" values="0.4;0.8;0.4" dur="2s" repeatCount="indefinite" />
-                                </path>
-
-                                {/* 浮动元素 */}
-                                <rect x="60" y="70" width="16" height="16" rx="4" fill="#22d3ee" opacity="0.3">
-                                  <animate attributeName="y" values="70;60;70" dur="3s" repeatCount="indefinite" />
-                                </rect>
-                                <circle cx="80" cy="140" r="6" fill="#f472b6" opacity="0.25">
-                                  <animate attributeName="cy" values="140;130;140" dur="2.5s" repeatCount="indefinite" />
-                                </circle>
-                                <rect x="210" y="130" width="12" height="12" rx="2" fill="#a3e635" opacity="0.35">
-                                  <animate attributeName="y" values="130;120;130" dur="2s" repeatCount="indefinite" />
-                                </rect>
-                              </>
-                            ) : (
-                              <>
-                                {/* 搜索无结果 - 放大镜主题 */}
-                                <circle cx="130" cy="90" r="40" fill="none" stroke="url(#emptyGrad2)" strokeWidth="3" opacity="0.6" />
-                                <line x1="158" y1="118" x2="190" y2="150" stroke="url(#emptyGrad2)" strokeWidth="4" strokeLinecap="round" />
-
-                                {/* 问号 */}
-                                <text x="130" y="100" textAnchor="middle" fill="#a3e635" fontSize="32" fontWeight="bold" opacity="0.6">?</text>
-
-                                {/* 浮动元素 */}
-                                <rect x="70" y="50" width="14" height="14" rx="3" fill="#22d3ee" opacity="0.3">
-                                  <animate attributeName="y" values="50;40;50" dur="2.5s" repeatCount="indefinite" />
-                                </rect>
-                                <circle cx="200" cy="70" r="8" fill="#f472b6" opacity="0.25">
-                                  <animate attributeName="cy" values="70;60;70" dur="3s" repeatCount="indefinite" />
-                                </circle>
-                                <rect x="180" y="140" width="10" height="10" rx="2" fill="#a3e635" opacity="0.35">
-                                  <animate attributeName="y" values="140;130;140" dur="2s" repeatCount="indefinite" />
-                                </rect>
-                              </>
-                            )}
-
-                            {/* 底部装饰线 */}
-                            <line x1="80" y1="190" x2="200" y2="190" stroke="#374151" strokeWidth="2" strokeDasharray="8 4" opacity="0.5" />
-                            <circle cx="90" cy="190" r="3" fill="#a3e635" opacity="0.6" />
-                            <circle cx="190" cy="190" r="3" fill="#22d3ee" opacity="0.6" />
-                          </svg>
-                        </div>
-
-                        {/* 文字内容 */}
-                        <h3 className="text-xl font-bold text-white mb-2">
-                          {activeTab === 'watchLater'
-                            ? '暂无待看视频'
-                            : searchTerm
-                              ? '没有找到相关视频'
-                              : '当前筛选无结果'}
-                        </h3>
-                        <p className="text-gray-400 text-sm mb-6 text-center max-w-xs leading-relaxed">
-                          {activeTab === 'watchLater'
-                            ? '长按视频卡片可以快速添加到待看列表，开始收藏你感兴趣的内容吧'
-                            : searchTerm
-                              ? `未找到与"${searchTerm}"相关的视频，试试其他关键词`
-                              : '调整筛选条件或切换时间范围查看更多'}
-                        </p>
-
-                        {/* 操作按钮 */}
-                        {activeTab === 'watchLater' ? (
-                          <button
-                            onClick={() => setActiveTab('home')}
-                            className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-400 text-white font-medium rounded-full 
+                          {/* 操作按钮 */}
+                          {activeTab === 'watchLater' ? (
+                            <button
+                              onClick={() => setActiveTab('home')}
+                              className="px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-400 text-white font-medium rounded-full 
                                  shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:shadow-[0_0_30px_rgba(37,99,235,0.6)]
                                  transition-all hover:scale-105 active:scale-95"
-                          >
-                            去发现视频
-                          </button>
-                        ) : searchTerm ? (
-                          <button
-                            onClick={() => setSearchTerm('')}
-                            className="px-6 py-2.5 bg-white/10 text-white font-medium rounded-full border border-white/20
-                                 hover:bg-white/20 transition-all"
-                          >
-                            清除搜索
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => setActiveFilter('all')}
-                            className="px-6 py-2.5 bg-white/10 text-white font-medium rounded-full border border-white/20
-                                 hover:bg-white/20 transition-all"
-                          >
-                            查看全部
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* 视频列表 */}
-                    {!loading && filteredVideos.length > 0 && (
-                      <div>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-x-4 gap-y-6 lg:gap-x-4 lg:gap-y-8">
-                          {filteredVideos.slice(0, visibleCount).map((video) => (
-                            <VideoCard
-                              key={video.bvid}
-                              video={video}
-                              onAddToWatchlist={toggleWatchLater}
-                              onRemoveFromWatchlist={toggleWatchLater}
-                              isInWatchlist={watchLaterIds.has(video.bvid)}
-                              openMenuId={openMenuId}
-                              onMenuToggle={setOpenMenuId}
-                              onDelete={(bvid) => executeDeleteVideo(bvid, false)}
-                              onDeleteWithLog={(bvid, title) => executeDeleteVideo(bvid, true)}
-                              onTranscript={handleTranscript}
-                              onAISummary={(bvid, title) => setAiSummaryVideo({ bvid, title })}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Loading / End indicator */}
-                    {!loading && filteredVideos.length > 0 && (
-                      <div className="pt-8 pb-24 flex justify-center">
-                        {visibleCount < filteredVideos.length ? (
-                          <div className="w-6 h-6 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                          <div className="flex flex-col items-center gap-3">
-                            <p className="text-gray-500 text-sm">没有更多视频了，去看看 RSS 吧 ✨</p>
-                            <button
-                              onClick={() => setActiveTab('rss')}
-                              className="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-full text-blue-400 text-sm font-medium hover:from-blue-500/30 hover:to-cyan-500/30 transition-all flex items-center gap-2"
                             >
-                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M4 11a9 9 0 0 1 9 9" />
-                                <path d="M4 4a16 16 0 0 1 16 16" />
-                                <circle cx="5" cy="19" r="1" fill="currentColor" />
-                              </svg>
-                              去看 RSS 订阅
+                              去发现视频
                             </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          </main>
-        </div>
+                          ) : searchTerm ? (
+                            <button
+                              onClick={() => setSearchTerm('')}
+                              className="px-6 py-2.5 bg-white/10 text-white font-medium rounded-full border border-white/20
+                                 hover:bg-white/20 transition-all"
+                            >
+                              清除搜索
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setActiveFilter('all')}
+                              className="px-6 py-2.5 bg-white/10 text-white font-medium rounded-full border border-white/20
+                                 hover:bg-white/20 transition-all"
+                            >
+                              查看全部
+                            </button>
+                          )}
+                        </div>
+                      )}
 
-        {/* 页面切换动画样式 */}
-        <style>{`
+                      {/* 视频列表 */}
+                      {!loading && filteredVideos.length > 0 && (
+                        <div>
+                          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-x-4 gap-y-6 lg:gap-x-4 lg:gap-y-8">
+                            {filteredVideos.slice(0, visibleCount).map((video) => (
+                              <VideoCard
+                                key={video.bvid}
+                                video={video}
+                                onAddToWatchlist={toggleWatchLater}
+                                onRemoveFromWatchlist={toggleWatchLater}
+                                isInWatchlist={watchLaterIds.has(video.bvid)}
+                                openMenuId={openMenuId}
+                                onMenuToggle={setOpenMenuId}
+                                onDelete={(bvid) => executeDeleteVideo(bvid, false)}
+                                onDeleteWithLog={(bvid, title) => executeDeleteVideo(bvid, true)}
+                                onTranscript={handleTranscript}
+                                onAISummary={(bvid, title) => setAiSummaryVideo({ bvid, title })}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Loading / End indicator */}
+                      {!loading && filteredVideos.length > 0 && (
+                        <div className="pt-8 pb-24 flex justify-center">
+                          {visibleCount < filteredVideos.length ? (
+                            <div className="w-6 h-6 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-3">
+                              <p className="text-gray-500 text-sm">没有更多视频了，去看看 RSS 吧 ✨</p>
+                              <button
+                                onClick={() => setActiveTab('rss')}
+                                className="px-4 py-2 bg-gradient-to-r from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-full text-blue-400 text-sm font-medium hover:from-blue-500/30 hover:to-cyan-500/30 transition-all flex items-center gap-2"
+                              >
+                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M4 11a9 9 0 0 1 9 9" />
+                                  <path d="M4 4a16 16 0 0 1 16 16" />
+                                  <circle cx="5" cy="19" r="1" fill="currentColor" />
+                                </svg>
+                                去看 RSS 订阅
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )
+              }
+
+              {/* 页面切换动画样式 */}
+              < style > {`
         @keyframes page-fade-in {
           from {
             opacity: 0;
@@ -1836,430 +1716,406 @@ const App = () => {
         .animate-page-fade-in {
           animation: page-fade-in 0.3s ease-out;
         }
-      `}</style>
+      `}</style >
 
-        {/* PC 侧边栏导航 - YouTube 风格 */}
-        <nav className="hidden lg:flex fixed left-0 top-0 bottom-0 w-56 bg-[#0f0f0f] border-r border-white/5 flex-col py-3 z-50 overflow-y-auto no-scrollbar">
-          {/* Logo */}
-          <div className="px-4 py-2 mb-2">
-            <div className="flex items-center gap-2">
-              <img src={LogoSvg} alt="FluxF" className="w-8 h-8" />
-              <span className="text-white font-bold text-lg">FluxF</span>
-            </div>
-          </div>
-
-          {/* 主导航 */}
-          <div className="px-2 space-y-1">
-            {/* 首页 */}
-            <button
-              onClick={() => setActiveTab('home')}
-              className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'home' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
-                }`}
-            >
-              <HomeIcon className="w-5 h-5" />
-              <span className="text-sm font-medium">首页</span>
-            </button>
-
-            {/* 待看 */}
-            <button
-              onClick={() => setActiveTab('watchLater')}
-              className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'watchLater' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
-                }`}
-            >
-              <ClockIcon className="w-5 h-5" />
-              <span className="text-sm font-medium">待看列表</span>
-            </button>
-
-            {/* RSS */}
-            <button
-              onClick={() => setActiveTab('rss')}
-              className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'rss' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
-                }`}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M4 11a9 9 0 0 1 9 9" />
-                <path d="M4 4a16 16 0 0 1 16 16" />
-                <circle cx="5" cy="19" r="1" fill="currentColor" />
-              </svg>
-              <span className="text-sm font-medium">RSS 订阅</span>
-            </button>
-          </div>
-
-          {/* 分隔线 */}
-          <div className="my-3 mx-4 border-t border-white/10" />
-
-          {/* 工具区 */}
-          <div className="px-2 space-y-1">
-            <p className="px-3 py-2 text-xs text-gray-500 font-medium">工具</p>
-
-            {/* 添加UP主 */}
-            <button
-              onClick={() => setIsAddUploaderOpen(true)}
-              className="w-full flex items-center gap-5 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-white/5 transition-all"
-            >
-              <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="16" />
-                <line x1="8" y1="12" x2="16" y2="12" />
-              </svg>
-              <span className="text-sm font-medium">添加 UP主</span>
-            </button>
-
-            {/* 设置 */}
-            <button
-              onClick={() => { settingsSourceRef.current = activeTab !== 'settings' ? activeTab : 'home'; subPageSourceRef.current = settingsSourceRef.current; setSettingsInitialView('main'); setActiveTab('settings'); }}
-              className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'
-                }`}
-            >
-              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-              <span className="text-sm font-medium">设置</span>
-            </button>
-          </div>
-        </nav>
-
-        {/* 移动端底部导航 - lg 以下显示 */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#0a0a0f] border-t border-white/10 pb-safe pt-2 px-4 z-50 h-[80px]">
-          <div className="flex justify-around items-center h-full max-w-lg mx-auto pb-4">
-            {/* Discovery */}
-            <button
-              onClick={() => setActiveTab('home')}
-              className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'home' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'
-                }`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'home' ? 'bg-cyber-lime/10' : ''}`}>
-                <HomeIcon className="w-5 h-5" />
-              </div>
-              <span className="text-[9px] font-medium">Discovery</span>
-            </button>
-
-            {/* Pending (待看视频) */}
-            <button
-              onClick={() => setActiveTab('watchLater')}
-              className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'watchLater' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'
-                }`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'watchLater' ? 'bg-cyber-lime/10' : ''}`}>
-                <ClockIcon className="w-5 h-5" />
-              </div>
-              <span className="text-[9px] font-medium">Pending</span>
-            </button>
-
-            {/* 中间加号按钮 */}
-            <button
-              onClick={() => setIsAddUploaderOpen(true)}
-              className="w-12 h-12 rounded-full bg-gradient-to-tr from-cyber-lime to-cyan-400 flex items-center justify-center -translate-y-4 shadow-[0_0_20px_rgba(163,230,53,0.4)] border-4 border-cyber-dark hover:scale-110 active:scale-95 transition-transform"
-            >
-              <div className="text-black font-bold text-xl">+</div>
-            </button>
-
-            {/* RSS 订阅 */}
-            <button
-              onClick={() => setActiveTab('rss')}
-              className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'rss' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'
-                }`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'rss' ? 'bg-cyber-lime/10' : ''}`}>
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 11a9 9 0 0 1 9 9" />
-                  <path d="M4 4a16 16 0 0 1 16 16" />
-                  <circle cx="5" cy="19" r="1" fill="currentColor" />
-                </svg>
-              </div>
-              <span className="text-[9px] font-medium">RSS</span>
-            </button>
-
-            {/* 设置 */}
-            <button
-              onClick={() => { settingsSourceRef.current = activeTab !== 'settings' ? activeTab : 'home'; subPageSourceRef.current = settingsSourceRef.current; setSettingsInitialView('main'); setActiveTab('settings'); }}
-              className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'settings' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'
-                }`}
-            >
-              <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-cyber-lime/10' : ''}`}>
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-              </div>
-              <span className="text-[9px] font-medium">Setting</span>
-            </button>
-          </div>
-        </nav>
-
-        {/* 热力图日历 - 查看视频分布 */}
-        <CustomDatePicker
-          isOpen={isCalendarOpen}
-          onClose={() => setIsCalendarOpen(false)}
-          currentFilter={customDateFilter}
-          videos={videos}
-          onApply={(filter) => {
-            setCustomDateFilter(filter);
-            setActiveFilter('custom');
-          }}
-        />
-
-        {/* 时间筛选器 */}
-        <DateFilterPicker
-          isOpen={isFilterOpen}
-          onClose={() => setIsFilterOpen(false)}
-          currentFilter={customDateFilter}
-          onApply={(filter) => {
-            setCustomDateFilter(filter);
-            setActiveFilter('custom');
-          }}
-        />
-
-        {/* 策展悬浮球 - 全局显示，支持拖动 */}
-        {activeTab !== 'settings' && (
-          <InsightFloatingBall
-            isLoading={insightLoading}
-            isDone={insightDone}
-            onClick={() => {
-              setSettingsInitialView('main');
-              setActiveTab('settings');
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('navigate-to-insights'));
-              }, 100);
-            }}
-            color="green"
-            storageKey="insight-ball-pos"
-          />
-        )}
-
-        {/* 音乐悬浮球 - 全局显示 */}
-        {musicState.showFloatingBall && musicState.currentMusic && (
-          <MusicFloatingBall onClick={() => setShowMusicMiniPlayer(true)} />
-        )}
-
-        {/* 音乐迷你播放器 */}
-        <MusicMiniPlayer
-          isOpen={showMusicMiniPlayer}
-          onClose={() => {
-            setShowMusicMiniPlayer(false);
-            musicService.setShowFloatingBall(true);
-          }}
-          onExpand={() => {
-            setShowMusicMiniPlayer(false);
-            musicService.expand();
-            // 跳转到设置页面的创作空间
-            setSettingsInitialView('main');
-            setActiveTab('settings');
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('navigate-to-creations'));
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('open-music-player'));
-              }, 100);
-            }, 100);
-          }}
-        />
-
-        {/* Toast 提示 - 右上角毛玻璃 macOS 风格 */}
-        {toast && (
-          <div className="fixed top-4 right-4 z-50 animate-notify-in">
-            <div className="relative px-4 py-3 rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
-              {/* 毛玻璃背景层 */}
-              <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
-              {/* 文字层 - 不模糊 */}
-              <div className="relative flex items-center gap-2">
-                <span className="text-cyber-lime">✓</span>
-                <span className="text-white text-sm font-medium">{toast}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 添加UP主弹窗 */}
-        <AddUploaderModal
-          isOpen={isAddUploaderOpen}
-          onClose={() => setIsAddUploaderOpen(false)}
-          onSuccess={() => {
-            showToast('UP主添加成功');
-          }}
-        />
-
-        {/* TODO 待办事项 */}
-        <TodoList
-          isOpen={isTodoOpen}
-          onClose={() => setIsTodoOpen(false)}
-        />
-
-        {/* 设置/个人中心 */}
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          onLogout={handleLogout}
-          watchLaterIds={watchLaterIds}
-          onToggleWatchLater={toggleWatchLater}
-        />
-
-        {/* 时间轴 */}
-        {showTimeline && (
-          <VideoTimeline
-            videos={videos}
-            onClose={() => setShowTimeline(false)}
-            watchLaterIds={watchLaterIds}
-            onToggleWatchLater={toggleWatchLater}
-            onDelete={handleDeleteVideo}
-          />
-        )}
-
-        {/* UP主选择器弹窗 */}
-        {isUploaderPickerOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
-            onClick={() => { setIsUploaderPickerOpen(false); setUploaderSearchTerm(''); }}
-          >
-            <div
-              className="w-full max-w-lg bg-cyber-card rounded-t-3xl border-t border-white/10 max-h-[70vh] flex flex-col animate-slide-up relative overflow-hidden"
-              onClick={e => e.stopPropagation()}
-            >
-              {/* 顶部光晕背景 - 全宽渐变 */}
-              <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-cyber-lime/20 to-transparent pointer-events-none" />
-              {/* 标题栏 */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-                <h3 className="text-white font-bold text-lg">选择 UP主</h3>
-                <button
-                  onClick={() => { setIsUploaderPickerOpen(false); setUploaderSearchTerm(''); }}
-                  className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-gray-400 hover:bg-white/20"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* 搜索框 */}
-              <div className="px-4 py-3">
-                <div className="relative">
-                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8" />
-                    <path d="M21 21l-4.35-4.35" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="搜索 UP主..."
-                    value={uploaderSearchTerm}
-                    onChange={e => setUploaderSearchTerm(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"
-                  />
+              {/* PC 侧边栏导航 - YouTube 风格 */}
+              <nav className="hidden lg:flex fixed left-0 top-0 bottom-0 w-56 bg-[#0f0f0f] border-r border-white/5 flex-col py-3 z-50 overflow-y-auto no-scrollbar">
+                {/* Logo */}
+                <div className="px-4 py-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <img src={LogoSvg} alt="FluxF" className="w-8 h-8" />
+                    <span className="text-white font-bold text-lg">FluxF</span>
+                  </div>
                 </div>
-              </div>
 
-              {/* UP主列表 */}
-              <div className="flex-1 overflow-y-auto px-4 pb-4">
-                {filteredUploaders.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    {uploaderSearchTerm ? '未找到匹配的 UP主' : '暂无 UP主数据'}
+                {/* 主导航 */}
+                <div className="px-2 space-y-1">
+                  {/* 首页 */}
+                  <button
+                    onClick={() => setActiveTab('home')}
+                    className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'home' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                  >
+                    <HomeIcon className="w-5 h-5" />
+                    <span className="text-sm font-medium">首页</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('watchLater')}
+                    className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'watchLater' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                  >
+                    <ClockIcon className="w-5 h-5" />
+                    <span className="text-sm font-medium">待看列表</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('rss')}
+                    className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'rss' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                  >
+                    <RssIcon className="w-5 h-5" />
+                    <span className="text-sm font-medium">RSS 订阅</span>
+                  </button>
+                </div>
+
+                <div className="my-3 mx-4 border-t border-white/10" />
+
+                <div className="px-2 space-y-1">
+                  <p className="px-3 py-2 text-xs text-gray-500 font-medium">工具</p>
+                  <button
+                    onClick={() => setIsAddUploaderOpen(true)}
+                    className="w-full flex items-center gap-5 px-3 py-2.5 rounded-xl text-gray-400 hover:bg-white/5 transition-all"
+                  >
+                    <PlusIcon className="w-5 h-5 text-cyber-lime" />
+                    <span className="text-sm font-medium">添加 UP主</span>
+                  </button>
+                  <button
+                    onClick={() => { settingsSourceRef.current = activeTab !== 'settings' ? activeTab : 'home'; setActiveTab('settings'); }}
+                    className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}
+                  >
+                    <SettingsIcon className="w-5 h-5" />
+                    <span className="text-sm font-medium">设置</span>
+                  </button>
+                </div>
+              </nav>
+
+              {/* 移动端底部导航 - lg 以下显示 */}
+              <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#0a0a0f] border-t border-white/10 pb-safe pt-2 px-4 z-50 h-[80px]">
+                <div className="flex justify-around items-center h-full max-w-lg mx-auto pb-4">
+                  <button
+                    onClick={() => setActiveTab('home')}
+                    className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'home' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'}`}
+                  >
+                    <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'home' ? 'bg-cyber-lime/10' : ''}`}>
+                      <HomeIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-[9px] font-medium">Discovery</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('watchLater')}
+                    className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'watchLater' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'}`}
+                  >
+                    <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'watchLater' ? 'bg-cyber-lime/10' : ''}`}>
+                      <ClockIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-[9px] font-medium">Pending</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIsAddUploaderOpen(true)}
+                    className="w-12 h-12 rounded-full bg-gradient-to-tr from-cyber-lime to-cyan-400 flex items-center justify-center -translate-y-4 shadow-[0_0_20px_rgba(163,230,53,0.4)] border-4 border-cyber-dark hover:scale-110 active:scale-95 transition-transform"
+                  >
+                    <div className="text-black font-bold text-xl">+</div>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('rss')}
+                    className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'rss' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'}`}
+                  >
+                    <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'rss' ? 'bg-cyber-lime/10' : ''}`}>
+                      <RssIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-[9px] font-medium">RSS</span>
+                  </button>
+
+                  <button
+                    onClick={() => { settingsSourceRef.current = activeTab !== 'settings' ? activeTab : 'home'; setActiveTab('settings'); }}
+                    className={`flex flex-col items-center gap-1 transition-all duration-300 ${activeTab === 'settings' ? 'text-cyber-lime -translate-y-1' : 'text-gray-500'}`}
+                  >
+                    <div className={`p-1.5 rounded-xl transition-all ${activeTab === 'settings' ? 'bg-cyber-lime/10' : ''}`}>
+                      <SettingsIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-[9px] font-medium">Setting</span>
+                  </button>
+                </div>
+              </nav>
+
+              {/* 弹窗与悬浮球 */}
+              <CustomDatePicker
+                isOpen={isCalendarOpen}
+                onClose={() => setIsCalendarOpen(false)}
+                currentFilter={customDateFilter}
+                videos={videos}
+                onApply={(filter) => {
+                  setCustomDateFilter(filter);
+                  setActiveFilter('custom');
+                }}
+              />
+
+              <DateFilterPicker
+                isOpen={isFilterOpen}
+                onClose={() => setIsFilterOpen(false)}
+                currentFilter={customDateFilter}
+                onApply={(filter) => {
+                  setCustomDateFilter(filter);
+                  setActiveFilter('custom');
+                }}
+              />
+
+              {
+                activeTab !== 'settings' && (
+                  <InsightFloatingBall
+                    isLoading={insightLoading}
+                    isDone={insightDone}
+                    onClick={() => {
+                      setSettingsInitialView('main');
+                      setActiveTab('settings');
+                      setTimeout(() => {
+                        window.dispatchEvent(new CustomEvent('navigate-to-insights'));
+                      }, 100);
+                    }}
+                    color="green"
+                    storageKey="insight-ball-pos"
+                  />
+                )
+              }
+
+              {
+                musicState.showFloatingBall && musicState.currentMusic && (
+                  <MusicFloatingBall onClick={() => setShowMusicMiniPlayer(true)} />
+                )
+              }
+
+              <MusicMiniPlayer
+                isOpen={showMusicMiniPlayer}
+                onClose={() => {
+                  setShowMusicMiniPlayer(false);
+                  musicService.setShowFloatingBall(true);
+                }}
+                onExpand={() => {
+                  setShowMusicMiniPlayer(false);
+                  musicService.expand();
+                  setSettingsInitialView('main');
+                  setActiveTab('settings');
+                  setTimeout(() => {
+                    window.dispatchEvent(new CustomEvent('navigate-to-creations'));
+                    setTimeout(() => window.dispatchEvent(new CustomEvent('open-music-player')), 100);
+                  }, 100);
+                }}
+              />
+
+              {
+                toast && (
+                  <div className="fixed top-4 right-4 z-50 animate-notify-in">
+                    <div className="relative px-4 py-3 rounded-2xl shadow-2xl border border-white/20 overflow-hidden">
+                      <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" />
+                      <div className="relative flex items-center gap-2">
+                        <span className="text-cyber-lime">✓</span>
+                        <span className="text-white text-sm font-medium">{toast}</span>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    {filteredUploaders.map(uploader => (
-                      <button
-                        key={uploader.mid}
-                        onClick={() => {
-                          setSelectedUploader({ mid: uploader.mid, name: uploader.name });
-                          setIsUploaderPickerOpen(false);
-                          setUploaderSearchTerm('');
-                          mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${selectedUploader?.mid === uploader.mid
-                          ? 'bg-violet-500/20 border border-violet-500/30'
-                          : 'bg-white/5 border border-transparent hover:bg-white/10'
-                          }`}
-                      >
-                        {uploader.face ? (
-                          <img
-                            src={uploader.face.replace('http:', 'https:')}
-                            alt=""
-                            referrerPolicy="no-referrer"
-                            className="w-10 h-10 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center text-white font-bold">
-                            {uploader.name[0]}
-                          </div>
-                        )}
-                        <div className="flex-1 text-left min-w-0">
-                          <p className="text-white font-medium text-sm truncate">{uploader.name}</p>
-                          <div className="flex items-center justify-between gap-2 mt-0.5 whitespace-nowrap overflow-hidden">
-                            <p className="text-gray-500 text-[10px] font-mono shrink-0">
-                              MID: {uploader.mid.toString().length > 10
-                                ? `${uploader.mid.toString().slice(0, 10)}...`
-                                : uploader.mid}
-                            </p>
-                            <p className="text-gray-500 text-[10px] shrink-0">{uploader.count} 个视频</p>
-                          </div>
-                        </div>
-                        {selectedUploader?.mid === uploader.mid && (
-                          <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="20 6 9 17 4 12" />
+                )
+              }
+
+              <AddUploaderModal
+                isOpen={isAddUploaderOpen}
+                onClose={() => setIsAddUploaderOpen(false)}
+                onSuccess={() => showToast('UP主添加成功')}
+              />
+
+              <TodoList
+                isOpen={isTodoOpen}
+                onClose={() => setIsTodoOpen(false)}
+              />
+
+              <SettingsModal
+                isOpen={isSettingsOpen}
+                onClose={() => setIsSettingsOpen(false)}
+                onLogout={handleLogout}
+                watchLaterIds={watchLaterIds}
+                onToggleWatchLater={toggleWatchLater}
+              />
+
+              {
+                showTimeline && (
+                  <VideoTimeline
+                    videos={videos}
+                    onClose={() => setShowTimeline(false)}
+                    watchLaterIds={watchLaterIds}
+                    onToggleWatchLater={toggleWatchLater}
+                    onDelete={handleDeleteVideo}
+                  />
+                )
+              }
+
+              {
+                isUploaderPickerOpen && (
+                  <div
+                    className="fixed inset-0 z-50 flex items-end justify-center bg-black/60"
+                    onClick={() => { setIsUploaderPickerOpen(false); setUploaderSearchTerm(''); }}
+                  >
+                    <div
+                      className="w-full max-w-lg bg-cyber-card rounded-t-3xl border-t border-white/10 max-h-[70vh] flex flex-col animate-slide-up relative overflow-hidden"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-cyber-lime/20 to-transparent pointer-events-none" />
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+                        <h3 className="text-white font-bold text-lg">选择 UP主</h3>
+                        <button
+                          onClick={() => { setIsUploaderPickerOpen(false); setUploaderSearchTerm(''); }}
+                          className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20"
+                        >
+                          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
                           </svg>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <style>{`
-            @keyframes slide-up {
-              from { transform: translateY(100%); }
-              to { transform: translateY(0); }
-            }
-            .animate-slide-up {
-              animation: slide-up 0.3s ease-out;
-            }
-          `}</style>
-          </div>
-        )}
+                        </button>
+                      </div>
 
-        {/* 时间筛选下拉框 - 使用 Portal 渲染到 body */}
-        {isTimeFilterOpen && (
-          <>
-            {/* 透明遮罩 */}
-            <div
-              className="fixed inset-0 z-[9998]"
-              onClick={() => setIsTimeFilterOpen(false)}
-            />
-            {/* 下拉菜单 */}
-            <div
-              className="fixed z-[9999] bg-[#1a1a1a] rounded-xl border border-white/20 overflow-hidden shadow-2xl"
-              style={{
-                top: `${timeFilterPos.top}px`,
-                left: `${timeFilterPos.left}px`,
-                minWidth: `${timeFilterPos.width}px`,
-              }}
-            >
-              {[
-                { id: 'today', label: '今天' },
-                { id: 'week', label: '本周' },
-                { id: 'month', label: '本月' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveFilter(item.id as FilterType);
-                    setIsTimeFilterOpen(false);
-                    mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                  }}
-                  className={`w-full px-5 py-2.5 text-left text-xs transition-colors flex items-center gap-2 ${activeFilter === item.id
-                    ? 'bg-cyber-lime/20 text-cyber-lime'
-                    : 'text-gray-300 hover:bg-white/10'
-                    }`}
-                >
-                  <span>{item.label}</span>
-                  {activeFilter === item.id && (
-                    <svg className="w-3 h-3 ml-auto text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
+                      <div className="px-4 py-3">
+                        <div className="relative">
+                          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <circle cx="11" cy="11" r="8" />
+                            <path d="M21 21l-4.35-4.35" />
+                          </svg>
+                          <input
+                            type="text"
+                            placeholder="搜索 UP主..."
+                            value={uploaderSearchTerm}
+                            onChange={e => setUploaderSearchTerm(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto px-4 pb-4 no-scrollbar">
+                        {filteredUploaders.length === 0 ? (
+                          <div className="text-center py-8 text-gray-500">
+                            {uploaderSearchTerm ? '未找到匹配的 UP主' : '暂无 UP主数据'}
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {filteredUploaders.map(uploader => (
+                              <button
+                                key={uploader.mid}
+                                onClick={() => {
+                                  setSelectedUploader({ mid: uploader.mid, name: uploader.name });
+                                  setIsUploaderPickerOpen(false);
+                                  setUploaderSearchTerm('');
+                                  mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all ${selectedUploader?.mid === uploader.mid ? 'bg-violet-500/20 border border-violet-500/30' : 'bg-white/5 border border-transparent hover:bg-white/10'}`}
+                              >
+                                {uploader.face ? (
+                                  <img src={uploader.face.replace('http:', 'https:')} alt="" referrerPolicy="no-referrer" className="w-10 h-10 rounded-full object-cover" />
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center text-white font-bold">{uploader.name[0]}</div>
+                                )}
+                                <div className="flex-1 text-left min-w-0">
+                                  <p className="text-white font-medium text-sm truncate">{uploader.name}</p>
+                                  <p className="text-gray-500 text-[10px] truncate">MID: {uploader.mid}</p>
+                                </div>
+                                {selectedUploader?.mid === uploader.mid && (
+                                  <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              {
+                isTimeFilterOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[9998]" onClick={() => setIsTimeFilterOpen(false)} />
+                    <div
+                      className="fixed z-[9999] bg-[#1a1a1a] rounded-xl border border-white/20 overflow-hidden shadow-2xl"
+                      style={{ top: `${timeFilterPos.top}px`, left: `${timeFilterPos.left}px`, minWidth: `${timeFilterPos.width}px` }}
+                    >
+                      {[
+                        { id: 'today', label: '今天' },
+                        { id: 'week', label: '本周' },
+                        { id: 'month', label: '本月' },
+                      ].map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveFilter(item.id as FilterType);
+                            setIsTimeFilterOpen(false);
+                            mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          className={`w-full px-5 py-2.5 text-left text-xs transition-colors flex items-center gap-2 ${activeFilter === item.id ? 'bg-cyber-lime/20 text-cyber-lime' : 'text-gray-300 hover:bg-white/10'}`}
+                        >
+                          <span>{item.label}</span>
+                          {activeFilter === item.id && (
+                            <svg className="w-3 h-3 ml-auto text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )
+              }
+
+              {
+                deleteConfirmVideo && (
+                  <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm px-4">
+                    <div className="w-full max-w-sm bg-cyber-card border border-white/10 rounded-3xl p-6 shadow-2xl animate-notify-in">
+                      <h3 className="text-white font-bold text-lg mb-2">确认删除视频？</h3>
+                      <p className="text-gray-400 text-sm mb-6 leading-relaxed">
+                        确定要删除视频 <span className="text-cyber-lime">"{deleteConfirmVideo.title}"</span> 吗？此操作不可撤销。
+                      </p>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => setDeleteConfirmVideo(null)}
+                          className="flex-1 py-3 rounded-xl bg-white/5 text-gray-300 font-medium hover:bg-white/10 transition-colors"
+                        >
+                          取消
+                        </button>
+                        <button
+                          onClick={() => {
+                            executeDeleteVideo(deleteConfirmVideo.bvid);
+                            setDeleteConfirmVideo(null);
+                          }}
+                          className="flex-1 py-3 rounded-xl bg-red-500/10 text-red-500 font-medium hover:bg-red-500/20 transition-all border border-red-500/20"
+                        >
+                          确认删除
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
+
+              {
+                isAppsModalOpen && (
+                  <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md" onClick={() => setIsAppsModalOpen(false)}>
+                    <div className="w-full max-w-sm bg-cyber-card border border-white/10 rounded-[32px] overflow-hidden animate-notify-in" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center justify-between p-6 pb-2">
+                        <h3 className="text-white font-bold text-xl">更多应用</h3>
+                        <button onClick={() => setIsAppsModalOpen(false)} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors">
+                          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                      <div className="px-6 pb-8 grid grid-cols-3 gap-5">
+                        {[
+                          { name: 'Reddit', icon: 'https://www.redditstatic.com/desktop2x/img/favicon/favicon-32x32.png', url: 'https://www.reddit.com' },
+                          { name: '知乎', icon: 'https://static.zhihu.com/heifetz/favicon.ico', url: 'https://www.zhihu.com' },
+                          { name: '小红书', icon: 'https://www.xiaohongshu.com/favicon.ico', url: 'https://www.xiaohongshu.com' },
+                          { name: '贴吧', icon: 'https://tieba.baidu.com/favicon.ico', url: 'https://tieba.baidu.com' },
+                        ].map(app => (
+                          <button key={app.name} className="flex flex-col items-center gap-2 group" onClick={() => window.open(app.url, '_blank')}>
+                            <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:bg-white/10 transition-all">
+                              <img src={app.icon} className="w-8 h-8" alt="" />
+                            </div>
+                            <span className="text-xs text-gray-400 group-hover:text-white transition-colors">{app.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )
+              }
             </div>
-          </>
-        )}
+          </main>
+        </div>
       </div>
     </PullToRefresh>
   );

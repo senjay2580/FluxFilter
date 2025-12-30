@@ -175,7 +175,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               <img
                 src={thumbnail || ''}
                 alt={title}
-                className={`w-full h-full object-cover transform-gpu transition-opacity duration-500 ease-out ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                className={`w-full h-full object-cover transform-gpu ${imageLoaded ? 'animate-card-fade' : 'opacity-0'}`}
                 loading="eager"
                 decoding="async"
                 fetchPriority="high"
@@ -416,6 +416,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
         </div>,
         document.body
       )}
+
+      <style>{`
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .animate-card-fade {
+          animation: fadeIn 0.4s ease-out forwards;
+        }
+      `}</style>
     </>
   );
 };
