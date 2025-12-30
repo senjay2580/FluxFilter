@@ -131,13 +131,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
   return (
     <>
       <div
-        className="group relative rounded-2xl overflow-visible
+        className="group relative rounded-2xl overflow-hidden
                  bg-cyber-card/90
                  border border-white/[0.08] 
                  shadow-lg
-                 hover:shadow-xl hover:border-white/[0.15]
                  active:scale-[0.98] transition-transform duration-200 cursor-pointer
                  transform-gpu"
+        style={{
+          contentVisibility: 'auto',
+          containIntrinsicSize: '0 260px'
+        }}
         onClick={handleClick}
       >
 
@@ -245,8 +248,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               {/* 标题 */}
               <h3
                 ref={titleRef}
-                className="text-white font-semibold leading-tight line-clamp-2 text-[13.5px] group-hover:text-white transition-colors cursor-default"
-                style={{ textShadow: '0 1px 3px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4)' }}
+                className="text-white font-semibold leading-tight line-clamp-2 text-[13.5px] cursor-default"
                 onMouseEnter={(e) => {
                   // 只有标题被截断时才显示 tooltip
                   const el = e.currentTarget;
@@ -263,8 +265,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
 
               {/* UP主和三个点按钮 */}
               <div className="flex items-center justify-between gap-2 mt-1.5">
-                <span className="text-[11.5px] text-cyber-lime font-semibold truncate"
-                  style={{ textShadow: '0 1px 2px rgba(0,0,0,0.8), 0 0 6px rgba(0,0,0,0.5)' }}>
+                <span className="text-[11.5px] text-cyber-lime font-semibold truncate">
                   {author}
                 </span>
 
@@ -336,11 +337,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                           onClick={() => setDescExpanded(!descExpanded)}
                           className="shrink-0 w-5 h-5 flex items-center justify-center text-cyber-lime hover:text-cyber-lime/80 transition-all"
                         >
-                          <svg 
-                            className={`w-4 h-4 transition-transform duration-200 ${descExpanded ? 'rotate-180' : ''}`} 
-                            viewBox="0 0 24 24" 
-                            fill="none" 
-                            stroke="currentColor" 
+                          <svg
+                            className={`w-4 h-4 transition-transform duration-200 ${descExpanded ? 'rotate-180' : ''}`}
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
                             strokeWidth="2"
                           >
                             <polyline points="6 9 12 15 18 9" />

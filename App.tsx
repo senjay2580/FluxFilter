@@ -678,11 +678,11 @@ const App = () => {
       if (!ticking) {
         requestAnimationFrame(() => {
           const { scrollTop, scrollHeight, clientHeight } = mainElement;
-          // 无限滚动加载 - 增加触发距离到 800px，提前加载
-          if (scrollTop + clientHeight >= scrollHeight - 800) {
+          // 无限滚动加载 - 增加触发距离到 1000px，提前加载
+          if (scrollTop + clientHeight >= scrollHeight - 1000) {
             setVisibleCount(prev => {
               if (prev >= filteredVideos.length) return prev;
-              return Math.min(prev + 12, filteredVideos.length); // 每次追加 12 个，减少触发频率
+              return Math.min(prev + 24, filteredVideos.length); // 每次追加 24 个，减少触发频率
             });
           }
           ticking = false;

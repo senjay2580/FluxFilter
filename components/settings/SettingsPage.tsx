@@ -164,13 +164,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   return createPortal(
     <div className={`fixed inset-0 z-[99998] overflow-hidden flex flex-col ${currentView === 'insights' ? '' : ''}`}
       style={currentView === 'insights'
-        ? { background: 'linear-gradient(180deg, #0a1628 0%, #0d2137 30%, #0f2847 60%, #0a1f3a 100%)' }
-        : { background: 'linear-gradient(135deg, #080a09 0%, #0a0d0b 25%, #0c100e 50%, #0a0d0b 75%, #070908 100%)' }
+        ? { background: 'linear-gradient(180deg, #0a1628 0%, #0a1f3a 100%)' }
+        : { background: '#080a09' }
       }
     >
-      {/* 背景 - 非 insights 视图 - 深墨绿色调 */}
+      {/* 背景 - 非 insights 视图 - 仅在 PC 端启用复杂特效以节省移动端性能 */}
       {currentView !== 'insights' && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden hidden lg:block">
           {/* 顶部主光源 - 深墨绿色 */}
           <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-gradient-to-b from-emerald-900/40 via-emerald-950/20 to-transparent blur-3xl animate-glow-breathe" />
 
@@ -202,9 +202,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       )}
 
-      {/* insights 视图的水波背景 */}
+      {/* insights 视图的水波背景 - 仅在 PC 端渲染，移动端由于波浪路径计算极其耗能且易引起闪烁，故禁用 */}
       {currentView === 'insights' && (
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none overflow-hidden hidden lg:block">
           {/* 水面光斑效果 */}
           <div className="absolute inset-0 opacity-30">
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-cyan-500/20 to-transparent" />
@@ -319,9 +319,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       )}
 
-      {/* 顶部导航栏 */}
-      <div className={`relative z-20 backdrop-blur-xl border-b shrink-0 ${currentView === 'insights' ? 'bg-[#0a1628]/70 border-cyan-500/10' : 'bg-black/40 border-emerald-900/20'}`}>
-        <div className="flex items-center gap-3 px-4 py-4">
+      {/* 顶部导航栏 - 加强背景层级以防滑动时透底闪烁 */}
+      <div className={`relative z-20 backdrop-blur-xl border-b shrink-0 ${currentView === 'insights'
+          ? 'bg-[#0a1628]/95 border-cyan-500/10'
+          : 'bg-black/80 border-emerald-900/20'
+        }`}>
+        <div className="flex items-center gap-3 px-4 py-4 translate-z-0">
           <button onClick={handleBack} className="p-2 -ml-2 rounded-xl hover:bg-white/10 active:bg-white/15 transition-all active:scale-95">
             <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -342,12 +345,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         </div>
       </div>
 
-      {/* 内容区域 */}
+      {/* 内容区域 - 强制 GPU 分层 */}
       <div
-        className="flex-1 overflow-y-auto transform-gpu"
+        className="flex-1 overflow-y-auto"
         style={{
           overscrollBehaviorX: 'none',
-          contain: 'size layout style'
+          contain: 'size layout style',
+          transform: 'translateZ(0)',
+          WebkitBackfaceVisibility: 'hidden',
+          backfaceVisibility: 'hidden'
         }}
         {...(shouldEnableSwipeBack ? swipeHandlers : {})}
       >
