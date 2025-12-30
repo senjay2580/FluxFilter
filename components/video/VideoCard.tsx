@@ -58,6 +58,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [descExpanded, setDescExpanded] = useState(false);
   const [isVisible, setIsVisible] = useState(true); // 初始设为 true，确保首屏可见
+  const [imageLoaded, setImageLoaded] = useState(false); // 图片加载状态
   const containerRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
 
@@ -174,11 +175,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               <img
                 src={thumbnail || ''}
                 alt={title}
-                className="w-full h-full object-cover transform-gpu"
+                className={`w-full h-full object-cover transform-gpu transition-opacity duration-500 ease-out ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
                 loading="eager"
                 decoding="async"
                 fetchPriority="high"
                 referrerPolicy="no-referrer"
+                onLoad={() => setImageLoaded(true)}
                 onError={(e) => {
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
