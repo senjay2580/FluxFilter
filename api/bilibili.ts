@@ -13,36 +13,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  const { path, subtitle_url } = req.query;
+  const { path, host = 'api.bilibili.com' } = req.query;
 
-  // 处理字幕URL代理请求
-  if (subtitle_url && typeof subtitle_url === 'string') {
-    try {
-      const response = await fetch(subtitle_url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Referer': 'https://www.bilibili.com',
-        },
-      });
-      const data = await response.json();
-      return res.status(200).json(data);
-    } catch (error) {
-      console.error('Subtitle fetch error:', error);
-      return res.status(500).json({ error: 'Failed to fetch subtitle' });
-    }
-  }
-  
   if (!path || typeof path !== 'string') {
     return res.status(400).json({ error: 'Missing path parameter' });
   }
 
-  // 构建 B站 API URL
-  const biliUrl = `https://api.bilibili.com${path.startsWith('/') ? path : '/' + path}`;
-  
+  // 构建完整的 URL
+  // host 参数允许代理不同的 B 站子域名（如 i0.hdslb.com 用于字幕文件）
+  const targetHost = typeof host === 'string' ? host : 'api.bilibili.com';
+  const biliUrl = `https://${targetHost}${path.startsWith('/') ? path : '/' + path}`;
+
   // 转发查询参数
   const url = new URL(biliUrl);
   Object.entries(req.query).forEach(([key, value]) => {
-    if (key !== 'path' && key !== 'subtitle_url' && typeof value === 'string') {
+    if (key !== 'path' && key !== 'host' && typeof value === 'string') {
       url.searchParams.set(key, value);
     }
   });
@@ -61,10 +46,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
 
+    if (!response.ok) {
+      return res.status(response.status).json({ error: `Bilibili proxy error: ${response.statusText}` });
+    }
+
     const data = await response.json();
     return res.status(200).json(data);
   } catch (error) {
-    console.error('Bilibili API error:', error);
+    console.error('Bilibili Proxy error:', error);
     return res.status(500).json({ error: 'Failed to fetch from Bilibili' });
   }
 }

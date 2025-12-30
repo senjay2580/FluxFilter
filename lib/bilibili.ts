@@ -648,10 +648,15 @@ export async function getSubtitleContent(subtitleUrl: string): Promise<SubtitleC
   }
 
   try {
+    // 解析原始 URL 以获取 host 和 path
+    const parsedUrl = new URL(subtitleUrl);
+    const apiPath = parsedUrl.pathname;
+    const apiHost = parsedUrl.host;
+
     // 字幕URL需要通过代理访问
     const proxyUrl = import.meta.env.DEV
       ? `/bili-subtitle?url=${encodeURIComponent(subtitleUrl)}`
-      : `/api/bilibili?subtitle_url=${encodeURIComponent(subtitleUrl)}`;
+      : `/api/bilibili?path=${encodeURIComponent(apiPath)}&host=${encodeURIComponent(apiHost)}`;
 
     const response = await fetch(proxyUrl, {
       headers: await getHeaders()
