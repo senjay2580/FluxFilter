@@ -240,13 +240,13 @@ const App = () => {
   }, [activeTab]);
 
   // Infinite Scroll State
-  const [visibleCount, setVisibleCount] = useState(20); // 初始加载更多一点，减少首屏后的立即加载
+  const [visibleCount, setVisibleCount] = useState(40); // 首页初始加载更多，避免快速滑动瞬时黑屏
   const mainRef = React.useRef<HTMLDivElement>(null);
 
 
   // 筛选条件变化时重置 visibleCount
   useEffect(() => {
-    setVisibleCount(20);
+    setVisibleCount(40);
   }, [activeFilter, selectedUploader, searchTerm, activeTab]);
 
   // 滑动切换Tab - B站式交互体验
@@ -269,7 +269,14 @@ const App = () => {
     swipeDirection.current = 'none';
   }, []);
 
+  const lastTouchTime = React.useRef<number>(0);
+
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    // 节流处理：控制手势位移状态更新频率
+    const now = Date.now();
+    if (now - lastTouchTime.current < 32) return; // ~30fps 限制
+    lastTouchTime.current = now;
+
     touchEndX.current = e.touches[0].clientX;
     touchEndY.current = e.touches[0].clientY;
 
@@ -278,11 +285,9 @@ const App = () => {
 
     // 首次移动时确定滑动方向
     if (swipeDirection.current === 'none' && (deltaX > 10 || deltaY > 10)) {
-      // 水平滑动距离明显大于垂直滑动，才认为是水平滑动
       swipeDirection.current = deltaX > deltaY * 1.5 ? 'horizontal' : 'vertical';
     }
 
-    // 只有明确的水平滑动才标记为滑动状态
     if (swipeDirection.current === 'horizontal' && deltaX > 50) {
       isSwiping.current = true;
     }
@@ -678,11 +683,11 @@ const App = () => {
       if (!ticking) {
         requestAnimationFrame(() => {
           const { scrollTop, scrollHeight, clientHeight } = mainElement;
-          // 无限滚动加载 - 增加触发距离到 1000px，提前加载
-          if (scrollTop + clientHeight >= scrollHeight - 1000) {
+          // 无限滚动加载 - 增加触发距离到 1200px，极致提前加载
+          if (scrollTop + clientHeight >= scrollHeight - 1200) {
             setVisibleCount(prev => {
               if (prev >= filteredVideos.length) return prev;
-              return Math.min(prev + 24, filteredVideos.length); // 每次追加 24 个，减少触发频率
+              return Math.min(prev + 30, filteredVideos.length); // 每次追加 30 个
             });
           }
           ticking = false;
