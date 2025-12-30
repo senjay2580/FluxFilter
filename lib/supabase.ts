@@ -640,3 +640,239 @@ export async function updateNote(id: number, params: UpdateNoteParams) {
   return data as Note;
 }
 
+
+
+// ============================================
+// 音乐相关操作
+// ============================================
+
+import type {
+  Music,
+  MusicPlaylist,
+  MusicPlaylistItem,
+  CreateMusicParams,
+  CreatePlaylistParams,
+  UpdateMusicParams
+} from './music-types';
+
+/** 获取用户所有音乐 */
+export async function getMusicList(userId: string) {
+  const { data, error } = await supabase
+    .from('music')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as Music[];
+}
+
+/** 搜索音乐 */
+export async function searchMusic(userId: string, keyword: string) {
+  const { data, error } = await supabase
+    .from('music')
+    .select('*')
+    .eq('user_id', userId)
+    .or(`title.ilike.%${keyword}%,artist.ilike.%${keyword}%,album.ilike.%${keyword}%`)
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+  return data as Music[];
+}
+
+/** 创建音乐记录 */
+export async function createMusic(userId: string, params: CreateMusicParams) {
+  const { data, error } = await supabase
+    .from('music')
+    .insert({
+      user_id: userId,
+      ...params,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Music;
+}
+
+/** 更新音乐信息 */
+export async function updateMusic(id: number, params: UpdateMusicParams) {
+  const { data, error } = await supabase
+    .from('music')
+    .update({
+      ...params,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Music;
+}
+
+/** 删除音乐 */
+export async function deleteMusic(id: number) {
+  const { error } = await supabase
+    .from('music')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+/** 更新播放进度 */
+export async function updateMusicPosition(id: number, position: number) {
+  const { error } = await supabase
+    .from('music')
+    .update({ last_position: position, updated_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+/** 增加播放次数 */
+export async function incrementPlayCount(id: number) {
+  const { data: music } = await supabase
+    .from('music')
+    .select('play_count')
+    .eq('id', id)
+    .single();
+
+  if (music) {
+    await supabase
+      .from('music')
+      .update({ play_count: (music.play_count || 0) + 1 })
+      .eq('id', id);
+  }
+}
+
+/** 获取用户所有歌单 */
+export async function getPlaylists(userId: string) {
+  const { data, error } = await supabase
+    .from('music_playlist')
+    .select('*')
+    .eq('user_id', userId)
+    .order('sort_order', { ascending: true });
+
+  if (error) throw error;
+  return data as MusicPlaylist[];
+}
+
+/** 创建歌单 */
+export async function createPlaylist(userId: string, params: CreatePlaylistParams) {
+  const { data, error } = await supabase
+    .from('music_playlist')
+    .insert({
+      user_id: userId,
+      ...params,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as MusicPlaylist;
+}
+
+/** 更新歌单 */
+export async function updatePlaylist(id: number, params: Partial<CreatePlaylistParams>) {
+  const { data, error } = await supabase
+    .from('music_playlist')
+    .update({
+      ...params,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as MusicPlaylist;
+}
+
+/** 删除歌单 */
+export async function deletePlaylist(id: number) {
+  const { error } = await supabase
+    .from('music_playlist')
+    .delete()
+    .eq('id', id);
+
+  if (error) throw error;
+}
+
+/** 获取歌单中的音乐 */
+export async function getPlaylistMusic(playlistId: number) {
+  const { data, error } = await supabase
+    .from('music_playlist_item')
+    .select(`
+      *,
+      music:music!music_playlist_item_music_id_fkey (*)
+    `)
+    .eq('playlist_id', playlistId)
+    .order('sort_order', { ascending: true });
+
+  if (error) throw error;
+  return data?.map(item => item.music) as Music[];
+}
+
+/** 添加音乐到歌单 */
+export async function addMusicToPlaylist(playlistId: number, musicId: number) {
+  const { data, error } = await supabase
+    .from('music_playlist_item')
+    .insert({
+      playlist_id: playlistId,
+      music_id: musicId,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    if (error.code === '23505') {
+      throw new Error('音乐已在歌单中');
+    }
+    throw error;
+  }
+  return data as MusicPlaylistItem;
+}
+
+/** 从歌单移除音乐 */
+export async function removeMusicFromPlaylist(playlistId: number, musicId: number) {
+  const { error } = await supabase
+    .from('music_playlist_item')
+    .delete()
+    .eq('playlist_id', playlistId)
+    .eq('music_id', musicId);
+
+  if (error) throw error;
+}
+
+/** 记录播放历史 */
+export async function recordPlayHistory(userId: string, musicId: number, durationPlayed: number) {
+  const { error } = await supabase
+    .from('music_play_history')
+    .insert({
+      user_id: userId,
+      music_id: musicId,
+      duration_played: durationPlayed,
+    });
+
+  if (error) throw error;
+}
+
+/** 上传音乐文件 (已移除 Supabase 实现，等待接入新 OSS) */
+export async function uploadMusicFile(userId: string, file: File, quality: 'standard' | 'high' = 'standard') {
+  console.log('[Mock] uploadMusicFile:', { userId, fileName: file.name });
+  alert('Supabase 存储已移除，请待接入新 OSS 后使用');
+  throw new Error('Storage implementation removed');
+}
+
+/** 上传封面图片 (已移除 Supabase 实现，等待接入新 OSS) */
+export async function uploadMusicCover(userId: string, file: File) {
+  console.log('[Mock] uploadMusicCover:', { userId, fileName: file.name });
+  return ''; // 返回空地址
+}
+
+/** 删除存储文件 (已移除 Supabase 实现) */
+export async function deleteMusicFile(fileUrl: string) {
+  console.log('[Mock] deleteMusicFile:', fileUrl);
+}

@@ -32,6 +32,9 @@ import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 import { insightService } from './lib/insight-service';
 import InsightFloatingBall from './components/shared/InsightFloatingBall';
 import { setModelApiKey } from './lib/ai-models';
+import { musicService } from './lib/music-service';
+import MusicFloatingBall from './components/music/MusicFloatingBall';
+import MusicMiniPlayer from './components/music/MusicMiniPlayer';
 
 const App = () => {
   // 全局策展状态
@@ -40,6 +43,13 @@ const App = () => {
     () => insightService.isLoading
   );
   const [insightDone, setInsightDone] = useState(false);
+
+  // 全局音乐播放器状态
+  const musicState = useSyncExternalStore(
+    musicService.subscribe,
+    musicService.getState
+  );
+  const [showMusicMiniPlayer, setShowMusicMiniPlayer] = useState(false);
 
   // 监听策展完成
   useEffect(() => {
@@ -811,8 +821,8 @@ const App = () => {
             <div className="absolute -bottom-1/4 right-1/4 w-[40%] h-[30%] bg-cyan-500/10 rounded-full blur-[100px]" />
           </div>
 
-          {/* 噪点纹理 */}
-          <div className="absolute inset-0 opacity-[0.02]" style={{
+          {/* 噪点纹理 - 仅在 PC 端渲染以节省移动端 GPU 资源 */}
+          <div className="hidden lg:block absolute inset-0 opacity-[0.02]" style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
           }} />
         </div>
@@ -839,187 +849,191 @@ const App = () => {
               <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/15 via-emerald-600/5 to-transparent" />
               <div className="absolute -top-20 left-1/4 w-60 h-40 bg-emerald-400/20 rounded-full blur-3xl" />
               <div className="absolute -top-10 right-1/3 w-48 h-32 bg-lime-500/15 rounded-full blur-3xl" />
-              
-              {/* Top Bar 内容层 */}
-              <div className="relative bg-black/10 backdrop-blur-md px-4 py-3">
-              <div className="flex items-center gap-3">
-                <img src={LogoSvg} alt="FluxF" className="w-9 h-9 shrink-0" />
-                <div className="relative flex-1">
-                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-                  <input
-                    type="text"
-                    placeholder={activeTab === 'watchLater' ? '搜索待看列表...' : '搜索视频或UP...'}
-                    className="w-full bg-white/10 border border-white/20 rounded-full pl-10 pr-10 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-cyber-lime/50 transition-colors"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-                  {/* 清除按钮 */}
-                  {searchTerm && (
-                    <button
-                      onClick={() => setSearchTerm('')}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                    >
-                      <svg className="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
+
+              {/* Top Bar 内容层 - 移动端降低模糊半径提升性能 */}
+              <div className="relative bg-black/10 backdrop-blur-md lg:backdrop-blur-xl px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <img src={LogoSvg} alt="FluxF" className="w-9 h-9 shrink-0" />
+                  <div className="relative flex-1">
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      placeholder={activeTab === 'watchLater' ? '搜索待看列表...' : '搜索视频或UP...'}
+                      className="w-full bg-white/10 border border-white/20 rounded-full pl-10 pr-10 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-cyber-lime/50 transition-colors"
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {/* 清除按钮 */}
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm('')}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                      >
+                        <svg className="w-3 h-3 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+                  <SyncButton compact />
+                  {/* 时间轴按钮 */}
+                  <button
+                    onClick={() => setShowTimeline(true)}
+                    className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 hover:bg-cyber-lime/10 transition-colors"
+                    title="时间轴"
+                  >
+                    <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="20" x2="12" y2="10" />
+                      <line x1="18" y1="20" x2="18" y2="4" />
+                      <line x1="6" y1="20" x2="6" y2="16" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setIsCalendarOpen(true)}
+                    className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 transition-colors"
+                    title="视频日历"
+                  >
+                    <CalendarIcon className="w-4 h-4 text-gray-400" />
+                  </button>
+                  {/* 个人头像/设置 */}
+                  <button
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="w-8 h-8 rounded-full bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center text-black font-bold text-xs hover:scale-110 transition-transform"
+                    title="设置"
+                  >
+                    {currentUser?.username?.[0]?.toUpperCase() || 'U'}
+                  </button>
                 </div>
-                <SyncButton compact />
-                {/* 时间轴按钮 */}
-                <button
-                  onClick={() => setShowTimeline(true)}
-                  className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 hover:bg-cyber-lime/10 transition-colors"
-                  title="时间轴"
-                >
-                  <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <line x1="12" y1="20" x2="12" y2="10" />
-                    <line x1="18" y1="20" x2="18" y2="4" />
-                    <line x1="6" y1="20" x2="6" y2="16" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => setIsCalendarOpen(true)}
-                  className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 transition-colors"
-                  title="视频日历"
-                >
-                  <CalendarIcon className="w-4 h-4 text-gray-400" />
-                </button>
-                {/* 个人头像/设置 */}
-                <button
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="w-8 h-8 rounded-full bg-gradient-to-br from-cyber-lime to-emerald-400 flex items-center justify-center text-black font-bold text-xs hover:scale-110 transition-transform"
-                  title="设置"
-                >
-                  {currentUser?.username?.[0]?.toUpperCase() || 'U'}
-                </button>
               </div>
-            </div>
 
-            {/* Filter Chips - 融入彩色弥散背景 (RSS页面隐藏) */}
-            {activeTab !== 'rss' && (
-              <div className="relative bg-black/10 backdrop-blur-sm py-2 overflow-x-auto no-scrollbar touch-pan-x">
-                <div className="flex px-4 gap-2 w-max">
-                  {/* All 按钮 */}
-                  <button
-                    onClick={() => {
-                      setActiveFilter('all');
-                      mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-                    }}
-                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${activeFilter === 'all'
-                      ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
-                      : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
-                      }`}
-                  >
-                    All
-                  </button>
-
-                  {/* 时间筛选按钮 */}
-                  <button
-                    ref={timeFilterBtnRef}
-                    onClick={() => {
-                      if (timeFilterBtnRef.current) {
-                        const rect = timeFilterBtnRef.current.getBoundingClientRect();
-                        setTimeFilterPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-                      }
-                      setIsTimeFilterOpen(true);
-                    }}
-                    className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 ${['today', 'week', 'month'].includes(activeFilter)
-                      ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
-                      : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
-                      }`}
-                  >
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                      <line x1="16" y1="2" x2="16" y2="6" />
-                      <line x1="8" y1="2" x2="8" y2="6" />
-                      <line x1="3" y1="10" x2="21" y2="10" />
-                    </svg>
-                    {activeFilter === 'today' ? '今天' : activeFilter === 'week' ? '本周' : activeFilter === 'month' ? '本月' : '时间'}
-                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </button>
-
-                  {/* 高级筛选组合按钮 */}
-                  <div className={`flex items-center rounded-full border overflow-hidden ${activeFilter === 'custom' || selectedUploader
-                    ? 'border-cyber-lime/50 bg-white/5'
-                    : 'border-white/10 bg-white/5'
-                    }`}>
-                    {/* 自定义日期 */}
+              {/* Filter Chips - 融入彩色弥散背景 (RSS页面隐藏) - 移动端降低模糊半径提升性能 */}
+              {activeTab !== 'rss' && (
+                <div className="relative bg-black/10 backdrop-blur-sm lg:backdrop-blur-md py-2 overflow-x-auto no-scrollbar touch-pan-x">
+                  <div className="flex px-4 gap-2 w-max">
+                    {/* All 按钮 */}
                     <button
-                      onClick={() => setIsFilterOpen(true)}
-                      className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${activeFilter === 'custom'
-                        ? 'bg-cyber-lime text-black'
-                        : 'text-gray-400 hover:text-white hover:bg-white/10'
+                      onClick={() => {
+                        setActiveFilter('all');
+                        mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border ${activeFilter === 'all'
+                        ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
+                        : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
                         }`}
                     >
-                      <SlidersIcon className="w-3 h-3" />
-                      {activeFilter === 'custom'
-                        ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}${customDateFilter.day !== undefined ? `/${customDateFilter.day}` : ''}`
-                        : '日期'}
+                      All
                     </button>
 
-                    {/* 分隔线 */}
-                    <div className="w-px h-4 bg-white/20" />
-
-                    {/* UP主筛选 */}
+                    {/* 时间筛选按钮 */}
                     <button
-                      onClick={() => setIsUploaderPickerOpen(true)}
-                      className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${selectedUploader
-                        ? 'bg-violet-500 text-white'
-                        : 'text-gray-400 hover:text-white hover:bg-white/10'
+                      ref={timeFilterBtnRef}
+                      onClick={() => {
+                        if (timeFilterBtnRef.current) {
+                          const rect = timeFilterBtnRef.current.getBoundingClientRect();
+                          setTimeFilterPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+                        }
+                        setIsTimeFilterOpen(true);
+                      }}
+                      className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 ${['today', 'week', 'month'].includes(activeFilter)
+                        ? 'bg-cyber-lime text-black border-cyber-lime shadow-[0_0_10px_rgba(163,230,53,0.3)]'
+                        : 'bg-white/5 text-gray-400 border-white/5 hover:border-gray-600'
                         }`}
                     >
                       <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                        <line x1="16" y1="2" x2="16" y2="6" />
+                        <line x1="8" y1="2" x2="8" y2="6" />
+                        <line x1="3" y1="10" x2="21" y2="10" />
                       </svg>
-                      {selectedUploader ? selectedUploader.name : '关注'}
+                      {activeFilter === 'today' ? '今天' : activeFilter === 'week' ? '本周' : activeFilter === 'month' ? '本月' : '时间'}
+                      <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
                     </button>
 
-                    {/* 清除按钮 */}
-                    {(selectedUploader || activeFilter === 'custom') && (
-                      <>
-                        <div className="w-px h-4 bg-white/20" />
-                        <button
-                          onClick={() => {
-                            setSelectedUploader(null);
-                            if (activeFilter === 'custom') setActiveFilter('today');
-                          }}
-                          className="px-2 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
-                          title="清除筛选"
-                        >
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M18 6L6 18M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </>
-                    )}
-                  </div>
+                    {/* 高级筛选组合按钮 */}
+                    <div className={`flex items-center rounded-full border overflow-hidden ${activeFilter === 'custom' || selectedUploader
+                      ? 'border-cyber-lime/50 bg-white/5'
+                      : 'border-white/10 bg-white/5'
+                      }`}>
+                      {/* 自定义日期 */}
+                      <button
+                        onClick={() => setIsFilterOpen(true)}
+                        className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${activeFilter === 'custom'
+                          ? 'bg-cyber-lime text-black'
+                          : 'text-gray-400 hover:text-white hover:bg-white/10'
+                          }`}
+                      >
+                        <SlidersIcon className="w-3 h-3" />
+                        {activeFilter === 'custom'
+                          ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}${customDateFilter.day !== undefined ? `/${customDateFilter.day}` : ''}`
+                          : '日期'}
+                      </button>
 
-                  {/* AI 分析按钮 */}
-                  <button
-                    onClick={() => setIsVideoAnalyzerOpen(true)}
-                    className="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white"
-                  >
-                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
-                    </svg>
-                    AI
-                  </button>
+                      {/* 分隔线 */}
+                      <div className="w-px h-4 bg-white/20" />
+
+                      {/* UP主筛选 */}
+                      <button
+                        onClick={() => setIsUploaderPickerOpen(true)}
+                        className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium transition-all flex items-center gap-1.5 ${selectedUploader
+                          ? 'bg-violet-500 text-white'
+                          : 'text-gray-400 hover:text-white hover:bg-white/10'
+                          }`}
+                      >
+                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        {selectedUploader ? selectedUploader.name : '关注'}
+                      </button>
+
+                      {/* 清除按钮 */}
+                      {(selectedUploader || activeFilter === 'custom') && (
+                        <>
+                          <div className="w-px h-4 bg-white/20" />
+                          <button
+                            onClick={() => {
+                              setSelectedUploader(null);
+                              if (activeFilter === 'custom') setActiveFilter('today');
+                            }}
+                            className="px-2 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                            title="清除筛选"
+                          >
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M18 6L6 18M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {/* AI 分析按钮 */}
+                    <button
+                      onClick={() => setIsVideoAnalyzerOpen(true)}
+                      className="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 bg-white/5 border-white/10 text-gray-300 hover:bg-white/10 hover:border-white/20 hover:text-white"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+                      </svg>
+                      AI
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
             </div>
           </header>
 
 
-          {/* Main Content Feed */}
+          {/* Main Content Feed - 优化滑动性能 */}
           <main
             ref={mainRef}
             className="flex-1 overflow-y-auto overflow-x-hidden no-scrollbar px-3 lg:px-6 xl:px-8 py-4 pb-24 lg:pb-6 transform-gpu"
-            style={{ willChange: 'transform, scroll-position' }}
+            style={{
+              willChange: 'scroll-position',
+              WebkitOverflowScrolling: 'touch',
+              contain: 'size layout style'
+            }}
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
@@ -2007,6 +2021,33 @@ const App = () => {
             storageKey="insight-ball-pos"
           />
         )}
+
+        {/* 音乐悬浮球 - 全局显示 */}
+        {musicState.showFloatingBall && musicState.currentMusic && (
+          <MusicFloatingBall onClick={() => setShowMusicMiniPlayer(true)} />
+        )}
+
+        {/* 音乐迷你播放器 */}
+        <MusicMiniPlayer
+          isOpen={showMusicMiniPlayer}
+          onClose={() => {
+            setShowMusicMiniPlayer(false);
+            musicService.setShowFloatingBall(true);
+          }}
+          onExpand={() => {
+            setShowMusicMiniPlayer(false);
+            musicService.expand();
+            // 跳转到设置页面的创作空间
+            setSettingsInitialView('main');
+            setActiveTab('settings');
+            setTimeout(() => {
+              window.dispatchEvent(new CustomEvent('navigate-to-creations'));
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('open-music-player'));
+              }, 100);
+            }, 100);
+          }}
+        />
 
         {/* Toast 提示 - 右上角毛玻璃 macOS 风格 */}
         {toast && (

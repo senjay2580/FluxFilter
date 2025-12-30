@@ -8,9 +8,10 @@ import VideoDownloader from '../tools/VideoDownloader';
 import AudioTranscriber from '../tools/AudioTranscriber';
 import DailyInsights from '../tools/DailyInsights';
 import InsightFloatingBall from '../shared/InsightFloatingBall';
+import MyCreations from '../pages/MyCreations';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
 
-export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights';
+export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights' | 'creations';
 
 interface SettingsPageProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 }) => {
   const [currentView, setCurrentView] = useState<SettingsView>(initialView);
   const [toast, setToast] = useState<string | null>(null);
-  
+
   // 策展状态
   const [insightStatus, setInsightStatus] = useState<'idle' | 'loading' | 'done'>('idle');
 
@@ -74,6 +75,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     return () => window.removeEventListener('navigate-to-transcriber', handleNavigateToTranscriber);
   }, []);
 
+  // 监听跳转到创作空间事件
+  useEffect(() => {
+    const handleNavigateToCreations = () => {
+      setCurrentView('creations');
+    };
+    window.addEventListener('navigate-to-creations', handleNavigateToCreations);
+    return () => window.removeEventListener('navigate-to-creations', handleNavigateToCreations);
+  }, []);
+
   const showToast = useCallback((message: string) => {
     setToast(message);
     setTimeout(() => setToast(null), 3000);
@@ -85,12 +95,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   }, [currentView, onClose]);
 
   // 左滑返回手势 - 在 insights 页面禁用（因为有卡片滑动）
-  const { swipeState, ...swipeHandlers } = useSwipeBack({ 
+  const { swipeState, ...swipeHandlers } = useSwipeBack({
     onBack: handleBack,
     threshold: 80,
     edgeWidth: 25
   });
-  
+
   // 根据当前视图决定是否启用滑动返回
   const shouldEnableSwipeBack = currentView !== 'insights';
 
@@ -105,6 +115,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       case 'downloader': return '视频下载';
       case 'transcriber': return '音频转写';
       case 'insights': return '每日信息差';
+      case 'creations': return '我的创作';
       default: return '设置';
     }
   };
@@ -122,19 +133,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     >
       {/* 光泽效果 */}
       <div className="absolute inset-0 bg-gradient-to-br from-white/25 via-transparent to-transparent opacity-60 pointer-events-none" />
-      
+
       {external && (
         <svg className="absolute top-3 right-3 w-3.5 h-3.5 text-white/50 z-10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" />
         </svg>
       )}
-      
+
       {/* 标题在上方 */}
       <div className="relative z-10">
         <h3 className="text-white font-bold text-base leading-tight drop-shadow-md">{title}</h3>
         <p className="text-white/80 text-xs mt-1 line-clamp-2 drop-shadow-sm">{desc}</p>
       </div>
-      
+
       {/* 大图标在右下角 - 隐约显示 */}
       <div className="absolute -bottom-3 -right-3 w-20 h-20 opacity-30 text-white transition-all group-hover:opacity-50 group-hover:scale-110">
         {icon}
@@ -152,8 +163,8 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
   return createPortal(
     <div className={`fixed inset-0 z-[99998] overflow-hidden flex flex-col ${currentView === 'insights' ? '' : ''}`}
-      style={currentView === 'insights' 
-        ? { background: 'linear-gradient(180deg, #0a1628 0%, #0d2137 30%, #0f2847 60%, #0a1f3a 100%)' } 
+      style={currentView === 'insights'
+        ? { background: 'linear-gradient(180deg, #0a1628 0%, #0d2137 30%, #0f2847 60%, #0a1f3a 100%)' }
         : { background: 'linear-gradient(135deg, #080a09 0%, #0a0d0b 25%, #0c100e 50%, #0a0d0b 75%, #070908 100%)' }
       }
     >
@@ -162,27 +173,27 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
           {/* 顶部主光源 - 深墨绿色 */}
           <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-gradient-to-b from-emerald-900/40 via-emerald-950/20 to-transparent blur-3xl animate-glow-breathe" />
-          
+
           {/* 左上角光斑 - 暗绿 */}
           <div className="absolute -top-20 -left-20 w-80 h-80 bg-emerald-950/50 rounded-full blur-[100px] animate-glow-float" />
-          
+
           {/* 右上角光斑 - 深青绿 */}
           <div className="absolute -top-10 -right-10 w-72 h-72 bg-teal-950/40 rounded-full blur-[80px] animate-glow-float" style={{ animationDelay: '2s' }} />
-          
+
           {/* 中间偏左光斑 */}
           <div className="absolute top-1/3 -left-20 w-96 h-96 bg-emerald-950/30 rounded-full blur-[120px] animate-glow-drift" />
-          
+
           {/* 中间偏右光斑 */}
           <div className="absolute top-1/2 -right-32 w-80 h-80 bg-teal-950/25 rounded-full blur-[100px] animate-glow-drift" style={{ animationDelay: '3s' }} />
-          
-          {/* 底部光晕 */}
-          <div className="absolute -bottom-20 left-1/3 w-[500px] h-64 bg-gradient-to-t from-emerald-950/30 via-teal-950/15 to-transparent blur-[80px]" />
-          
+
+          {/* 底部光晕 - 移动端简化 */}
+          <div className="absolute -bottom-20 left-1/3 w-[500px] h-64 bg-gradient-to-t from-emerald-950/30 via-teal-950/15 to-transparent blur-[80px] lg:animate-glow-drift" />
+
           {/* 装饰性光点 - 更暗淡 */}
           <div className="absolute top-1/4 left-1/4 w-1.5 h-1.5 bg-emerald-700/40 rounded-full blur-sm animate-twinkle" />
           <div className="absolute top-1/3 right-1/3 w-1 h-1 bg-teal-700/30 rounded-full blur-sm animate-twinkle" style={{ animationDelay: '1s' }} />
           <div className="absolute bottom-1/3 left-1/2 w-1.5 h-1.5 bg-emerald-800/30 rounded-full blur-sm animate-twinkle" style={{ animationDelay: '2s' }} />
-          
+
           {/* 网格纹理 */}
           <div className="absolute inset-0 opacity-[0.015]" style={{
             backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`,
@@ -190,7 +201,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           }} />
         </div>
       )}
-      
+
       {/* insights 视图的水波背景 */}
       {currentView === 'insights' && (
         <div className="absolute inset-0 pointer-events-none overflow-hidden">
@@ -198,7 +209,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
           <div className="absolute inset-0 opacity-30">
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-cyan-500/20 to-transparent" />
           </div>
-          
+
           {/* 波浪层1 - 浅青色 */}
           <div className="absolute bottom-0 left-0 right-0 h-[70%]">
             <svg className="absolute bottom-0 w-[200%] animate-wave-slow" viewBox="0 0 1440 320" preserveAspectRatio="none" style={{ height: '100%' }}>
@@ -211,7 +222,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
               </defs>
             </svg>
           </div>
-          
+
           {/* 波浪层2 - 深青色 */}
           <div className="absolute bottom-0 left-0 right-0 h-[55%]">
             <svg className="absolute bottom-0 w-[200%] animate-wave-medium" viewBox="0 0 1440 320" preserveAspectRatio="none" style={{ height: '100%' }}>
@@ -224,7 +235,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
               </defs>
             </svg>
           </div>
-          
+
           {/* 波浪层3 - 深蓝色 */}
           <div className="absolute bottom-0 left-0 right-0 h-[40%]">
             <svg className="absolute bottom-0 w-[200%] animate-wave-fast" viewBox="0 0 1440 320" preserveAspectRatio="none" style={{ height: '100%' }}>
@@ -237,18 +248,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
               </defs>
             </svg>
           </div>
-          
+
           {/* 水下光晕 */}
           <div className="absolute top-20 left-1/3 w-80 h-80 bg-cyan-400/8 rounded-full blur-[120px] animate-caustic" />
           <div className="absolute top-40 right-1/4 w-60 h-60 bg-sky-400/6 rounded-full blur-[100px] animate-caustic animation-delay-1000" />
           <div className="absolute bottom-1/3 left-1/4 w-48 h-48 bg-teal-400/5 rounded-full blur-[80px] animate-caustic animation-delay-2000" />
-          
+
           {/* 气泡效果 */}
           <div className="absolute bottom-20 left-[15%] w-2 h-2 bg-white/20 rounded-full animate-bubble" />
           <div className="absolute bottom-32 left-[35%] w-1.5 h-1.5 bg-white/15 rounded-full animate-bubble animation-delay-1000" />
           <div className="absolute bottom-16 right-[25%] w-1 h-1 bg-white/10 rounded-full animate-bubble animation-delay-2000" />
           <div className="absolute bottom-40 right-[40%] w-2.5 h-2.5 bg-white/15 rounded-full animate-bubble animation-delay-3000" />
-          
+
           {/* 水浪动画样式 */}
           <style>{`
             @keyframes wave-slow {
@@ -332,9 +343,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       </div>
 
       {/* 内容区域 */}
-      <div 
-        className="flex-1 overflow-y-auto"
-        style={{ overscrollBehaviorX: 'none' }}
+      <div
+        className="flex-1 overflow-y-auto transform-gpu"
+        style={{
+          overscrollBehaviorX: 'none',
+          contain: 'size layout style'
+        }}
         {...(shouldEnableSwipeBack ? swipeHandlers : {})}
       >
         {currentView === 'main' && (
@@ -433,6 +447,18 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 onClick={() => setCurrentView('downloader')}
               />
             </div>
+
+            {/* 我的创作 */}
+            <SectionTitle title="创作空间" />
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              <MenuItem
+                icon={<svg className="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>}
+                title="我的创作"
+                desc="提示词·音乐·文章·项目"
+                gradient="bg-gradient-to-br from-fuchsia-400 via-purple-500 to-violet-600"
+                onClick={() => setCurrentView('creations')}
+              />
+            </div>
           </div>
         )}
 
@@ -459,10 +485,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             <DailyInsights />
           </div>
         )}
+        {currentView === 'creations' && (
+          <MyCreations isOpen={true} onClose={() => setCurrentView('main')} />
+        )}
       </div>
 
       {/* 策展悬浮球 - 仅在非insights页面时显示 */}
-      {currentView !== 'insights' && (
+      {currentView !== 'insights' && currentView !== 'creations' && (
         <InsightFloatingBall
           isLoading={insightStatus === 'loading'}
           isDone={insightStatus === 'done'}
