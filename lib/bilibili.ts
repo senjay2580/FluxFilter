@@ -15,7 +15,7 @@ import { getUserBilibiliCookie } from './auth';
 
 // B站API基础URL
 // 开发模式使用 Vite 代理，生产模式使用 Vercel Serverless Function
-const BILIBILI_API_BASE = import.meta.env.DEV 
+const BILIBILI_API_BASE = import.meta.env.DEV
   ? '/bili-api'  // 开发模式：通过 Vite 代理
   : '/api/bilibili?path=';  // 生产模式：通过 Vercel API 代理
 
@@ -46,7 +46,7 @@ let cachedCookie: string | null = null;
  */
 async function getBilibiliCookie(): Promise<string> {
   if (cachedCookie !== null) return cachedCookie;
-  
+
   const cookie = await getUserBilibiliCookie();
   cachedCookie = cookie || '';
   return cachedCookie;
@@ -82,12 +82,12 @@ const getHeaders = async (): Promise<Record<string, string>> => {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Referer': 'https://www.bilibili.com',
   };
-  
+
   // 只在有有效 Cookie 字符串时才添加
   if (cookie && typeof cookie === 'string' && cookie.trim()) {
     headers['Cookie'] = cookie.trim();
   }
-  
+
   return headers;
 };
 
@@ -98,7 +98,7 @@ async function waitForRateLimit(): Promise<void> {
   const now = Date.now();
   const elapsed = now - lastRequestTime;
   const waitTime = Math.max(0, RATE_LIMIT_CONFIG.minInterval - elapsed);
-  
+
   if (waitTime > 0) {
     await sleep(waitTime);
   }
@@ -117,7 +117,7 @@ async function fetchWithRetry<T>(
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       const response = await fetch(url, { headers: await getHeaders() });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -127,29 +127,29 @@ async function fetchWithRetry<T>(
       // B站特有错误码处理
       if (data.code !== 0) {
         const isRetryable = RATE_LIMIT_CONFIG.retryableCodes.includes(data.code);
-        
+
         if (isRetryable && attempt < retries) {
           // 限流时等待更长时间：5s, 10s, 20s
           const delay = RATE_LIMIT_CONFIG.baseDelay * Math.pow(2, attempt);
-          console.warn(`⏳ B站限流 [${data.code}]，等待 ${delay/1000}s 后重试 (${attempt + 1}/${retries})`);
+          console.warn(`⏳ B站限流 [${data.code}]，等待 ${delay / 1000}s 后重试 (${attempt + 1}/${retries})`);
           await sleep(delay);
           lastRequestTime = Date.now(); // 重置计时器
           continue;
         }
-        
+
         throw new Error(`B站API错误 [${data.code}]: ${data.message}`);
       }
-      
+
       // 成功后记录时间
       lastSuccessTime = Date.now();
 
       return data as T;
-      
+
     } catch (error) {
       if (attempt === retries) {
         throw error;
       }
-      
+
       const delay = RATE_LIMIT_CONFIG.baseDelay * Math.pow(2, attempt);
       console.warn(`请求失败，${delay}ms后重试:`, error);
       await sleep(delay);
@@ -189,11 +189,11 @@ export async function getUploaderVideos(
     // 从动态中提取视频
     const videos: BilibiliVideoItem[] = [];
     const items = data.data?.items || [];
-    
+
     for (const item of items) {
       // 只处理视频类型的动态
       if (item.type !== 'DYNAMIC_TYPE_AV') continue;
-      
+
       const archive = item.modules?.module_dynamic?.major?.archive;
       if (!archive) continue;
 
@@ -240,7 +240,7 @@ export async function getUploaderVideos(
 function parseDuration(duration: string | number): number {
   if (typeof duration === 'number') return duration;
   if (!duration) return 0;
-  
+
   const parts = duration.split(':').map(Number);
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
@@ -251,7 +251,7 @@ function parseDuration(duration: string | number): number {
 function parseCount(count: string | number): number {
   if (typeof count === 'number') return count;
   if (!count) return 0;
-  
+
   const str = String(count);
   if (str.includes('万')) return parseFloat(str) * 10000;
   if (str.includes('亿')) return parseFloat(str) * 100000000;
@@ -267,13 +267,13 @@ export async function getRecentVideos(
 ): Promise<BilibiliVideoItem[]> {
   const recentVideos: BilibiliVideoItem[] = [];
   const cutoffTime = Date.now() / 1000 - days * 24 * 60 * 60;
-  
+
   let page = 1;
   let hasMore = true;
 
   while (hasMore) {
     const { videos, total } = await getUploaderVideos(mid, page, 30);
-    
+
     for (const video of videos) {
       if (video.pubdate >= cutoffTime) {
         recentVideos.push(video);
@@ -288,9 +288,9 @@ export async function getRecentVideos(
     if (videos.length === 0 || page * 30 >= total) {
       hasMore = false;
     }
-    
+
     page++;
-    
+
     // 避免请求过快
     await sleep(300);
   }
@@ -396,14 +396,14 @@ export function isMobileDevice(): boolean {
  */
 export function handleVideoClick(bvid: string): void {
   const webUrl = getBilibiliVideoUrl(bvid);
-  
+
   if (isMobileDevice()) {
     const appUrl = getBilibiliAppDeepLink(bvid);
-    
+
     // 尝试打开APP
     const start = Date.now();
     window.location.href = appUrl;
-    
+
     // 如果2秒后还在页面上，说明APP未安装，跳转网页
     setTimeout(() => {
       if (Date.now() - start < 2500) {
@@ -505,11 +505,11 @@ export async function getVideoAISummary(bvid: string): Promise<AISummary | null>
   if (!videoInfo) return null;
 
   const { cid, mid } = videoInfo;
-  
+
   // AI总结需要WBI签名
   const params = { bvid, cid, up_mid: mid };
   const signedQuery = await encWbi(params);
-  
+
   const apiPath = `/x/web-interface/view/conclusion/get`;
   const url = import.meta.env.DEV
     ? `${BILIBILI_API_BASE}${apiPath}?${signedQuery}`
@@ -593,11 +593,11 @@ export async function getVideoSubtitleList(bvid: string): Promise<SubtitleInfo[]
   if (!videoInfo) return [];
 
   const { cid } = videoInfo;
-  
+
   // 使用WBI签名
   const params = { bvid, cid };
   const signedQuery = await encWbi(params);
-  
+
   const apiPath = `/x/player/wbi/v2`;
   const url = import.meta.env.DEV
     ? `${BILIBILI_API_BASE}${apiPath}?${signedQuery}`
@@ -616,8 +616,8 @@ export async function getVideoSubtitleList(bvid: string): Promise<SubtitleInfo[]
     return subtitles.map((s: any) => ({
       lan: s.lan,
       lan_doc: s.lan_doc,
-      subtitle_url: s.subtitle_url?.startsWith('//') 
-        ? `https:${s.subtitle_url}` 
+      subtitle_url: s.subtitle_url?.startsWith('//')
+        ? `https:${s.subtitle_url}`
         : s.subtitle_url,
     }));
   } catch (error) {
@@ -635,7 +635,7 @@ export async function getSubtitleContent(subtitleUrl: string): Promise<SubtitleC
     return ((hash << 5) - hash) + char.charCodeAt(0);
   }, 0).toString(36);
   const cacheKey = `bili_subtitle_${urlHash}`;
-  
+
   const cached = localStorage.getItem(cacheKey);
   if (cached) {
     try {
@@ -653,7 +653,9 @@ export async function getSubtitleContent(subtitleUrl: string): Promise<SubtitleC
       ? `/bili-subtitle?url=${encodeURIComponent(subtitleUrl)}`
       : `/api/bilibili?subtitle_url=${encodeURIComponent(subtitleUrl)}`;
 
-    const response = await fetch(proxyUrl);
+    const response = await fetch(proxyUrl, {
+      headers: await getHeaders()
+    });
     const data = await response.json();
 
     if (!data.body) {
