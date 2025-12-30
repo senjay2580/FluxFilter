@@ -85,7 +85,10 @@ const getHeaders = async (): Promise<Record<string, string>> => {
 
   // 只在有有效 Cookie 字符串时才添加
   if (cookie && typeof cookie === 'string' && cookie.trim()) {
-    headers['Cookie'] = cookie.trim();
+    const trimmedCookie = cookie.trim();
+    headers['Cookie'] = trimmedCookie;
+    // 同时也放入自定义头，方便后端 Vercel Proxy 识别并透传
+    headers['X-Bilibili-Cookie'] = trimmedCookie;
   }
 
   return headers;
@@ -648,15 +651,10 @@ export async function getSubtitleContent(subtitleUrl: string): Promise<SubtitleC
   }
 
   try {
-    // 解析原始 URL 以获取 host 和 path
-    const parsedUrl = new URL(subtitleUrl);
-    const apiPath = parsedUrl.pathname;
-    const apiHost = parsedUrl.host;
-
-    // 字幕URL需要通过代理访问
+    // 统一调用方式：使用 BILIBILI_API_BASE 代理，逻辑与获取视频列表等完全一致
     const proxyUrl = import.meta.env.DEV
       ? `/bili-subtitle?url=${encodeURIComponent(subtitleUrl)}`
-      : `/api/bilibili?path=${encodeURIComponent(apiPath)}&host=${encodeURIComponent(apiHost)}`;
+      : `${BILIBILI_API_BASE}${encodeURIComponent(subtitleUrl)}`;
 
     const response = await fetch(proxyUrl, {
       headers: await getHeaders()

@@ -13,26 +13,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  const { path, host = 'api.bilibili.com' } = req.query;
+  const { path } = req.query;
 
   if (!path || typeof path !== 'string') {
     return res.status(400).json({ error: 'Missing path parameter' });
   }
 
   // 构建完整的 URL
-  // host 参数允许代理不同的 B 站子域名（如 i0.hdslb.com 用于字幕文件）
-  const targetHost = typeof host === 'string' ? host : 'api.bilibili.com';
-  const biliUrl = `https://${targetHost}${path.startsWith('/') ? path : '/' + path}`;
+  let targetUrl = '';
+  if (path.startsWith('http')) {
+    // 如果 path 是完整 URL (如字幕链接)，直接使用
+    targetUrl = path;
+  } else {
+    // 否则拼装标准的 B站 API 域名
+    targetUrl = `https://api.bilibili.com${path.startsWith('/') ? path : '/' + path}`;
+  }
 
-  // 转发查询参数
-  const url = new URL(biliUrl);
+  // 转发所有非控制类查询参数
+  const url = new URL(targetUrl);
   Object.entries(req.query).forEach(([key, value]) => {
-    if (key !== 'path' && key !== 'host' && typeof value === 'string') {
+    if (key !== 'path' && typeof value === 'string') {
       url.searchParams.set(key, value);
     }
   });
 
-  // 优先使用请求头中的用户 Cookie，否则使用环境变量
+  // 优先使用请求头中的用户 Cookie，否则使用环境变量 (作为可选凭据)
   const userCookie = req.headers['x-bilibili-cookie'] as string || '';
   const cookie = userCookie || DEFAULT_COOKIE;
 
