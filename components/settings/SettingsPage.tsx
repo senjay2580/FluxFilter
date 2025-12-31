@@ -7,10 +7,11 @@ import DevCommunity from '../pages/DevCommunity';
 import VideoDownloader from '../tools/VideoDownloader';
 import AudioTranscriber from '../tools/AudioTranscriber';
 import DailyInsights from '../tools/DailyInsights';
+import AIChat from '../tools/AIChat';
 import InsightFloatingBall from '../shared/InsightFloatingBall';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
 
-export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights';
+export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights' | 'aichat';
 
 interface SettingsPageProps {
   isOpen: boolean;
@@ -107,6 +108,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       case 'downloader': return '视频下载';
       case 'transcriber': return '音频转写';
       case 'insights': return '每日信息差';
+      case 'aichat': return 'AI 对话';
       default: return '设置';
     }
   };
@@ -412,6 +414,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 gradient="bg-gradient-to-br from-rose-400 via-pink-500 to-rose-600"
                 onClick={() => setCurrentView('insights')}
               />
+              <MenuItem
+                icon={<svg className="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><path d="M8 10h.01M12 10h.01M16 10h.01" /></svg>}
+                title="AI 对话"
+                desc="智能助手 · 多模型"
+                gradient="bg-gradient-to-br from-violet-400 via-purple-500 to-indigo-600"
+                onClick={() => setCurrentView('aichat')}
+              />
             </div>
 
             {/* 资源 & 社区 */}
@@ -468,6 +477,11 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         {currentView === 'insights' && (
           <div className="relative z-10 p-4" style={{ touchAction: 'pan-y pinch-zoom' }}>
             <DailyInsights />
+          </div>
+        )}
+        {currentView === 'aichat' && (
+          <div className="relative z-10 h-full flex flex-col">
+            <AIChat embedded />
           </div>
         )}
       </div>
