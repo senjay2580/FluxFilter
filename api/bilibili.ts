@@ -19,14 +19,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing path parameter' });
   }
 
+  // 解码 path 参数（可能被 encodeURIComponent 编码过）
+  const decodedPath = decodeURIComponent(path);
+
   // 构建完整的 URL
   let targetUrl = '';
-  if (path.startsWith('http')) {
+  if (decodedPath.startsWith('http')) {
     // 如果 path 是完整 URL (如字幕链接)，直接使用
-    targetUrl = path;
+    targetUrl = decodedPath;
   } else {
     // 否则拼装标准的 B站 API 域名
-    targetUrl = `https://api.bilibili.com${path.startsWith('/') ? path : '/' + path}`;
+    targetUrl = `https://api.bilibili.com${decodedPath.startsWith('/') ? decodedPath : '/' + decodedPath}`;
   }
 
   // 转发所有非控制类查询参数

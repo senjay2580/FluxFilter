@@ -8,10 +8,9 @@ import VideoDownloader from '../tools/VideoDownloader';
 import AudioTranscriber from '../tools/AudioTranscriber';
 import DailyInsights from '../tools/DailyInsights';
 import InsightFloatingBall from '../shared/InsightFloatingBall';
-import MyCreations from '../pages/MyCreations';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
 
-export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights' | 'creations';
+export type SettingsView = 'main' | 'todo' | 'reminder' | 'collector' | 'devcommunity' | 'downloader' | 'transcriber' | 'insights';
 
 interface SettingsPageProps {
   isOpen: boolean;
@@ -75,14 +74,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     return () => window.removeEventListener('navigate-to-transcriber', handleNavigateToTranscriber);
   }, []);
 
-  // 监听跳转到创作空间事件
-  useEffect(() => {
-    const handleNavigateToCreations = () => {
-      setCurrentView('creations');
-    };
-    window.addEventListener('navigate-to-creations', handleNavigateToCreations);
-    return () => window.removeEventListener('navigate-to-creations', handleNavigateToCreations);
-  }, []);
+
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -115,7 +107,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
       case 'downloader': return '视频下载';
       case 'transcriber': return '音频转写';
       case 'insights': return '每日信息差';
-      case 'creations': return '我的创作';
       default: return '设置';
     }
   };
@@ -453,18 +444,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 onClick={() => setCurrentView('downloader')}
               />
             </div>
-
-            {/* 我的创作 */}
-            <SectionTitle title="创作空间" />
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              <MenuItem
-                icon={<svg className="w-full h-full" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>}
-                title="我的创作"
-                desc="提示词·音乐·文章·项目"
-                gradient="bg-gradient-to-br from-fuchsia-400 via-purple-500 to-violet-600"
-                onClick={() => setCurrentView('creations')}
-              />
-            </div>
           </div>
         )}
 
@@ -491,13 +470,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
             <DailyInsights />
           </div>
         )}
-        {currentView === 'creations' && (
-          <MyCreations isOpen={true} onClose={() => setCurrentView('main')} />
-        )}
       </div>
 
       {/* 策展悬浮球 - 仅在非insights页面时显示 */}
-      {currentView !== 'insights' && currentView !== 'creations' && (
+      {currentView !== 'insights' && (
         <InsightFloatingBall
           isLoading={insightStatus === 'loading'}
           isDone={insightStatus === 'done'}

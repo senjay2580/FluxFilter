@@ -1342,8 +1342,8 @@ ${text}`
           {/* 转写按钮 */}
           <button
             onClick={transcribe}
-            disabled={!file || !groqKey || transcribing}
-            className={`w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 btn-press ${file && groqKey && !transcribing
+            disabled={!file || (apiKeys.length === 0 && !groqKey) || transcribing}
+            className={`w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 btn-press ${file && (apiKeys.length > 0 || groqKey) && !transcribing
               ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white'
               : 'bg-white/5 text-gray-500 cursor-not-allowed'
               }`}

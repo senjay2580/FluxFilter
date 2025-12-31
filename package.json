@@ -9,6 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.958.0",
+    "@aws-sdk/s3-request-presigner": "^3.958.0",
     "@google/genai": "^1.32.0",
     "@supabase/supabase-js": "^2.45.0",
     "@tiptap/extension-color": "^3.13.0",

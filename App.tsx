@@ -32,10 +32,6 @@ import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 import { insightService } from './lib/insight-service';
 import InsightFloatingBall from './components/shared/InsightFloatingBall';
 import { setModelApiKey } from './lib/ai-models';
-import { musicService } from './lib/music-service';
-import MusicFloatingBall from './components/music/MusicFloatingBall';
-import MusicMiniPlayer from './components/music/MusicMiniPlayer';
-
 const App = () => {
   // 全局策展状态
   const insightLoading = useSyncExternalStore(
@@ -43,13 +39,6 @@ const App = () => {
     () => insightService.isLoading
   );
   const [insightDone, setInsightDone] = useState(false);
-
-  // 全局音乐播放器状态
-  const musicState = useSyncExternalStore(
-    musicService.subscribe,
-    musicService.getState
-  );
-  const [showMusicMiniPlayer, setShowMusicMiniPlayer] = useState(false);
 
   // 监听策展完成
   useEffect(() => {
@@ -2027,33 +2016,6 @@ const App = () => {
             storageKey="insight-ball-pos"
           />
         )}
-
-        {/* 音乐悬浮球 - 全局显示 */}
-        {musicState.showFloatingBall && musicState.currentMusic && (
-          <MusicFloatingBall onClick={() => setShowMusicMiniPlayer(true)} />
-        )}
-
-        {/* 音乐迷你播放器 */}
-        <MusicMiniPlayer
-          isOpen={showMusicMiniPlayer}
-          onClose={() => {
-            setShowMusicMiniPlayer(false);
-            musicService.setShowFloatingBall(true);
-          }}
-          onExpand={() => {
-            setShowMusicMiniPlayer(false);
-            musicService.expand();
-            // 跳转到设置页面的创作空间
-            setSettingsInitialView('main');
-            setActiveTab('settings');
-            setTimeout(() => {
-              window.dispatchEvent(new CustomEvent('navigate-to-creations'));
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('open-music-player'));
-              }, 100);
-            }, 100);
-          }}
-        />
 
         {/* Toast 提示 - 右上角毛玻璃 macOS 风格 */}
         {toast && (
