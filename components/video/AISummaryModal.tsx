@@ -295,56 +295,90 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
               {/* 总结内容 */}
               {summary && (
                 <>
-                  <div className="bg-white/5 rounded-xl p-4">
-                    <h4 className="text-cyber-lime text-xs font-medium mb-2 flex items-center gap-1.5">
+                  {/* 视频摘要 - 分段渲染 */}
+                  <div className="bg-gradient-to-br from-purple-500/10 to-cyan-500/10 rounded-xl p-4 border border-white/5">
+                    <h4 className="text-cyber-lime text-xs font-medium mb-3 flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
                       </svg>
                       视频摘要
                     </h4>
-                    <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-wrap">
-                      {summary.summary}
-                    </p>
+                    <div className="space-y-3">
+                      {summary.summary.split('\n\n').map((paragraph, idx) => {
+                        // 检查是否是标题行（以【开头）
+                        if (paragraph.startsWith('【')) {
+                          const titleMatch = paragraph.match(/^【(.+?)】(.*)$/s);
+                          if (titleMatch) {
+                            return (
+                              <div key={idx}>
+                                <span className="text-cyan-400 text-xs font-medium">【{titleMatch[1]}】</span>
+                                <p className="text-gray-300 text-sm leading-relaxed mt-1">
+                                  {titleMatch[2].trim()}
+                                </p>
+                              </div>
+                            );
+                          }
+                        }
+                        return (
+                          <p key={idx} className="text-gray-300 text-sm leading-relaxed">
+                            {paragraph}
+                          </p>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  {/* 关键要点 */}
+                  {/* 关键要点 - 卡片式布局 */}
                   {summary.keyPoints?.length > 0 && (
                     <div className="bg-white/5 rounded-xl p-4">
-                      <h4 className="text-cyan-400 text-xs font-medium mb-2 flex items-center gap-1.5">
+                      <h4 className="text-cyan-400 text-xs font-medium mb-3 flex items-center gap-1.5">
                         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M9 12l2 2 4-4" />
                           <circle cx="12" cy="12" r="10" />
                         </svg>
                         关键要点
                       </h4>
-                      <ul className="space-y-1.5">
+                      <div className="grid gap-2">
                         {summary.keyPoints.map((point, idx) => (
-                          <li key={idx} className="text-gray-300 text-sm flex gap-2">
-                            <span className="text-cyan-400 shrink-0">{idx + 1}.</span>
-                            <span>{point}</span>
-                          </li>
+                          <div 
+                            key={idx} 
+                            className="bg-white/5 rounded-lg px-3 py-2.5 text-gray-300 text-sm flex items-start gap-2 hover:bg-white/10 transition-colors"
+                          >
+                            <span className="text-base leading-5">{point.match(/^[^\s]+/)?.[0] || '•'}</span>
+                            <span className="leading-relaxed">{point.replace(/^[^\s]+\s*/, '')}</span>
+                          </div>
                         ))}
-                      </ul>
+                      </div>
                     </div>
                   )}
 
-                  {/* 章节大纲 */}
+                  {/* 章节大纲 - 时间线样式 */}
                   {summary.outline?.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-white text-sm font-medium flex items-center gap-1.5">
-                        <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <div className="bg-white/5 rounded-xl p-4">
+                      <h4 className="text-white text-xs font-medium mb-3 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                         章节大纲
                       </h4>
-                      {summary.outline.map((section, idx) => (
-                        <div key={idx} className="bg-white/5 rounded-xl p-3">
-                          <h5 className="text-white text-sm font-medium">{section.title}</h5>
-                          {section.content && (
-                            <p className="text-gray-400 text-xs mt-1">{section.content}</p>
-                          )}
-                        </div>
-                      ))}
+                      <div className="space-y-0 relative">
+                        {/* 时间线 */}
+                        <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-purple-500/50 via-cyan-500/50 to-cyber-lime/50" />
+                        {summary.outline.map((section, idx) => (
+                          <div key={idx} className="relative pl-6 pb-3 last:pb-0">
+                            {/* 节点 */}
+                            <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-[#0f0f12] border-2 border-cyan-500/70 flex items-center justify-center">
+                              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                            </div>
+                            <div className="bg-white/5 rounded-lg p-3 hover:bg-white/10 transition-colors">
+                              <h5 className="text-white text-sm font-medium">{section.title}</h5>
+                              {section.content && (
+                                <p className="text-gray-400 text-xs mt-1 leading-relaxed">{section.content}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )}
                 </>

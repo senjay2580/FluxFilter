@@ -553,7 +553,6 @@ const TodoList: React.FC<TodoListProps> = ({ isOpen, onClose, embedded = false, 
                 onDragStart={(e) => handleDragStart(e, todo.id)}
                 onDragOver={(e) => handleDragOver(e, todo.id)}
                 onDragEnd={handleDragEnd}
-                onDragEnd={handleDragEnd}
                 onTouchStart={(e) => handleLongPressStart(e, todo)}
                 onTouchMove={handleLongPressMove}
                 onTouchEnd={handleLongPressEnd}

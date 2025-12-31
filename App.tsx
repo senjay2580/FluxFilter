@@ -1,37 +1,39 @@
-import React, { useState, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useSyncExternalStore, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { Tab, FilterType, DateFilter } from './types';
 import VideoCard from './components/video/VideoCard';
-import AISummaryModal from './components/video/AISummaryModal';
 import { HomeIcon, ClockIcon, SearchIcon, CalendarIcon, SlidersIcon, SettingsIcon, RssIcon, PlusIcon } from './components/shared/Icons';
 import CustomDatePicker from './components/layout/CustomDatePicker';
 import DateFilterPicker from './components/layout/DateFilterPicker';
 import SyncButton from './components/layout/SyncButton';
-import AddUploaderModal from './components/video/AddUploaderModal';
-import TodoList from './components/tools/TodoList';
 import Loader from './components/shared/Loader';
 import SplashScreen from './components/layout/SplashScreen';
 import PullToRefresh from './components/layout/PullToRefresh';
-import RssFeed from './components/tools/RssFeed';
-import SettingsPage from './components/settings/SettingsPage';
-import HotCarousel from './components/video/HotCarousel';
-import SettingsModal from './components/settings/SettingsModal';
-import AuthPage from './components/pages/AuthPage';
-import VideoTimeline from './components/video/VideoTimeline';
 import LogoSvg from './assets/logo.svg';
-import PWAInstallPrompt from './components/layout/PWAInstallPrompt';
-import HighPriorityTodoReminder from './components/tools/HighPriorityTodoReminder';
-import NotesPage from './components/pages/NotesPage';
-import LearningLog from './components/pages/LearningLog';
-import ResourceCenter from './components/pages/ResourceCenter';
-import VideoAnalyzer from './components/tools/VideoAnalyzer';
 import { supabase, isSupabaseConfigured, addToWatchlist, removeFromWatchlistByBvid, getAIConfigs } from './lib/supabase';
 import { getStoredUserId, getCurrentUser, logout, type User } from './lib/auth';
 import { clearCookieCache } from './lib/bilibili';
 import type { VideoWithUploader, WatchlistItem } from './lib/database.types';
 import { insightService } from './lib/insight-service';
-import InsightFloatingBall from './components/shared/InsightFloatingBall';
 import { setModelApiKey } from './lib/ai-models';
+
+// 按需加载重量级组件/页面，减小首屏包体积
+const AISummaryModal = lazy(() => import('./components/video/AISummaryModal'));
+const AddUploaderModal = lazy(() => import('./components/video/AddUploaderModal'));
+const TodoList = lazy(() => import('./components/tools/TodoList'));
+const RssFeed = lazy(() => import('./components/tools/RssFeed'));
+const SettingsPage = lazy(() => import('./components/settings/SettingsPage'));
+const HotCarousel = lazy(() => import('./components/video/HotCarousel'));
+const SettingsModal = lazy(() => import('./components/settings/SettingsModal'));
+const AuthPage = lazy(() => import('./components/pages/AuthPage'));
+const VideoTimeline = lazy(() => import('./components/video/VideoTimeline'));
+const PWAInstallPrompt = lazy(() => import('./components/layout/PWAInstallPrompt'));
+const HighPriorityTodoReminder = lazy(() => import('./components/tools/HighPriorityTodoReminder'));
+const NotesPage = lazy(() => import('./components/pages/NotesPage'));
+const LearningLog = lazy(() => import('./components/pages/LearningLog'));
+const ResourceCenter = lazy(() => import('./components/pages/ResourceCenter'));
+const VideoAnalyzer = lazy(() => import('./components/tools/VideoAnalyzer'));
+const InsightFloatingBall = lazy(() => import('./components/shared/InsightFloatingBall'));
 const App = () => {
   // 全局策展状态
   const insightLoading = useSyncExternalStore(
@@ -712,7 +714,11 @@ const App = () => {
 
   // 认证过期时显示登录页
   if (authExpired) {
-    return <AuthPage onLoginSuccess={() => { setAuthExpired(false); handleLoginSuccess(); }} />;
+    return (
+      <Suspense fallback={<Loader text="准备登录界面..." />}>
+        <AuthPage onLoginSuccess={() => { setAuthExpired(false); handleLoginSuccess(); }} />
+      </Suspense>
+    );
   }
 
   return (
@@ -720,12 +726,16 @@ const App = () => {
       <div className="h-screen bg-cyber-dark font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden flex flex-col">
 
         {/* PWA 安装提示 */}
-        <PWAInstallPrompt />
+        <Suspense fallback={null}>
+          <PWAInstallPrompt />
+        </Suspense>
 
         {/* 高优先级待办提醒弹窗 */}
-        <HighPriorityTodoReminder
-          onNavigateToTodo={() => setActiveTab('todo')}
-        />
+        <Suspense fallback={null}>
+          <HighPriorityTodoReminder
+            onNavigateToTodo={() => setActiveTab('todo')}
+          />
+        </Suspense>
 
         {/* 网络错误提示 */}
         {networkError && (
@@ -1038,94 +1048,110 @@ const App = () => {
 
               {/* RSS 阅读界面 */}
               {activeTab === 'rss' && (
-                <RssFeed scrollContainerRef={mainRef} timeFilter={activeFilter} />
+                <Suspense fallback={<Loader text="加载 RSS..." />}>
+                  <RssFeed scrollContainerRef={mainRef} timeFilter={activeFilter} />
+                </Suspense>
               )}
 
               {/* TODO 待办事项界面 */}
               {activeTab === 'todo' && (
-                <TodoList embedded timeFilter={activeFilter} />
+                <Suspense fallback={<Loader text="加载待办..." />}>
+                  <TodoList embedded timeFilter={activeFilter} />
+                </Suspense>
               )}
 
               {/* 设置页面 */}
-              <SettingsPage
-                isOpen={activeTab === 'settings'}
-                onClose={() => setActiveTab(subPageSourceRef.current)}
-                initialView={settingsInitialView}
-                onOpenNotes={() => { subPageSourceRef.current = 'settings'; setIsNotesOpen(true); }}
-                onOpenLearningLog={() => { subPageSourceRef.current = 'settings'; setLearningLogInitialData({ url: '', title: '', cover: '' }); setIsLearningLogOpen(true); }}
-                onOpenResourceCenter={() => { subPageSourceRef.current = 'settings'; setIsResourceCenterOpen(true); }}
-              />
+              <Suspense fallback={<Loader text="加载设置..." />}>
+                <SettingsPage
+                  isOpen={activeTab === 'settings'}
+                  onClose={() => setActiveTab(subPageSourceRef.current)}
+                  initialView={settingsInitialView}
+                  onOpenNotes={() => { subPageSourceRef.current = 'settings'; setIsNotesOpen(true); }}
+                  onOpenLearningLog={() => { subPageSourceRef.current = 'settings'; setLearningLogInitialData({ url: '', title: '', cover: '' }); setIsLearningLogOpen(true); }}
+                  onOpenResourceCenter={() => { subPageSourceRef.current = 'settings'; setIsResourceCenterOpen(true); }}
+                />
+              </Suspense>
 
               {/* 笔记页面 */}
-              <NotesPage
-                isOpen={isNotesOpen}
-                onClose={() => {
-                  setIsNotesOpen(false);
-                  // 返回到打开时的来源页面
-                  setActiveTab(subPageSourceRef.current);
-                  // 如果是从设置返回，恢复设置页面的来源
-                  if (subPageSourceRef.current === 'settings') {
-                    subPageSourceRef.current = settingsSourceRef.current;
-                  }
-                }}
-              />
+              <Suspense fallback={<Loader text="加载笔记..." />}>
+                <NotesPage
+                  isOpen={isNotesOpen}
+                  onClose={() => {
+                    setIsNotesOpen(false);
+                    // 返回到打开时的来源页面
+                    setActiveTab(subPageSourceRef.current);
+                    // 如果是从设置返回，恢复设置页面的来源
+                    if (subPageSourceRef.current === 'settings') {
+                      subPageSourceRef.current = settingsSourceRef.current;
+                    }
+                  }}
+                />
+              </Suspense>
 
               {/* 学习日志页面 */}
-              <LearningLog
-                isOpen={isLearningLogOpen}
-                onClose={() => {
-                  setIsLearningLogOpen(false);
-                  // 返回到打开时的来源页面
-                  setActiveTab(subPageSourceRef.current);
-                  // 如果是从设置返回，恢复设置页面的来源
-                  if (subPageSourceRef.current === 'settings') {
-                    subPageSourceRef.current = settingsSourceRef.current;
-                  }
-                }}
-                initialVideoUrl={learningLogInitialData.url}
-                initialVideoTitle={learningLogInitialData.title}
-                initialVideoCover={learningLogInitialData.cover}
-              />
+              <Suspense fallback={<Loader text="加载学习日志..." />}>
+                <LearningLog
+                  isOpen={isLearningLogOpen}
+                  onClose={() => {
+                    setIsLearningLogOpen(false);
+                    // 返回到打开时的来源页面
+                    setActiveTab(subPageSourceRef.current);
+                    // 如果是从设置返回，恢复设置页面的来源
+                    if (subPageSourceRef.current === 'settings') {
+                      subPageSourceRef.current = settingsSourceRef.current;
+                    }
+                  }}
+                  initialVideoUrl={learningLogInitialData.url}
+                  initialVideoTitle={learningLogInitialData.title}
+                  initialVideoCover={learningLogInitialData.cover}
+                />
+              </Suspense>
 
               {/* 资源中心 */}
-              <ResourceCenter
-                isOpen={isResourceCenterOpen}
-                onClose={() => {
-                  setIsResourceCenterOpen(false);
-                  // 返回到打开时的来源页面
-                  setActiveTab(subPageSourceRef.current);
-                  // 如果是从设置返回，恢复设置页面的来源
-                  if (subPageSourceRef.current === 'settings') {
-                    subPageSourceRef.current = settingsSourceRef.current;
-                  }
-                }}
-              />
+              <Suspense fallback={<Loader text="加载资源中心..." />}>
+                <ResourceCenter
+                  isOpen={isResourceCenterOpen}
+                  onClose={() => {
+                    setIsResourceCenterOpen(false);
+                    // 返回到打开时的来源页面
+                    setActiveTab(subPageSourceRef.current);
+                    // 如果是从设置返回，恢复设置页面的来源
+                    if (subPageSourceRef.current === 'settings') {
+                      subPageSourceRef.current = settingsSourceRef.current;
+                    }
+                  }}
+                />
+              </Suspense>
 
               {/* 全局 AI总结弹窗 - 单例 */}
               {aiSummaryVideo && (
-                <AISummaryModal
-                  key={aiSummaryVideo.bvid}
-                  bvid={aiSummaryVideo.bvid}
-                  title={aiSummaryVideo.title}
-                  onClose={() => setAiSummaryVideo(null)}
-                />
+                <Suspense fallback={null}>
+                  <AISummaryModal
+                    key={aiSummaryVideo.bvid}
+                    bvid={aiSummaryVideo.bvid}
+                    title={aiSummaryVideo.title}
+                    onClose={() => setAiSummaryVideo(null)}
+                  />
+                </Suspense>
               )}
 
               {/* AI 视频分析 */}
-              <VideoAnalyzer
-                isOpen={isVideoAnalyzerOpen}
-                onClose={() => setIsVideoAnalyzerOpen(false)}
-                videos={filteredVideos}
-                filterName={
-                  selectedUploader ? `UP主: ${selectedUploader.name}` :
-                    activeFilter === 'today' ? '今天' :
-                      activeFilter === 'week' ? '本周' :
-                        activeFilter === 'month' ? '本月' :
-                          activeFilter === 'custom' ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}` :
-                            activeTab === 'watchLater' ? '待看列表' :
-                              '全部视频'
-                }
-              />
+              <Suspense fallback={<Loader text="加载分析工具..." />}>
+                <VideoAnalyzer
+                  isOpen={isVideoAnalyzerOpen}
+                  onClose={() => setIsVideoAnalyzerOpen(false)}
+                  videos={filteredVideos}
+                  filterName={
+                    selectedUploader ? `UP主: ${selectedUploader.name}` :
+                      activeFilter === 'today' ? '今天' :
+                        activeFilter === 'week' ? '本周' :
+                          activeFilter === 'month' ? '本月' :
+                            activeFilter === 'custom' ? `${customDateFilter.year}${customDateFilter.month !== undefined ? `/${customDateFilter.month + 1}` : ''}` :
+                              activeTab === 'watchLater' ? '待看列表' :
+                                '全部视频'
+                  }
+                />
+              </Suspense>
 
               {/* 删除确认框 */}
               {deleteConfirmVideo && createPortal(
@@ -1314,7 +1340,9 @@ const App = () => {
                       {/* 热门轮播图 - PC端占 70% */}
                       {activeFilter === 'all' && videos.length > 0 && (
                         <div className="lg:w-[70%] lg:shrink-0">
-                          <HotCarousel videos={hotVideos} />
+                          <Suspense fallback={<Loader text="加载热门..." />}>
+                            <HotCarousel videos={hotVideos} />
+                          </Suspense>
                         </div>
                       )}
 
@@ -2002,19 +2030,21 @@ const App = () => {
 
         {/* 策展悬浮球 - 全局显示，支持拖动 */}
         {activeTab !== 'settings' && (
-          <InsightFloatingBall
-            isLoading={insightLoading}
-            isDone={insightDone}
-            onClick={() => {
-              setSettingsInitialView('main');
-              setActiveTab('settings');
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('navigate-to-insights'));
-              }, 100);
-            }}
-            color="green"
-            storageKey="insight-ball-pos"
-          />
+          <Suspense fallback={null}>
+            <InsightFloatingBall
+              isLoading={insightLoading}
+              isDone={insightDone}
+              onClick={() => {
+                setSettingsInitialView('main');
+                setActiveTab('settings');
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('navigate-to-insights'));
+                }, 100);
+              }}
+              color="green"
+              storageKey="insight-ball-pos"
+            />
+          </Suspense>
         )}
 
         {/* Toast 提示 - 右上角毛玻璃 macOS 风格 */}
@@ -2033,38 +2063,46 @@ const App = () => {
         )}
 
         {/* 添加UP主弹窗 */}
-        <AddUploaderModal
-          isOpen={isAddUploaderOpen}
-          onClose={() => setIsAddUploaderOpen(false)}
-          onSuccess={() => {
-            showToast('UP主添加成功');
-          }}
-        />
+        <Suspense fallback={null}>
+          <AddUploaderModal
+            isOpen={isAddUploaderOpen}
+            onClose={() => setIsAddUploaderOpen(false)}
+            onSuccess={() => {
+              showToast('UP主添加成功');
+            }}
+          />
+        </Suspense>
 
         {/* TODO 待办事项 */}
-        <TodoList
-          isOpen={isTodoOpen}
-          onClose={() => setIsTodoOpen(false)}
-        />
+        <Suspense fallback={null}>
+          <TodoList
+            isOpen={isTodoOpen}
+            onClose={() => setIsTodoOpen(false)}
+          />
+        </Suspense>
 
         {/* 设置/个人中心 */}
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          onLogout={handleLogout}
-          watchLaterIds={watchLaterIds}
-          onToggleWatchLater={toggleWatchLater}
-        />
+        <Suspense fallback={null}>
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            onClose={() => setIsSettingsOpen(false)}
+            onLogout={handleLogout}
+            watchLaterIds={watchLaterIds}
+            onToggleWatchLater={toggleWatchLater}
+          />
+        </Suspense>
 
         {/* 时间轴 */}
         {showTimeline && (
-          <VideoTimeline
-            videos={videos}
-            onClose={() => setShowTimeline(false)}
-            watchLaterIds={watchLaterIds}
-            onToggleWatchLater={toggleWatchLater}
-            onDelete={handleDeleteVideo}
-          />
+          <Suspense fallback={<Loader text="加载时间轴..." />}>
+            <VideoTimeline
+              videos={videos}
+              onClose={() => setShowTimeline(false)}
+              watchLaterIds={watchLaterIds}
+              onToggleWatchLater={toggleWatchLater}
+              onDelete={handleDeleteVideo}
+            />
+          </Suspense>
         )}
 
         {/* UP主选择器弹窗 */}
