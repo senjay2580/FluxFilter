@@ -643,3 +643,108 @@ export async function updateNote(id: number, params: UpdateNoteParams) {
   if (error) throw error;
   return data as Note;
 }
+
+
+// ============================================
+// 每日信息差记忆相关操作
+// ============================================
+
+export interface InsightHistoryItem {
+  id: number;
+  user_id: string;
+  title: string;
+  category: string;
+  source: string | null;
+  core_content: string | null;
+  tags: string[] | null;
+  created_at: string;
+}
+
+/** 获取用户的信息差历史记录（用于 AI 记忆） */
+export async function getInsightHistory(userId: string, limit = 100): Promise<InsightHistoryItem[]> {
+  const { data, error } = await supabase
+    .from('insight_history')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('获取信息差历史失败:', error);
+    return [];
+  }
+  return data as InsightHistoryItem[];
+}
+
+/** 批量保存信息差卡片到历史记录 */
+export async function saveInsightHistory(userId: string, cards: {
+  title: string;
+  category: string;
+  source?: string;
+  core_content?: string;
+  tags?: string[];
+}[]): Promise<void> {
+  if (cards.length === 0) return;
+
+  const { error } = await supabase
+    .from('insight_history')
+    .insert(cards.map(card => ({
+      user_id: userId,
+      title: card.title,
+      category: card.category,
+      source: card.source || null,
+      core_content: card.core_content || null,
+      tags: card.tags || null,
+    })));
+
+  if (error) {
+    console.error('保存信息差历史失败:', error);
+  }
+}
+
+/** 获取用户历史标题列表（用于快速去重） */
+export async function getInsightHistoryTitles(userId: string, limit = 200): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('insight_history')
+    .select('title')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('获取历史标题失败:', error);
+    return [];
+  }
+  return data?.map(item => item.title) || [];
+}
+
+/** 清除用户的信息差历史（可选：按时间范围） */
+export async function clearInsightHistory(userId: string, beforeDate?: Date): Promise<void> {
+  let query = supabase
+    .from('insight_history')
+    .delete()
+    .eq('user_id', userId);
+
+  if (beforeDate) {
+    query = query.lt('created_at', beforeDate.toISOString());
+  }
+
+  const { error } = await query;
+  if (error) {
+    console.error('清除信息差历史失败:', error);
+  }
+}
+
+/** 删除单条信息差历史记录 */
+export async function deleteInsightHistoryItem(id: number): Promise<boolean> {
+  const { error } = await supabase
+    .from('insight_history')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.error('删除信息差历史记录失败:', error);
+    return false;
+  }
+  return true;
+}

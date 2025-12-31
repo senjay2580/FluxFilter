@@ -1011,7 +1011,13 @@ ${text}`
 
   // 转写音频（使用后台服务）
   const transcribe = useCallback(async () => {
-    if (!file || !groqKey) return;
+    // 只使用 API 池中选中的 Key
+    const selectedApiKey = apiKeys[selectedApiKeyIndex];
+    
+    if (!file || !selectedApiKey?.key) {
+      updateCurrentState({ error: '请先选择文件并配置 API Key' });
+      return;
+    }
 
     updateCurrentState({
       transcribing: true,
@@ -1023,7 +1029,6 @@ ${text}`
 
     try {
       // 使用全局转写服务（后台运行）
-      const selectedApiKey = apiKeys[selectedApiKeyIndex];
       const taskId = await transcribeService.transcribe(file, false, (task) => {
         // 转写完成后的回调
         updateCurrentState({
@@ -1031,7 +1036,7 @@ ${text}`
           transcribing: false,
           progress: 0,
         });
-      }, selectedApiKey?.id);
+      }, selectedApiKey.id);
       updateCurrentState({ currentTaskId: taskId });
     } catch (err) {
       console.error('转写失败:', err);
@@ -1041,7 +1046,7 @@ ${text}`
         progress: 0,
       });
     }
-  }, [file, groqKey, apiKeys, selectedApiKeyIndex, updateCurrentState]);
+  }, [file, apiKeys, selectedApiKeyIndex, updateCurrentState]);
 
   // AI 优化（使用后台服务）
   const optimizeWithAI = useCallback(async () => {
@@ -1342,8 +1347,8 @@ ${text}`
           {/* 转写按钮 */}
           <button
             onClick={transcribe}
-            disabled={!file || (apiKeys.length === 0 && !groqKey) || transcribing}
-            className={`w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 btn-press ${file && (apiKeys.length > 0 || groqKey) && !transcribing
+            disabled={!file || !apiKeys[selectedApiKeyIndex]?.key || transcribing}
+            className={`w-full py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 btn-press ${file && apiKeys[selectedApiKeyIndex]?.key && !transcribing
               ? 'bg-gradient-to-r from-pink-500 to-rose-500 text-white'
               : 'bg-white/5 text-gray-500 cursor-not-allowed'
               }`}

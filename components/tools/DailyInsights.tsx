@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useSyncExternalStore, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { supabase } from '../../lib/supabase';
+import { supabase, getInsightHistory, deleteInsightHistoryItem, clearInsightHistory, type InsightHistoryItem } from '../../lib/supabase';
 import { getStoredUserId } from '../../lib/auth';
 import { insightService, type InsightCard } from '../../lib/insight-service';
 
@@ -31,7 +31,13 @@ const DailyInsights: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
-  const [showSaved, setShowSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<'pending' | 'saved' | 'history'>('pending');
+  
+  // 历史记录相关
+  const [historyItems, setHistoryItems] = useState<InsightHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [selectedHistoryItem, setSelectedHistoryItem] = useState<InsightHistoryItem | null>(null);
   
   // 用户标签
   const [userTags, setUserTags] = useState<string[]>([]);
@@ -86,10 +92,55 @@ const DailyInsights: React.FC = () => {
     loadTags();
   }, []);
 
+  // 加载历史记录
+  const loadHistory = useCallback(async () => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+    
+    setHistoryLoading(true);
+    try {
+      const items = await getInsightHistory(userId, 500);
+      setHistoryItems(items);
+    } catch (err) {
+      console.error('加载历史记录失败:', err);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  // 切换到历史 tab 时加载数据
+  useEffect(() => {
+    if (activeTab === 'history') {
+      loadHistory();
+    }
+  }, [activeTab, loadHistory]);
+
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 2000);
   }, []);
+
+  // 删除单条历史记录
+  const deleteHistoryItem = useCallback(async (id: number) => {
+    const success = await deleteInsightHistoryItem(id);
+    if (success) {
+      setHistoryItems(prev => prev.filter(item => item.id !== id));
+      showToast('已删除');
+    } else {
+      showToast('删除失败');
+    }
+  }, [showToast]);
+
+  // 清空所有历史记录
+  const handleClearHistory = useCallback(async () => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+    
+    await clearInsightHistory(userId);
+    setHistoryItems([]);
+    setShowClearConfirm(false);
+    showToast('历史记录已清空');
+  }, [showToast]);
 
   // 添加标签
   const addTag = async () => {
@@ -185,7 +236,7 @@ const DailyInsights: React.FC = () => {
     e.preventDefault();
     e.stopPropagation();
     
-    const allCards = showSaved ? savedCards : cards;
+    const allCards = activeTab === 'saved' ? savedCards : cards;
     const card = allCards.find(c => c.id === cardId);
     if (!card) return;
     
@@ -198,7 +249,7 @@ const DailyInsights: React.FC = () => {
     } else if (action === 'remove') {
       removeSavedCard(cardId);
     }
-  }, [showSaved, savedCards, cards, copyCard, deleteCard, archiveCard, removeSavedCard]);
+  }, [activeTab, savedCards, cards, copyCard, deleteCard, archiveCard, removeSavedCard]);
 
   // 滑动处理 - 使用原生事件监听器处理移动端滑动
   const touchStartPos = useRef({ x: 0, y: 0, time: 0 });
@@ -208,13 +259,13 @@ const DailyInsights: React.FC = () => {
   // 用 ref 存储最新的 cards 和 savedCards，避免闭包问题
   const cardsRef = useRef(cards);
   const savedCardsRef = useRef(savedCards);
-  const showSavedRef = useRef(showSaved);
+  const activeTabRef = useRef(activeTab);
   
   useEffect(() => {
     cardsRef.current = cards;
     savedCardsRef.current = savedCards;
-    showSavedRef.current = showSaved;
-  }, [cards, savedCards, showSaved]);
+    activeTabRef.current = activeTab;
+  }, [cards, savedCards, activeTab]);
   
   // 使用原生事件监听器处理触摸事件
   useEffect(() => {
@@ -227,7 +278,7 @@ const DailyInsights: React.FC = () => {
       const cardId = button.dataset.cardId;
       if (!action || !cardId) return;
       
-      const allCards = showSavedRef.current ? savedCardsRef.current : cardsRef.current;
+      const allCards = activeTabRef.current === 'saved' ? savedCardsRef.current : cardsRef.current;
       const card = allCards.find(c => c.id === cardId);
       if (!card) return;
       
@@ -278,7 +329,7 @@ const DailyInsights: React.FC = () => {
       
       // 水平滑动时阻止默认行为并更新状态
       if (swipeDirectionRef.current === 'horizontal') {
-        const displayCards = showSavedRef.current ? savedCardsRef.current : cardsRef.current;
+        const displayCards = activeTabRef.current === 'saved' ? savedCardsRef.current : cardsRef.current;
         // 第一页不能向右滑，最后一页不能向左滑
         const isFirstPage = currentIndexRef.current === 0;
         const isLastPage = currentIndexRef.current >= displayCards.length - 1;
@@ -314,7 +365,7 @@ const DailyInsights: React.FC = () => {
         dragStateRef.current.isDragging = false;
         
         const threshold = 80;
-        const displayCards = showSavedRef.current ? savedCardsRef.current : cardsRef.current;
+        const displayCards = activeTabRef.current === 'saved' ? savedCardsRef.current : cardsRef.current;
         const currentOffset = offsetXRef.current;
         const idx = currentIndexRef.current;
         
@@ -354,7 +405,7 @@ const DailyInsights: React.FC = () => {
         container2.removeEventListener('touchend', handleNativeTouchEnd);
       }
     };
-  }, [copyCard, deleteCard, archiveCard, removeSavedCard, showSaved, cards.length, savedCards.length]);
+  }, [copyCard, deleteCard, archiveCard, removeSavedCard, activeTab, cards.length, savedCards.length]);
   
   // PC 端鼠标事件处理
   const handleMouseDown = (e: React.MouseEvent) => { 
@@ -365,7 +416,7 @@ const DailyInsights: React.FC = () => {
   const handleMouseMove = (e: React.MouseEvent) => { 
     if (!isDragging || e.buttons !== 1) return;
     const deltaX = e.clientX - startX;
-    const displayCards = showSaved ? savedCards : cards;
+    const displayCards = activeTab === 'saved' ? savedCards : cards;
     const isFirstPage = currentIndex === 0;
     const isLastPage = currentIndex >= displayCards.length - 1;
     
@@ -380,7 +431,7 @@ const DailyInsights: React.FC = () => {
     if (!isDragging) return;
     setIsDragging(false);
     const threshold = 80;
-    const displayCards = showSaved ? savedCards : cards;
+    const displayCards = activeTab === 'saved' ? savedCards : cards;
     if (offsetX > threshold && currentIndex > 0) setCurrentIndex(currentIndex - 1);
     else if (offsetX < -threshold && currentIndex < displayCards.length - 1) setCurrentIndex(currentIndex + 1);
     setOffsetX(0);
@@ -577,19 +628,45 @@ const DailyInsights: React.FC = () => {
       <div className="flex flex-col gap-3 mb-4">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { setShowSaved(false); setCurrentIndex(0); }}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${!showSaved ? 'bg-emerald-700 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
+            onClick={() => { setActiveTab('pending'); setCurrentIndex(0); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === 'pending' ? 'bg-emerald-700 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
           >
-            {loading && !showSaved && <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+            {loading && activeTab === 'pending' ? (
+              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                <line x1="12" y1="22.08" x2="12" y2="12" />
+              </svg>
+            )}
             待处理
-            {cards.length > 0 && <span className="text-[11px] opacity-80">{cards.length}</span>}
+            {cards.length > 0 && <span className="text-[10px] opacity-80">{cards.length}</span>}
           </button>
           <button
-            onClick={() => { setShowSaved(true); setCurrentIndex(0); }}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${showSaved ? 'bg-emerald-700 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
+            onClick={() => { setActiveTab('saved'); setCurrentIndex(0); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === 'saved' ? 'bg-emerald-700 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
           >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
             已归档
-            {savedCards.length > 0 && <span className="text-[11px] opacity-80">{savedCards.length}</span>}
+            {savedCards.length > 0 && <span className="text-[10px] opacity-80">{savedCards.length}</span>}
+          </button>
+          <button
+            onClick={() => { setActiveTab('history'); setCurrentIndex(0); }}
+            className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${activeTab === 'history' ? 'bg-emerald-700 text-white' : 'bg-white/5 text-white/60 hover:bg-white/10'}`}
+          >
+            {historyLoading ? (
+              <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+            )}
+            历史
+            {historyItems.length > 0 && <span className="text-[10px] opacity-80">{historyItems.length}</span>}
           </button>
           
           {/* 兴趣配置按钮 */}
@@ -605,7 +682,7 @@ const DailyInsights: React.FC = () => {
           </button>
         </div>
         
-        {!showSaved && cards.length > 0 && (
+        {activeTab === 'pending' && cards.length > 0 && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => generateInsights(true)}
@@ -691,7 +768,7 @@ const DailyInsights: React.FC = () => {
       )}
 
       {/* 错误状态 */}
-      {error && !loading && (
+      {error && !loading && activeTab === 'pending' && (
         <div className="flex flex-col items-center justify-center py-12 bg-white/5 rounded-2xl border border-white/10">
           <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center mb-3">
             <svg className="w-6 h-6 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -704,7 +781,7 @@ const DailyInsights: React.FC = () => {
       )}
 
       {/* 空状态 */}
-      {!showSaved && cards.length === 0 && !loading && !error && (
+      {activeTab === 'pending' && cards.length === 0 && !loading && !error && (
         <div className="flex flex-col items-center justify-center py-16 bg-white/5 rounded-2xl border border-white/10">
           <div className="w-16 h-16 rounded-full bg-cyber-lime/10 flex items-center justify-center mb-4">
             <svg className="w-8 h-8 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -720,7 +797,7 @@ const DailyInsights: React.FC = () => {
       )}
 
       {/* 加载中 */}
-      {!showSaved && loading && cards.length === 0 && (
+      {activeTab === 'pending' && loading && cards.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 bg-white/5 rounded-2xl border border-white/10">
           <div className="w-12 h-12 rounded-full border-4 border-cyber-lime/30 border-t-cyber-lime animate-spin mb-4" />
           <p className="text-white/70 text-sm">AI 正在策展知识...</p>
@@ -729,7 +806,7 @@ const DailyInsights: React.FC = () => {
       )}
 
       {/* 卡片轮播 - 待处理 */}
-      {!showSaved && cards.length > 0 && (
+      {activeTab === 'pending' && cards.length > 0 && (
         <div className="relative pb-16">
           <div
             ref={cardsContainerRef}
@@ -757,7 +834,7 @@ const DailyInsights: React.FC = () => {
       )}
 
       {/* 已归档列表 */}
-      {showSaved && (
+      {activeTab === 'saved' && (
         savedCards.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 bg-white/5 rounded-2xl border border-white/10">
             <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
@@ -796,10 +873,307 @@ const DailyInsights: React.FC = () => {
         )
       )}
 
+      {/* 历史记录列表 */}
+      {activeTab === 'history' && (
+        <div>
+          {/* 历史记录操作栏 */}
+          {historyItems.length > 0 && (
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-white/40">共 {historyItems.length} 条记录</span>
+              <button
+                onClick={() => setShowClearConfirm(true)}
+                className="px-3 py-1 text-xs text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+              >
+                清空历史
+              </button>
+            </div>
+          )}
+          
+          {/* 加载中 */}
+          {historyLoading && (
+            <div className="flex flex-col items-center justify-center py-12 bg-white/5 rounded-xl border border-white/10">
+              <div className="w-10 h-10 rounded-full border-3 border-cyber-lime/30 border-t-cyber-lime animate-spin mb-3" />
+              <p className="text-white/70 text-sm">加载历史记录...</p>
+            </div>
+          )}
+          
+          {/* 空状态 */}
+          {!historyLoading && historyItems.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-12 bg-white/5 rounded-xl border border-white/10">
+              <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
+                <svg className="w-6 h-6 text-white/30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+              </div>
+              <p className="text-white/50 text-sm">暂无历史记录</p>
+              <p className="text-white/30 text-xs mt-1">生成的卡片会自动保存到历史</p>
+            </div>
+          )}
+          
+          {/* 历史记录列表 - 使用 content-visibility 优化渲染性能 */}
+          {!historyLoading && historyItems.length > 0 && (
+            <div 
+              className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 pb-4" 
+              style={{ scrollbarWidth: 'thin' }}
+            >
+              {historyItems.map((item) => {
+                const config = CATEGORY_CONFIG[item.category] || { label: item.category, icon: '📌' };
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => setSelectedHistoryItem(item)}
+                    className="p-3 bg-white/5 rounded-lg border border-white/5 hover:bg-white/8 active:bg-white/10 transition-colors cursor-pointer md:aspect-square md:flex md:flex-col"
+                    style={{ contentVisibility: 'auto', containIntrinsicSize: '0 180px' }}
+                  >
+                    {/* 移动端横向布局 */}
+                    <div className="flex items-start gap-2 md:hidden">
+                      <span className="text-base shrink-0">{config.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] text-cyber-lime/70 uppercase">{config.label}</span>
+                          <span className="text-[10px] text-white/25 ml-auto">
+                            {new Date(item.created_at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <h4 className="text-[13px] font-medium text-white/90 line-clamp-1">{item.title}</h4>
+                        {item.source && (
+                          <p className="text-[10px] text-white/35 mt-0.5 line-clamp-1">{item.source}</p>
+                        )}
+                        {item.core_content && (
+                          <p className="text-[11px] text-white/50 line-clamp-1 mt-1">{item.core_content}</p>
+                        )}
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1.5">
+                            {item.tags.slice(0, 3).map((tag, i) => (
+                              <span key={i} className="px-1.5 py-0.5 bg-white/5 rounded text-[9px] text-white/40">#{tag}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteHistoryItem(item.id); }}
+                        className="p-1.5 hover:bg-red-500/20 rounded text-white/20 hover:text-red-400 transition-colors shrink-0"
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </button>
+                    </div>
+                    
+                    {/* PC端正方形卡片布局 */}
+                    <div className="hidden md:flex md:flex-col md:h-full">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl">{config.icon}</span>
+                          <span className="text-xs text-cyber-lime/70 uppercase font-medium">{config.label}</span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); deleteHistoryItem(item.id); }}
+                          className="p-1.5 hover:bg-red-500/20 rounded text-white/25 hover:text-red-400 transition-colors"
+                        >
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                        </button>
+                      </div>
+                      <h4 className="text-base font-semibold text-white line-clamp-2 mb-2">{item.title}</h4>
+                      {item.source && (
+                        <p className="text-xs text-white/45 line-clamp-1 mb-2">{item.source}</p>
+                      )}
+                      <p className="text-sm text-white/60 line-clamp-4 flex-1 leading-relaxed">{item.core_content || ''}</p>
+                      <div className="mt-auto pt-3">
+                        {item.tags && item.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mb-2">
+                            {item.tags.slice(0, 3).map((tag, i) => (
+                              <span key={i} className="px-2 py-0.5 bg-white/8 rounded text-xs text-white/50">#{tag}</span>
+                            ))}
+                          </div>
+                        )}
+                        <span className="text-xs text-white/30">
+                          {new Date(item.created_at).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 历史详情弹窗 - macOS 风格 */}
+      {selectedHistoryItem !== null && createPortal(
+        <div 
+          className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-md"
+          style={{ animation: 'fadeIn 0.2s ease-out' }}
+          onClick={() => setSelectedHistoryItem(null)}
+        >
+          <div 
+            className="mx-4 w-full max-w-lg overflow-hidden flex flex-col shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'linear-gradient(180deg, #2d2d2d 0%, #1a1a1a 100%)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255,255,255,0.1)',
+              maxHeight: '85vh',
+              animation: 'scaleIn 0.2s ease-out',
+            }}
+          >
+            {/* macOS 标题栏 */}
+            <div 
+              className="flex items-center px-4 py-3 shrink-0"
+              style={{ 
+                background: 'linear-gradient(180deg, #3d3d3d 0%, #2d2d2d 100%)',
+                borderBottom: '1px solid rgba(0,0,0,0.3)',
+              }}
+            >
+              {/* 红黄绿按钮 */}
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => setSelectedHistoryItem(null)}
+                  className="w-3 h-3 rounded-full bg-[#ff5f57] hover:bg-[#ff4136] transition-colors flex items-center justify-center group"
+                >
+                  <svg className="w-1.5 h-1.5 text-[#4a0000] opacity-0 group-hover:opacity-100" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+                <button className="w-3 h-3 rounded-full bg-[#febc2e] hover:bg-[#f5a623] transition-colors" />
+                <button className="w-3 h-3 rounded-full bg-[#28c840] hover:bg-[#1db954] transition-colors" />
+              </div>
+              
+              {/* 标题 */}
+              <div className="flex-1 text-center">
+                <span className="text-sm text-white/70 font-medium">知识卡片详情</span>
+              </div>
+              
+              {/* 占位 */}
+              <div className="w-14" />
+            </div>
+            
+            {/* 内容区域 */}
+            <div className="flex-1 overflow-y-auto p-6" style={{ background: '#1e1e1e' }}>
+              {/* 分类标签 */}
+              <div className="flex items-center gap-3 mb-4">
+                <span className="text-3xl">{CATEGORY_CONFIG[selectedHistoryItem.category]?.icon || '📌'}</span>
+                <span 
+                  className="px-3 py-1 rounded-full text-xs font-medium uppercase tracking-wider"
+                  style={{ background: 'rgba(34, 211, 238, 0.15)', color: '#22d3ee' }}
+                >
+                  {CATEGORY_CONFIG[selectedHistoryItem.category]?.label || selectedHistoryItem.category}
+                </span>
+              </div>
+              
+              {/* 标题 */}
+              <h2 className="text-xl font-semibold text-white mb-4 leading-tight">{selectedHistoryItem.title}</h2>
+              
+              {/* 来源 */}
+              {selectedHistoryItem.source && (
+                <div className="flex items-center gap-2 mb-5 text-white/50">
+                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span className="text-sm">{selectedHistoryItem.source}</span>
+                </div>
+              )}
+              
+              {/* 核心内容 */}
+              {selectedHistoryItem.core_content && (
+                <div className="mb-5">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-1 h-4 bg-cyber-lime rounded-full" />
+                    <span className="text-xs text-white/40 uppercase tracking-wider">核心内容</span>
+                  </div>
+                  <p className="text-base text-white/80 leading-relaxed pl-3">{selectedHistoryItem.core_content}</p>
+                </div>
+              )}
+              
+              {/* 标签 */}
+              {selectedHistoryItem.tags && selectedHistoryItem.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-5">
+                  {selectedHistoryItem.tags.map((tag, i) => (
+                    <span 
+                      key={i} 
+                      className="px-3 py-1.5 rounded-lg text-sm"
+                      style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}
+                    >
+                      #{tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              {/* 时间 */}
+              <div className="text-xs text-white/30 pt-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                生成于 {new Date(selectedHistoryItem.created_at).toLocaleString('zh-CN')}
+              </div>
+            </div>
+            
+            {/* 底部操作栏 */}
+            <div 
+              className="flex items-center justify-end gap-3 px-6 py-4 shrink-0"
+              style={{ background: '#252525', borderTop: '1px solid rgba(255,255,255,0.08)' }}
+            >
+              <button
+                onClick={() => {
+                  deleteHistoryItem(selectedHistoryItem.id);
+                  setSelectedHistoryItem(null);
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition-all hover:bg-red-500/20 text-red-400"
+              >
+                删除
+              </button>
+              <button
+                onClick={() => {
+                  const text = `【${CATEGORY_CONFIG[selectedHistoryItem.category]?.label || selectedHistoryItem.category}】${selectedHistoryItem.title}\n\n📚 来源：${selectedHistoryItem.source || '未知'}\n\n💡 核心内容：\n${selectedHistoryItem.core_content || ''}\n\n🏷️ 标签：${selectedHistoryItem.tags?.join(' | ') || '无'}`;
+                  navigator.clipboard.writeText(text);
+                  showToast('已复制到剪贴板');
+                }}
+                className="px-5 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2"
+                style={{ background: 'linear-gradient(180deg, #4a9eff 0%, #0066ff 100%)', color: '#fff' }}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                复制内容
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 清空确认弹窗 */}
+      {showClearConfirm && createPortal(
+        <div className="fixed inset-0 z-[999999] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#1a1f2e] rounded-2xl p-6 mx-4 max-w-sm w-full border border-white/10">
+            <h3 className="text-white font-medium mb-2">确认清空历史？</h3>
+            <p className="text-white/50 text-sm mb-4">此操作将删除所有历史记录，AI 将不再记住之前生成过的内容。</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowClearConfirm(false)}
+                className="flex-1 px-4 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-white text-sm transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleClearHistory}
+                className="flex-1 px-4 py-2.5 bg-red-500 hover:bg-red-600 rounded-xl text-white text-sm transition-colors"
+              >
+                确认清空
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
 
       {/* Toast */}
       {toast && createPortal(
-        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[9999] px-4 py-2 bg-white/10 backdrop-blur-xl rounded-full text-white text-sm border border-white/20 animate-fade-in">
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[999999] px-4 py-2 bg-white/10 backdrop-blur-xl rounded-full text-white text-sm border border-white/20 animate-fade-in">
           {toast}
         </div>,
         document.body
