@@ -4,7 +4,7 @@
  * GET /api/youtube-transcript?videoId=xxx&lang=en
  * 
  * 服务端获取 YouTube 字幕，绕过 CORS 限制
- * 使用 YouTube 内部 API (youtubei) 获取字幕，更稳定
+ * 使用 YouTube innertube API 获取字幕
  */
 
 export const config = {
@@ -18,59 +18,123 @@ interface CaptionTrack {
   kind?: string;
 }
 
-// 从 YouTube 页面提取字幕轨道
-function extractCaptionTracks(html: string): CaptionTrack[] | null {
-  // 方法1: 直接匹配 captionTracks 数组
-  const patterns = [
-    /"captionTracks":\s*(\[[\s\S]*?\])(?=\s*[,}])/,
-    /\"captionTracks\":\s*(\[[\s\S]*?\])\s*,\s*\"audioTracks\"/,
-    /\"captionTracks\":\s*(\[[\s\S]*?\])\s*,\s*\"translationLanguages\"/,
-  ];
+// 使用 YouTube innertube API 获取视频信息
+async function getVideoInfoViaInnertube(videoId: string): Promise<CaptionTrack[] | null> {
+  const innertubeApiKey = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8'; // 公开的 innertube key
+  
+  const payload = {
+    context: {
+      client: {
+        hl: 'en',
+        gl: 'US',
+        clientName: 'WEB',
+        clientVersion: '2.20231219.04.00',
+      },
+    },
+    videoId,
+  };
 
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match) {
-      try {
-        // 处理 JSON 中的转义字符
-        let jsonStr = match[1]
-          .replace(/\\u0026/g, '&')
-          .replace(/\\"/g, '"')
-          .replace(/\\\\/g, '\\');
-        
-        // 尝试修复不完整的 JSON
-        if (!jsonStr.endsWith(']')) {
-          const lastBracket = jsonStr.lastIndexOf('}');
-          if (lastBracket > 0) {
-            jsonStr = jsonStr.substring(0, lastBracket + 1) + ']';
+  try {
+    const response = await fetch(
+      `https://www.youtube.com/youtubei/v1/player?key=${innertubeApiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      console.error('Innertube API failed:', response.status);
+      return null;
+    }
+
+    const data = await response.json();
+    const tracks = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+    
+    if (Array.isArray(tracks) && tracks.length > 0) {
+      return tracks;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Innertube API error:', error);
+    return null;
+  }
+}
+
+// 从 YouTube 页面 HTML 提取字幕轨道（备用方案）
+async function extractCaptionTracksFromPage(videoId: string): Promise<CaptionTrack[] | null> {
+  try {
+    const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    const pageResponse = await fetch(videoPageUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    });
+
+    if (!pageResponse.ok) {
+      return null;
+    }
+
+    const html = await pageResponse.text();
+
+    // 方法1: 从 ytInitialPlayerResponse 提取
+    const playerResponsePatterns = [
+      /var\s+ytInitialPlayerResponse\s*=\s*(\{.+?\});(?:\s*var|\s*<\/script>)/s,
+      /ytInitialPlayerResponse\s*=\s*(\{.+?\});/s,
+    ];
+
+    for (const pattern of playerResponsePatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        try {
+          const playerResponse = JSON.parse(match[1]);
+          const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+          if (Array.isArray(tracks) && tracks.length > 0) {
+            return tracks;
           }
+        } catch (e) {
+          console.error('Player response parse failed:', e);
         }
-        
-        const tracks = JSON.parse(jsonStr);
-        if (Array.isArray(tracks) && tracks.length > 0) {
-          return tracks;
-        }
-      } catch (e) {
-        console.error('Parse attempt failed:', e);
-        continue;
       }
     }
-  }
 
-  // 方法2: 从 ytInitialPlayerResponse 提取
-  const playerResponseMatch = html.match(/ytInitialPlayerResponse\s*=\s*(\{[\s\S]*?\});/);
-  if (playerResponseMatch) {
-    try {
-      const playerResponse = JSON.parse(playerResponseMatch[1]);
-      const tracks = playerResponse?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
-      if (Array.isArray(tracks) && tracks.length > 0) {
-        return tracks;
+    // 方法2: 直接匹配 captionTracks
+    const captionPatterns = [
+      /"captionTracks":\s*(\[[\s\S]*?\])(?=\s*,\s*")/,
+      /"captionTracks":\s*(\[[\s\S]*?\])\s*,\s*"audioTracks"/,
+    ];
+
+    for (const pattern of captionPatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        try {
+          let jsonStr = match[1]
+            .replace(/\\u0026/g, '&')
+            .replace(/\\"/g, '"')
+            .replace(/\\\\/g, '\\');
+          
+          const tracks = JSON.parse(jsonStr);
+          if (Array.isArray(tracks) && tracks.length > 0) {
+            return tracks;
+          }
+        } catch (e) {
+          console.error('Caption tracks parse failed:', e);
+        }
       }
-    } catch (e) {
-      console.error('Player response parse failed:', e);
     }
-  }
 
-  return null;
+    return null;
+  } catch (error) {
+    console.error('Page extraction error:', error);
+    return null;
+  }
 }
 
 export default async function handler(request: Request) {
@@ -78,70 +142,34 @@ export default async function handler(request: Request) {
   const videoId = url.searchParams.get('videoId');
   const lang = url.searchParams.get('lang') || 'en';
 
+  // CORS headers
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+
   // CORS 预检请求
   if (request.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
+    return new Response(null, { headers: corsHeaders });
   }
 
   if (!videoId) {
     return new Response(JSON.stringify({ error: 'videoId is required' }), {
       status: 400,
-      headers: { 
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   }
 
   try {
-    // 步骤1: 获取 YouTube 视频页面
-    const videoPageUrl = `https://www.youtube.com/watch?v=${videoId}`;
-    const pageResponse = await fetch(videoPageUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Cache-Control': 'no-cache',
-      },
-    });
-
-    if (!pageResponse.ok) {
-      return new Response(JSON.stringify({ 
-        error: 'Failed to fetch video page',
-        message: `YouTube 页面请求失败: ${pageResponse.status}`,
-      }), {
-        status: 502,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
+    // 步骤1: 尝试使用 innertube API 获取字幕轨道
+    let captionTracks = await getVideoInfoViaInnertube(videoId);
+    
+    // 步骤2: 如果 innertube 失败，尝试从页面提取
+    if (!captionTracks) {
+      console.log('Innertube failed, trying page extraction...');
+      captionTracks = await extractCaptionTracksFromPage(videoId);
     }
-
-    const pageHtml = await pageResponse.text();
-
-    // 检查视频是否存在
-    if (pageHtml.includes('Video unavailable') || pageHtml.includes('"playabilityStatus":{"status":"ERROR"')) {
-      return new Response(JSON.stringify({ 
-        error: 'Video unavailable',
-        message: '视频不可用或已被删除',
-      }), {
-        status: 404,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
-    }
-
-    // 步骤2: 提取字幕轨道信息
-    const captionTracks = extractCaptionTracks(pageHtml);
     
     if (!captionTracks || captionTracks.length === 0) {
       return new Response(JSON.stringify({ 
@@ -149,15 +177,11 @@ export default async function handler(request: Request) {
         message: '该视频没有字幕',
       }), {
         status: 404,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
     // 步骤3: 选择合适的字幕轨道
-    // 优先级: 指定语言 > 英语 > 中文 > 第一个可用
     const selectedTrack = captionTracks.find(t => t.languageCode === lang)
       || captionTracks.find(t => t.languageCode === 'en')
       || captionTracks.find(t => t.languageCode?.startsWith('en'))
@@ -173,10 +197,7 @@ export default async function handler(request: Request) {
         availableLangs: captionTracks.map(t => t.languageCode),
       }), {
         status: 404,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
@@ -185,7 +206,7 @@ export default async function handler(request: Request) {
     const captionResponse = await fetch(captionUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/xml, text/xml, */*',
+        'Accept': '*/*',
       },
     });
 
@@ -195,37 +216,70 @@ export default async function handler(request: Request) {
         message: `字幕内容获取失败: ${captionResponse.status}`,
       }), {
         status: 502,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    const captionText = await captionResponse.text();
+
+    // 检查是否是有效的字幕格式（XML 或 JSON3）
+    if (captionText.includes('<text') || captionText.includes('<transcript')) {
+      // XML 格式，直接返回
+      return new Response(captionText, {
+        headers: {
+          'Content-Type': 'application/xml; charset=utf-8',
+          'X-Caption-Language': selectedTrack.languageCode || 'unknown',
+          'Cache-Control': 'public, s-maxage=3600',
+          ...corsHeaders,
         },
       });
     }
 
-    const captionXml = await captionResponse.text();
-
-    // 验证返回的是有效的 XML
-    if (!captionXml.includes('<text') && !captionXml.includes('<transcript')) {
-      return new Response(JSON.stringify({ 
-        error: 'Invalid caption format',
-        message: '字幕格式无效',
-      }), {
-        status: 500,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      });
+    // 尝试解析为 JSON3 格式
+    try {
+      const json3Data = JSON.parse(captionText);
+      if (json3Data.events) {
+        // 转换 JSON3 为简单 XML 格式
+        const xmlParts = ['<?xml version="1.0" encoding="utf-8"?><transcript>'];
+        
+        for (const event of json3Data.events) {
+          if (event.segs) {
+            const text = event.segs.map((s: any) => s.utf8 || '').join('');
+            if (text.trim()) {
+              const start = (event.tStartMs || 0) / 1000;
+              const dur = (event.dDurationMs || 0) / 1000;
+              const escapedText = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+              xmlParts.push(`<text start="${start}" dur="${dur}">${escapedText}</text>`);
+            }
+          }
+        }
+        
+        xmlParts.push('</transcript>');
+        
+        return new Response(xmlParts.join(''), {
+          headers: {
+            'Content-Type': 'application/xml; charset=utf-8',
+            'X-Caption-Language': selectedTrack.languageCode || 'unknown',
+            'Cache-Control': 'public, s-maxage=3600',
+            ...corsHeaders,
+          },
+        });
+      }
+    } catch {
+      // 不是 JSON，继续
     }
 
-    // 返回 XML 格式的字幕
-    return new Response(captionXml, {
-      headers: {
-        'Content-Type': 'application/xml; charset=utf-8',
-        'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, s-maxage=3600',
-        'X-Caption-Language': selectedTrack.languageCode || 'unknown',
-      },
+    // 无法识别的格式
+    return new Response(JSON.stringify({ 
+      error: 'Unknown caption format',
+      message: '无法识别的字幕格式',
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
 
   } catch (error) {
@@ -236,10 +290,7 @@ export default async function handler(request: Request) {
       message: error instanceof Error ? error.message : '获取字幕失败',
     }), {
       status: 500,
-      headers: { 
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });
   }
 }
