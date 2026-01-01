@@ -5,10 +5,6 @@ import {
   formatTimestamp,
   type SubtitleContent 
 } from '../../lib/bilibili';
-import { 
-  getYouTubeTranscript, 
-  type YouTubeCaption 
-} from '../../lib/youtube';
 import { generateVideoSummaryStream, isAIConfigured, type VideoSummaryResult } from '../../lib/video-summary-service';
 
 interface AISummaryModalProps {
@@ -36,13 +32,10 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
   const [summary, setSummary] = useState<VideoSummaryResult | null>(null);
   const [streamingText, setStreamingText] = useState<string>('');
   
-  // 字幕数据（B站格式）
+  // 字幕数据（仅B站）
   const [subtitles, setSubtitles] = useState<SubtitleContent | null>(null);
   const [subtitleLang, setSubtitleLang] = useState<string>('');
   const [fullSubtitleText, setFullSubtitleText] = useState<string>('');
-  
-  // YouTube 字幕数据
-  const [ytCaptions, setYtCaptions] = useState<YouTubeCaption[]>([]);
   
   // AbortController for canceling requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -54,17 +47,8 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
 
     try {
       if (isYT) {
-        // YouTube 视频：使用 YouTube 字幕 API
-        const videoId = getYouTubeVideoId(bvid);
-        const result = await getYouTubeTranscript(videoId);
-        
-        if (result && result.captions.length > 0) {
-          setYtCaptions(result.captions);
-          setFullSubtitleText(result.fullText);
-          setSubtitleLang('auto');
-        } else {
-          setError('该 YouTube 视频暂无字幕，可尝试使用语音转文字功能');
-        }
+        // YouTube 视频暂不支持字幕获取
+        setError('YouTube 视频暂不支持字幕获取，可尝试使用语音转文字功能');
       } else {
         // B站视频：使用原有逻辑
         const data = await getVideoSubtitles(bvid);
@@ -83,6 +67,7 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
       setLoading(false);
     }
   }, [bvid, isYT]);
+
 
   // 生成AI总结（流式）
   const generateSummary = useCallback(async () => {
@@ -166,27 +151,17 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
           text += `• ${section.title}: ${section.content}\n`;
         });
       }
-    } else if (activeTab === 'subtitle') {
+    } else if (activeTab === 'subtitle' && subtitles) {
       text = `【字幕】${title}\n\n`;
-      if (isYT && ytCaptions.length > 0) {
-        // YouTube 字幕格式
-        text += ytCaptions.map(cap => {
-          const mins = Math.floor(cap.start / 60);
-          const secs = Math.floor(cap.start % 60);
-          return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} ${cap.text}`;
-        }).join('\n');
-      } else if (subtitles) {
-        // B站字幕格式
-        text += subtitles.body.map(item => 
-          `${formatTimestamp(item.from)} ${item.content}`
-        ).join('\n');
-      }
+      text += subtitles.body.map(item => 
+        `${formatTimestamp(item.from)} ${item.content}`
+      ).join('\n');
     }
 
     navigator.clipboard.writeText(text).then(() => {
       alert('已复制到剪贴板');
     });
-  }, [activeTab, summary, subtitles, ytCaptions, title, isYT]);
+  }, [activeTab, summary, subtitles, title]);
 
   // 禁止背景滚动
   useEffect(() => {
@@ -195,6 +170,7 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
       document.body.style.overflow = '';
     };
   }, []);
+
 
   return createPortal(
     <div className="fixed inset-0 z-[99999]" onClick={onClose}>
@@ -263,6 +239,7 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
           </button>
         </div>
 
+
         {/* 内容区域 */}
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
@@ -279,12 +256,14 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                 </svg>
               </div>
               <p className="text-gray-400 text-sm text-center whitespace-pre-line">{error}</p>
-              <button
-                onClick={loadSubtitles}
-                className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-white text-sm transition-colors"
-              >
-                重试
-              </button>
+              {!isYT && (
+                <button
+                  onClick={loadSubtitles}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/15 rounded-lg text-white text-sm transition-colors"
+                >
+                  重试
+                </button>
+              )}
             </div>
           ) : activeTab === 'summary' ? (
             <div className="space-y-4">
@@ -331,10 +310,11 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                 </div>
               )}
 
+
               {/* 总结内容 */}
               {summary && (
                 <>
-                  {/* 视频摘要 - 分段渲染 */}
+                  {/* 视频摘要 */}
                   <div className="bg-gradient-to-br from-purple-500/10 to-cyan-500/10 rounded-xl p-4 border border-white/5">
                     <h4 className="text-cyber-lime text-xs font-medium mb-3 flex items-center gap-1.5">
                       <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -344,7 +324,6 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                     </h4>
                     <div className="space-y-3">
                       {summary.summary.split('\n\n').map((paragraph, idx) => {
-                        // 检查是否是标题行（以【开头）
                         if (paragraph.startsWith('【')) {
                           const titleMatch = paragraph.match(/^【(.+?)】(.*)$/s);
                           if (titleMatch) {
@@ -367,7 +346,7 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                     </div>
                   </div>
 
-                  {/* 关键要点 - 卡片式布局 */}
+                  {/* 关键要点 */}
                   {summary.keyPoints?.length > 0 && (
                     <div className="bg-white/5 rounded-xl p-4">
                       <h4 className="text-cyan-400 text-xs font-medium mb-3 flex items-center gap-1.5">
@@ -391,7 +370,7 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                     </div>
                   )}
 
-                  {/* 章节大纲 - 时间线样式 */}
+                  {/* 章节大纲 */}
                   {summary.outline?.length > 0 && (
                     <div className="bg-white/5 rounded-xl p-4">
                       <h4 className="text-white text-xs font-medium mb-3 flex items-center gap-1.5">
@@ -401,11 +380,9 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                         章节大纲
                       </h4>
                       <div className="space-y-0 relative">
-                        {/* 时间线 */}
                         <div className="absolute left-[7px] top-2 bottom-2 w-0.5 bg-gradient-to-b from-purple-500/50 via-cyan-500/50 to-cyber-lime/50" />
                         {summary.outline.map((section, idx) => (
                           <div key={idx} className="relative pl-6 pb-3 last:pb-0">
-                            {/* 节点 */}
                             <div className="absolute left-0 top-1.5 w-4 h-4 rounded-full bg-[#0f0f12] border-2 border-cyan-500/70 flex items-center justify-center">
                               <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                             </div>
@@ -423,50 +400,28 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                 </>
               )}
             </div>
-          ) : activeTab === 'subtitle' && (subtitles || ytCaptions.length > 0) ? (
+          ) : activeTab === 'subtitle' && subtitles ? (
             <div className="space-y-1">
-              {isYT ? (
-                // YouTube 字幕显示
-                ytCaptions.map((cap, idx) => {
-                  const mins = Math.floor(cap.start / 60);
-                  const secs = Math.floor(cap.start % 60);
-                  const timestamp = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-                  return (
-                    <div 
-                      key={idx} 
-                      className="flex gap-3 py-1.5 hover:bg-white/5 rounded px-2 -mx-2 transition-colors group"
-                    >
-                      <span className="text-red-400/70 font-mono text-xs shrink-0 pt-0.5 group-hover:text-red-400">
-                        {timestamp}
-                      </span>
-                      <span className="text-gray-300 text-sm leading-relaxed">
-                        {cap.text}
-                      </span>
-                    </div>
-                  );
-                })
-              ) : subtitles ? (
-                // B站字幕显示
-                subtitles.body.map((item, idx) => (
-                  <div 
-                    key={idx} 
-                    className="flex gap-3 py-1.5 hover:bg-white/5 rounded px-2 -mx-2 transition-colors group"
-                  >
-                    <span className="text-cyber-lime/70 font-mono text-xs shrink-0 pt-0.5 group-hover:text-cyber-lime">
-                      {formatTimestamp(item.from)}
-                    </span>
-                    <span className="text-gray-300 text-sm leading-relaxed">
-                      {item.content}
-                    </span>
-                  </div>
-                ))
-              ) : null}
+              {subtitles.body.map((item, idx) => (
+                <div 
+                  key={idx} 
+                  className="flex gap-3 py-1.5 hover:bg-white/5 rounded px-2 -mx-2 transition-colors group"
+                >
+                  <span className="text-cyber-lime/70 font-mono text-xs shrink-0 pt-0.5 group-hover:text-cyber-lime">
+                    {formatTimestamp(item.from)}
+                  </span>
+                  <span className="text-gray-300 text-sm leading-relaxed">
+                    {item.content}
+                  </span>
+                </div>
+              ))}
             </div>
           ) : null}
         </div>
 
+
         {/* 底部操作栏 */}
-        {!loading && !error && (summary || subtitles || ytCaptions.length > 0) && (
+        {!loading && !error && (summary || subtitles) && (
           <div className="border-t border-white/10 px-4 py-3 flex gap-3 shrink-0">
             <button
               onClick={handleCopy}

@@ -51,6 +51,18 @@ const Loader: React.FC<LoaderProps> = ({ text = '加载中...' }) => {
   );
 };
 
+/**
+ * 简单圆形加载器 - 用于次要加载状态
+ */
+export const SimpleLoader: React.FC<LoaderProps> = ({ text }) => {
+  return (
+    <div className="flex flex-col items-center justify-center py-16">
+      <div className="w-8 h-8 border-2 border-white/10 border-t-cyber-lime rounded-full animate-spin" />
+      {text && <span className="mt-4 text-sm text-gray-500">{text}</span>}
+    </div>
+  );
+};
+
 export const LoaderPulse: React.FC<LoaderProps> = ({ text = '数据加载中...' }) => {
   return (
     <div className="flex flex-col items-center justify-center py-20">

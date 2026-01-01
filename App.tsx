@@ -6,7 +6,7 @@ import { HomeIcon, ClockIcon, SearchIcon, CalendarIcon, SlidersIcon, SettingsIco
 import CustomDatePicker from './components/layout/CustomDatePicker';
 import DateFilterPicker from './components/layout/DateFilterPicker';
 import SyncButton from './components/layout/SyncButton';
-import Loader from './components/shared/Loader';
+import Loader, { SimpleLoader } from './components/shared/Loader';
 import SplashScreen from './components/layout/SplashScreen';
 import PullToRefresh from './components/layout/PullToRefresh';
 import LogoSvg from './assets/logo.svg';
@@ -761,7 +761,7 @@ const App = () => {
   // 认证过期时显示登录页
   if (authExpired) {
     return (
-      <Suspense fallback={<Loader text="准备登录界面..." />}>
+      <Suspense fallback={<SimpleLoader />}>
         <AuthPage onLoginSuccess={() => { setAuthExpired(false); handleLoginSuccess(); }} />
       </Suspense>
     );
@@ -1094,20 +1094,20 @@ const App = () => {
 
               {/* RSS 阅读界面 */}
               {activeTab === 'rss' && (
-                <Suspense fallback={<Loader text="加载 RSS..." />}>
+                <Suspense fallback={<SimpleLoader />}>
                   <RssFeed scrollContainerRef={mainRef} timeFilter={activeFilter} />
                 </Suspense>
               )}
 
               {/* TODO 待办事项界面 */}
               {activeTab === 'todo' && (
-                <Suspense fallback={<Loader text="加载待办..." />}>
+                <Suspense fallback={<SimpleLoader />}>
                   <TodoList embedded timeFilter={activeFilter} />
                 </Suspense>
               )}
 
               {/* 设置页面 */}
-              <Suspense fallback={<Loader text="加载设置..." />}>
+              <Suspense fallback={<SimpleLoader />}>
                 <SettingsPage
                   isOpen={activeTab === 'settings'}
                   onClose={() => setActiveTab(subPageSourceRef.current)}
@@ -1119,7 +1119,7 @@ const App = () => {
               </Suspense>
 
               {/* 笔记页面 */}
-              <Suspense fallback={<Loader text="加载笔记..." />}>
+              <Suspense fallback={<SimpleLoader />}>
                 <NotesPage
                   isOpen={isNotesOpen}
                   onClose={() => {
@@ -1135,7 +1135,7 @@ const App = () => {
               </Suspense>
 
               {/* 学习日志页面 */}
-              <Suspense fallback={<Loader text="加载学习日志..." />}>
+              <Suspense fallback={<SimpleLoader />}>
                 <LearningLog
                   isOpen={isLearningLogOpen}
                   onClose={() => {
@@ -1154,7 +1154,7 @@ const App = () => {
               </Suspense>
 
               {/* 资源中心 */}
-              <Suspense fallback={<Loader text="加载资源中心..." />}>
+              <Suspense fallback={<SimpleLoader />}>
                 <ResourceCenter
                   isOpen={isResourceCenterOpen}
                   onClose={() => {
@@ -1182,7 +1182,7 @@ const App = () => {
               )}
 
               {/* AI 视频分析 */}
-              <Suspense fallback={<Loader text="加载分析工具..." />}>
+              <Suspense fallback={<SimpleLoader />}>
                 <VideoAnalyzer
                   isOpen={isVideoAnalyzerOpen}
                   onClose={() => setIsVideoAnalyzerOpen(false)}
@@ -1386,7 +1386,7 @@ const App = () => {
                       {/* 热门轮播图 - PC端占 70% */}
                       {activeFilter === 'all' && videos.length > 0 && (
                         <div className="lg:w-[70%] lg:shrink-0">
-                          <Suspense fallback={<Loader text="加载热门..." />}>
+                          <Suspense fallback={<SimpleLoader />}>
                             <HotCarousel videos={hotVideos} />
                           </Suspense>
                         </div>
@@ -2140,7 +2140,7 @@ const App = () => {
 
         {/* 时间轴 */}
         {showTimeline && (
-          <Suspense fallback={<Loader text="加载时间轴..." />}>
+          <Suspense fallback={<SimpleLoader />}>
             <VideoTimeline
               videos={videos}
               onClose={() => setShowTimeline(false)}

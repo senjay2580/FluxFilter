@@ -160,16 +160,17 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
     <>
       <div
         ref={containerRef}
-        className="group relative rounded-2xl overflow-hidden
-                 bg-cyber-card/90
-                 border border-white/[0.08] 
-                 shadow-lg
-                 active:scale-[0.98] transition-transform duration-200 cursor-pointer
-                 transform-gpu"
+        className="group relative rounded-[1.25rem] overflow-hidden
+                 bg-[#0a0a0d]
+                 border border-white/[0.08]
+                 shadow-xl shadow-black/20
+                 hover:shadow-2xl hover:shadow-black/30
+                 hover:border-white/[0.12]
+                 active:scale-[0.98] transition-all duration-300 cursor-pointer
+                 transform-gpu flex flex-col"
         style={{
           contentVisibility: 'auto',
-          containIntrinsicSize: '0 260px',
-          minHeight: '220px'
+          containIntrinsicSize: '0 280px'
         }}
         onClick={handleClick}
       >
@@ -178,11 +179,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
         ) : (
           <>
             {/* Thumbnail */}
-            <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-800 rounded-t-2xl">
+            <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-800/50">
               <img
                 src={thumbnail || ''}
                 alt={title}
-                className={`w-full h-full object-cover transform-gpu ${imageLoaded ? 'animate-card-fade' : 'opacity-0'}`}
+                className={`w-full h-full object-cover transform-gpu transition-transform duration-500 group-hover:scale-105 ${imageLoaded ? 'animate-card-fade' : 'opacity-0'}`}
                 loading="eager"
                 decoding="async"
                 fetchPriority="high"
@@ -193,32 +194,15 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                 }}
               />
               {/* 渐变遮罩 */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-80"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
 
-              {/* Duration Badge */}
-              <div className="absolute top-2 right-2 px-2 py-0.5 bg-black/70 rounded text-[11px] font-bold text-white">
+              {/* Duration Badge - 带背景色块 */}
+              <div className="absolute top-3 right-3 px-2.5 py-1 bg-black/80 backdrop-blur-sm rounded-lg text-[11px] font-bold text-white flex items-center gap-1.5 shadow-lg">
+                <svg className="w-3 h-3 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
                 {duration}
-              </div>
-
-              {/* Platform Badge - 斜角丝带样式，只显示图标 */}
-              <div className="absolute -left-[6px] -top-[6px] z-10 overflow-hidden w-16 h-16">
-                <div 
-                  className={`absolute top-[10px] -left-[14px] w-[70px] py-1 transform -rotate-45 flex items-center justify-center shadow-lg ${
-                    isYouTube 
-                      ? 'bg-gradient-to-r from-red-600 via-red-500 to-red-600' 
-                      : 'bg-gradient-to-r from-pink-500 via-pink-400 to-pink-500'
-                  }`}
-                >
-                  {isYouTube ? (
-                    <svg className="w-3.5 h-3.5 text-white drop-shadow" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
-                    </svg>
-                  ) : (
-                    <svg className="w-3.5 h-3.5 text-white drop-shadow" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.659.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906L17.813 4.653zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773H5.333zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373z"/>
-                    </svg>
-                  )}
-                </div>
               </div>
 
               {/* 充电/付费标识 */}
@@ -276,8 +260,12 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               )}
             </div>
 
-            {/* Content Section */}
-            <div className="p-3 bg-cyber-card rounded-b-2xl overflow-hidden">
+            {/* Content Section - 平台渐变背景 */}
+            <div className={`p-3.5 overflow-hidden flex-1 ${
+              isYouTube 
+                ? 'bg-gradient-to-r from-red-950/80 via-[#0d0d10] to-[#0d0d10]' 
+                : 'bg-gradient-to-r from-pink-500/30 via-[#0d0d10] to-[#0d0d10]'
+            }`}>
               <div className="flex gap-2.5 items-start">
                 {/* 头像 */}
                 <div className="shrink-0">
