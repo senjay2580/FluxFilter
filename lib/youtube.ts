@@ -632,30 +632,28 @@ export async function getYouTubeCaptionTracks(videoId: string): Promise<YouTubeC
  * 获取 YouTube 视频字幕内容
  * @param videoId - YouTube 视频 ID
  * @param lang - 语言代码（默认 'en'，可选 'zh-Hans', 'zh-Hant', 'ja' 等）
+ * @returns 字幕数据或 null（如果失败）
+ * @throws Error 如果需要向用户显示错误信息
  */
 export async function getYouTubeTranscript(
   videoId: string, 
   lang: string = 'en'
-): Promise<{ captions: YouTubeCaption[]; fullText: string } | null> {
+): Promise<{ captions: YouTubeCaption[]; fullText: string; language?: string } | null> {
   try {
     // 统一使用 Vercel API（开发和生产环境都用）
     const apiUrl = `/api/youtube-transcript?videoId=${videoId}&lang=${lang}`;
     
+    console.log('🎬 请求 YouTube 字幕:', apiUrl);
+    
     const response = await fetch(apiUrl);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('YouTube 字幕 API 错误:', response.status, errorText);
-      return null;
-    }
-    
     const contentType = response.headers.get('content-type') || '';
     
-    // 如果返回 JSON 错误
+    // 如果返回 JSON（错误响应）
     if (contentType.includes('application/json')) {
       const data = await response.json();
       if (data.error) {
-        console.error('YouTube 字幕不可用:', data.error);
+        console.error('YouTube 字幕 API 错误:', data.error, data.message);
+        // 返回 null，让调用方显示默认错误信息
         return null;
       }
       // 如果 API 直接返回解析好的 JSON 格式
@@ -664,15 +662,31 @@ export async function getYouTubeTranscript(
       }
     }
     
+    if (!response.ok) {
+      console.error('YouTube 字幕请求失败:', response.status);
+      return null;
+    }
+    
     const text = await response.text();
+    
+    // 获取字幕语言（从响应头）
+    const captionLang = response.headers.get('x-caption-language') || lang;
     
     // 解析 XML 格式的字幕
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(text, 'text/xml');
+    
+    // 检查 XML 解析错误
+    const parseError = xmlDoc.querySelector('parsererror');
+    if (parseError) {
+      console.error('字幕 XML 解析错误:', parseError.textContent);
+      return null;
+    }
+    
     const textElements = xmlDoc.querySelectorAll('text');
     
     if (textElements.length === 0) {
-      console.error('字幕 XML 解析失败或无内容');
+      console.error('字幕 XML 无内容');
       return null;
     }
     
@@ -680,12 +694,14 @@ export async function getYouTubeTranscript(
     let fullText = '';
     
     textElements.forEach((el) => {
+      // 解码 HTML 实体
       const content = el.textContent
         ?.replace(/&#39;/g, "'")
         .replace(/&quot;/g, '"')
         .replace(/&amp;/g, '&')
         .replace(/&lt;/g, '<')
         .replace(/&gt;/g, '>')
+        .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code)))
         .replace(/\n/g, ' ')
         .trim() || '';
       
@@ -703,9 +719,12 @@ export async function getYouTubeTranscript(
       }
     });
     
+    console.log(`✅ 成功获取 ${captions.length} 条字幕 (${captionLang})`);
+    
     return {
       captions,
       fullText: fullText.trim(),
+      language: captionLang,
     };
   } catch (error) {
     console.error('获取 YouTube 字幕失败:', error);
