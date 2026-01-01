@@ -80,6 +80,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
 
   const videoData = useMemo(() => {
     const isDb = isDbVideo(video);
+    const platform = isDb ? ((video as any).platform || 'bilibili') : 'bilibili';
+    const isYouTube = platform === 'youtube';
     return {
       bvid: isDb ? video.bvid : video.id,
       thumbnail: isDb ? video.pic : video.thumbnail,
@@ -96,10 +98,13 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
       pubdate: isDb && video.pubdate ? formatPubdate(video.pubdate) : null,
       accessRestriction: isDb ? (video as any).access_restriction : null,
       description: isDb ? (video as any).description || '' : (video as any).description || '',
+      platform,
+      isYouTube,
+      videoId: isDb ? (video as any).video_id : null,  // YouTube video ID
     };
   }, [video]);
 
-  const { bvid, thumbnail, title, duration, author, avatar, stats, pubdate, accessRestriction, description } = videoData;
+  const { bvid, thumbnail, title, duration, author, avatar, stats, pubdate, accessRestriction, description, platform, isYouTube, videoId } = videoData;
 
   const drawerOpen = openMenuId === bvid;
 
@@ -121,7 +126,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
 
   const handleShare = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const url = `https://www.bilibili.com/video/${bvid}`;
+    const url = isYouTube 
+      ? `https://www.youtube.com/watch?v=${videoId}`
+      : `https://www.bilibili.com/video/${bvid}`;
     if (navigator.share) {
       navigator.share({ title, url });
     } else {
@@ -129,7 +136,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
       alert('链接已复制到剪贴板');
     }
     onMenuToggle?.(null);
-  }, [bvid, title, onMenuToggle]);
+  }, [bvid, title, onMenuToggle, isYouTube, videoId]);
 
   const handleRemoveFromWatchlistClick = useCallback((e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -193,6 +200,27 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                 {duration}
               </div>
 
+              {/* Platform Badge - 斜角丝带样式，只显示图标 */}
+              <div className="absolute -left-[6px] -top-[6px] z-10 overflow-hidden w-16 h-16">
+                <div 
+                  className={`absolute top-[10px] -left-[14px] w-[70px] py-1 transform -rotate-45 flex items-center justify-center shadow-lg ${
+                    isYouTube 
+                      ? 'bg-gradient-to-r from-red-600 via-red-500 to-red-600' 
+                      : 'bg-gradient-to-r from-pink-500 via-pink-400 to-pink-500'
+                  }`}
+                >
+                  {isYouTube ? (
+                    <svg className="w-3.5 h-3.5 text-white drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5 text-white drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.659.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906L17.813 4.653zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773H5.333zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373z"/>
+                    </svg>
+                  )}
+                </div>
+              </div>
+
               {/* 充电/付费标识 */}
               {accessRestriction && (
                 <div className="absolute top-2 left-2 px-1.5 py-0.5 bg-gradient-to-r from-amber-500 to-orange-500 rounded text-[10px] font-bold text-white flex items-center gap-0.5 shadow-lg">
@@ -238,9 +266,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                 </div>
               </div>
 
-              {/* 已收藏星标 */}
+              {/* 已收藏星标 - 放在右下角 */}
               {isInWatchlist && (
-                <div className="absolute top-2 left-2 p-1 bg-black/50 rounded">
+                <div className="absolute bottom-10 right-2 p-1 bg-black/50 rounded">
                   <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
@@ -366,9 +394,24 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                     <span className="text-[15px] text-white font-medium">下载视频</span>
                   </button>
                 )}
-                <button onClick={(e) => { e.stopPropagation(); window.open(`https://www.bilibili.com/video/${bvid}`, '_blank'); onMenuToggle?.(null); }} className="w-full flex items-center gap-4 px-4 py-3.5">
-                  <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center"><svg className="w-5 h-5 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg></div>
-                  <span className="text-[15px] text-white font-medium">在B站打开</span>
+                <button onClick={(e) => { 
+                  e.stopPropagation(); 
+                  const url = isYouTube 
+                    ? `https://www.youtube.com/watch?v=${videoId}` 
+                    : `https://www.bilibili.com/video/${bvid}`;
+                  window.open(url, '_blank'); 
+                  onMenuToggle?.(null); 
+                }} className="w-full flex items-center gap-4 px-4 py-3.5">
+                  <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isYouTube ? 'bg-red-500/15' : 'bg-white/10'}`}>
+                    {isYouTube ? (
+                      <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                      </svg>
+                    ) : (
+                      <svg className="w-5 h-5 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                    )}
+                  </div>
+                  <span className="text-[15px] text-white font-medium">{isYouTube ? '在YouTube打开' : '在B站打开'}</span>
                 </button>
                 {onDelete && (
                   <button onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }} className="w-full flex items-center gap-4 px-4 py-3.5">

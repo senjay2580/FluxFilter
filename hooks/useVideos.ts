@@ -42,10 +42,7 @@ export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
 
       let query = supabase
         .from('video')
-        .select(`
-          *,
-          uploader:uploader!fk_video_uploader (name, face)
-        `)
+        .select('*')
         .eq('user_id', userId)
         .order('pubdate', { ascending: false })
         .range(isLoadMore ? offset : 0, (isLoadMore ? offset : 0) + limit - 1);
@@ -61,10 +58,57 @@ export function useVideos(options: UseVideosOptions = {}): UseVideosReturn {
 
       if (fetchError) throw fetchError;
 
+      // 获取 uploader 信息
+      let processedData = data || [];
+      if (data && data.length > 0) {
+        // 分别处理 B站和 YouTube 视频
+        const biliVideos = data.filter((v: any) => v.platform !== 'youtube');
+        const ytVideos = data.filter((v: any) => v.platform === 'youtube');
+
+        // B站视频通过 mid 关联
+        const mids = [...new Set(biliVideos.map((v: any) => v.mid).filter(Boolean))];
+        let biliUploaderMap = new Map();
+        if (mids.length > 0) {
+          const { data: uploaders } = await supabase
+            .from('uploader')
+            .select('mid, name, face')
+            .eq('user_id', userId)
+            .eq('platform', 'bilibili')
+            .in('mid', mids);
+          biliUploaderMap = new Map(uploaders?.map((u: any) => [u.mid, u]) || []);
+        }
+
+        // YouTube 视频通过 channel_id 关联
+        const channelIds = [...new Set(ytVideos.map((v: any) => v.channel_id).filter(Boolean))];
+        let ytUploaderMap = new Map();
+        if (channelIds.length > 0) {
+          const { data: uploaders } = await supabase
+            .from('uploader')
+            .select('channel_id, name, face')
+            .eq('user_id', userId)
+            .eq('platform', 'youtube')
+            .in('channel_id', channelIds);
+          ytUploaderMap = new Map(uploaders?.map((u: any) => [u.channel_id, u]) || []);
+        }
+
+        processedData = data.map((v: any) => {
+          let uploader = null;
+          if (v.platform === 'youtube') {
+            uploader = ytUploaderMap.get(v.channel_id);
+          } else {
+            uploader = biliUploaderMap.get(v.mid);
+          }
+          return {
+            ...v,
+            uploader: uploader ? { name: uploader.name, face: uploader.face } : null
+          };
+        });
+      }
+
       if (isLoadMore) {
-        setVideos(prev => [...prev, ...(data || [])]);
+        setVideos(prev => [...prev, ...(processedData || [])]);
       } else {
-        setVideos(data || []);
+        setVideos(processedData || []);
       }
 
       setHasMore((data?.length || 0) === limit);

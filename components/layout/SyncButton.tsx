@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { formatLastSyncTime, triggerSyncWithUploaders } from '../../lib/autoSync';
+import { formatLastSyncTime, triggerSyncWithUploaders, triggerYouTubeSyncWithUploaders } from '../../lib/autoSync';
 import { supabase } from '../../lib/supabase';
 import { getStoredUserId, getStoredUsername } from '../../lib/auth';
 import {
@@ -19,7 +19,11 @@ interface Uploader {
   is_active: boolean;
   last_sync_count: number | null;
   last_sync_at: string | null;
+  platform?: 'bilibili' | 'youtube';
+  channel_id?: string | null;
 }
+
+type Platform = 'bilibili' | 'youtube';
 
 interface SyncButtonProps {
   compact?: boolean;
@@ -45,7 +49,10 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const [showModal, setShowModal] = useState(false);
   const [uploaders, setUploaders] = useState<Uploader[]>([]);
   const [selectedMids, setSelectedMids] = useState<Set<number>>(new Set());
+  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<string>>(new Set());
   const [loadingUploaders, setLoadingUploaders] = useState(false);
+  const [activePlatform, setActivePlatform] = useState<Platform>('bilibili');
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -53,12 +60,38 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   const [progress, setProgress] = useState(0);
   const [currentUploader, setCurrentUploader] = useState<string>('');
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
-  const [newVideos, setNewVideos] = useState<Array<{ bvid: string; title: string; pic: string; uploader_name: string }>>([]);
+  const [newVideos, setNewVideos] = useState<Array<{ bvid?: string; video_id?: string; title: string; pic: string; uploader_name: string }>>([]);
   const [showSuccessModal, setShowSuccessModal] = useState(false); // 后台同步完成后显示成功弹窗
   const [backgroundResult, setBackgroundResult] = useState<{ message: string; newVideos: any[] }>({ message: '', newVideos: [] });
 
   const cancelRef = useRef(false);
   const isBackgroundRef = useRef(false); // 使用 ref 追踪是否为后台同步
+
+  // 按平台筛选并搜索的 uploaders
+  const filteredUploaders = useMemo(() => {
+    let result = uploaders.filter(u => (u.platform || 'bilibili') === activePlatform);
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      result = result.filter(u => u.name.toLowerCase().includes(term));
+    }
+    return result;
+  }, [uploaders, activePlatform, searchTerm]);
+
+  // 当前平台选中的数量
+  const currentPlatformSelectedCount = useMemo(() => {
+    if (activePlatform === 'bilibili') {
+      return filteredUploaders.filter(u => selectedMids.has(u.mid)).length;
+    } else {
+      return filteredUploaders.filter(u => u.channel_id && selectedChannelIds.has(u.channel_id)).length;
+    }
+  }, [activePlatform, filteredUploaders, selectedMids, selectedChannelIds]);
+
+  // B站和YouTube的UP主数量
+  const platformCounts = useMemo(() => {
+    const bilibili = uploaders.filter(u => (u.platform || 'bilibili') === 'bilibili').length;
+    const youtube = uploaders.filter(u => u.platform === 'youtube').length;
+    return { bilibili, youtube };
+  }, [uploaders]);
 
   const fetchUploaders = useCallback(async (forceRefresh = false) => {
     setLoadingUploaders(true);
@@ -89,7 +122,11 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
       );
 
       setUploaders(list);
-      setSelectedMids(new Set(list.map(u => u.mid)));
+      // 默认全选B站UP主
+      const biliMids = list.filter(u => (u.platform || 'bilibili') === 'bilibili').map(u => u.mid);
+      const ytChannels = list.filter(u => u.platform === 'youtube' && u.channel_id).map(u => u.channel_id!);
+      setSelectedMids(new Set(biliMids));
+      setSelectedChannelIds(new Set(ytChannels));
     } catch (err) {
       console.error('获取UP主列表失败:', err);
     } finally {
@@ -103,6 +140,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     setProgress(0);
     setMessage(null);
     setNewVideos([]);
+    setSearchTerm('');
     setShowModal(true);
   };
 
@@ -115,22 +153,70 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
     }
     setShowModal(false);
     setSyncStatus('idle');
+    setSearchTerm('');
   };
 
-  const toggleSelect = (mid: number) => {
-    setSelectedMids(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(mid)) newSet.delete(mid);
-      else newSet.add(mid);
-      return newSet;
-    });
+  const toggleSelect = (uploader: Uploader) => {
+    if (activePlatform === 'bilibili') {
+      setSelectedMids(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(uploader.mid)) newSet.delete(uploader.mid);
+        else newSet.add(uploader.mid);
+        return newSet;
+      });
+    } else if (uploader.channel_id) {
+      setSelectedChannelIds(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(uploader.channel_id!)) newSet.delete(uploader.channel_id!);
+        else newSet.add(uploader.channel_id!);
+        return newSet;
+      });
+    }
   };
 
   const toggleSelectAll = () => {
-    if (selectedMids.size === uploaders.length) {
-      setSelectedMids(new Set());
+    if (activePlatform === 'bilibili') {
+      const platformUploaders = filteredUploaders;
+      const allSelected = platformUploaders.every(u => selectedMids.has(u.mid));
+      if (allSelected) {
+        // 取消选择当前平台的所有
+        setSelectedMids(prev => {
+          const newSet = new Set(prev);
+          platformUploaders.forEach(u => newSet.delete(u.mid));
+          return newSet;
+        });
+      } else {
+        // 全选当前平台
+        setSelectedMids(prev => {
+          const newSet = new Set(prev);
+          platformUploaders.forEach(u => newSet.add(u.mid));
+          return newSet;
+        });
+      }
     } else {
-      setSelectedMids(new Set(uploaders.map(u => u.mid)));
+      const platformUploaders = filteredUploaders.filter(u => u.channel_id);
+      const allSelected = platformUploaders.every(u => selectedChannelIds.has(u.channel_id!));
+      if (allSelected) {
+        setSelectedChannelIds(prev => {
+          const newSet = new Set(prev);
+          platformUploaders.forEach(u => u.channel_id && newSet.delete(u.channel_id));
+          return newSet;
+        });
+      } else {
+        setSelectedChannelIds(prev => {
+          const newSet = new Set(prev);
+          platformUploaders.forEach(u => u.channel_id && newSet.add(u.channel_id));
+          return newSet;
+        });
+      }
+    }
+  };
+
+  const isUploaderSelected = (uploader: Uploader) => {
+    if ((uploader.platform || 'bilibili') === 'bilibili') {
+      return selectedMids.has(uploader.mid);
+    } else {
+      return uploader.channel_id ? selectedChannelIds.has(uploader.channel_id) : false;
     }
   };
 
@@ -140,7 +226,12 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
   };
 
   const handleStartSync = async () => {
-    if (selectedMids.size === 0) return;
+    // 获取当前平台选中的UP主
+    const selectedUploaders = activePlatform === 'bilibili'
+      ? uploaders.filter(u => (u.platform || 'bilibili') === 'bilibili' && selectedMids.has(u.mid))
+      : uploaders.filter(u => u.platform === 'youtube' && u.channel_id && selectedChannelIds.has(u.channel_id));
+
+    if (selectedUploaders.length === 0) return;
 
     // 0. 节流检查 - 防止频繁同步（白名单用户跳过）
     const WHITELIST_USERS = ['senjay']; // 白名单用户，跳过限流
@@ -170,7 +261,6 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
 
     try {
       // 1. 等待获取同步锁（小任务直接跳过队列）
-      const selectedUploaders = uploaders.filter(u => selectedMids.has(u.mid));
       const taskCount = selectedUploaders.length;
 
       const lockResult = await waitForSyncLock(
@@ -201,24 +291,40 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
       lockId = lockResult.lockId;
       setMessage('🚀 开始同步...');
 
-      // 2. 执行同步（selectedUploaders 已在上面定义）
-      const result = await triggerSyncWithUploaders(
-        selectedUploaders as any,
-        (progressMsg) => {
-          if (cancelRef.current) return;
+      // 2. 执行同步（根据平台调用不同的同步函数）
+      const progressCallback = (progressMsg: string) => {
+        if (cancelRef.current) return;
 
-          setMessage(progressMsg);
+        setMessage(progressMsg);
 
-          const match = progressMsg.match(/\[(\d+)\/(\d+)\]\s*(.+)/);
-          if (match) {
-            const current = parseInt(match[1]);
-            const total = parseInt(match[2]);
-            setProgress(Math.round((current / total) * 100));
-            setCurrentUploader(match[3]?.replace('...', '') || '');
-          }
-        },
-        () => cancelRef.current  // 传入取消检查函数
-      );
+        const match = progressMsg.match(/\[(\d+)\/(\d+)\]\s*(.+)/);
+        if (match) {
+          const current = parseInt(match[1]);
+          const total = parseInt(match[2]);
+          setProgress(Math.round((current / total) * 100));
+          setCurrentUploader(match[3]?.replace('...', '') || '');
+        }
+      };
+
+      const cancelCheck = () => cancelRef.current;
+
+      const result = activePlatform === 'youtube'
+        ? await triggerYouTubeSyncWithUploaders(
+            selectedUploaders.map(u => ({
+              id: u.id,
+              user_id: getStoredUserId()!,
+              name: u.name,
+              channel_id: u.channel_id!,
+              platform: 'youtube' as const,
+            })),
+            progressCallback,
+            cancelCheck
+          )
+        : await triggerSyncWithUploaders(
+            selectedUploaders as any,
+            progressCallback,
+            cancelCheck
+          );
 
       if (result.cancelled || cancelRef.current) {
         setSyncStatus('idle');
@@ -375,35 +481,41 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                     )}
                   </div>
                   <div className="max-h-[45vh] overflow-y-auto space-y-2 px-1 custom-scrollbar">
-                    {newVideos.map((video) => (
-                      <div
-                        key={video.bvid}
-                        onClick={() => window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank')}
-                        className="group flex gap-3 p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyber-lime/30 rounded-xl cursor-pointer transition-all active:scale-[0.98]"
-                      >
-                        <div className="relative w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-white/5">
-                          <img
-                            src={video.pic?.replace('http:', 'https:')}
-                            alt={video.title}
-                            className="w-full h-full object-cover"
-                            referrerPolicy="no-referrer"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
+                    {newVideos.map((video) => {
+                      const videoKey = video.bvid || video.video_id || video.title;
+                      const videoUrl = video.bvid 
+                        ? `https://www.bilibili.com/video/${video.bvid}`
+                        : `https://www.youtube.com/watch?v=${video.video_id}`;
+                      return (
+                        <div
+                          key={videoKey}
+                          onClick={() => window.open(videoUrl, '_blank')}
+                          className="group flex gap-3 p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 hover:border-cyber-lime/30 rounded-xl cursor-pointer transition-all active:scale-[0.98]"
+                        >
+                          <div className="relative w-24 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-white/5">
+                            <img
+                              src={video.pic?.replace('http:', 'https:')}
+                              alt={video.title}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M8 5v14l11-7z" />
+                              </svg>
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
+                            <h4 className="text-white text-xs font-medium line-clamp-2 leading-tight group-hover:text-cyber-lime transition-colors">
+                              {video.title}
+                            </h4>
+                            <span className="text-gray-400 text-[10px] truncate mt-1">
+                              {video.uploader_name}
+                            </span>
                           </div>
                         </div>
-                        <div className="flex-1 min-w-0 flex flex-col justify-between py-0.5">
-                          <h4 className="text-white text-xs font-medium line-clamp-2 leading-tight group-hover:text-cyber-lime transition-colors">
-                            {video.title}
-                          </h4>
-                          <span className="text-gray-400 text-[10px] truncate mt-1">
-                            {video.uploader_name}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -430,7 +542,7 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
           {/* 头部 */}
           <div className="px-5 py-4 border-b border-white/10 shrink-0">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">选择同步的UP主</h2>
+              <h2 className="text-lg font-bold text-white">选择同步的博主</h2>
               <button onClick={handleCloseModal} className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10">
                 <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -438,21 +550,81 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
               </button>
             </div>
 
+            {/* 平台 Tab 切换 */}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => { setActivePlatform('bilibili'); setSearchTerm(''); }}
+                disabled={syncing}
+                className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  activePlatform === 'bilibili'
+                    ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                    : 'bg-white/5 text-gray-400 border border-transparent hover:bg-white/10'
+                }`}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.659.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906L17.813 4.653zM5.333 7.24c-.746.018-1.373.276-1.88.773-.506.498-.769 1.13-.786 1.894v7.52c.017.764.28 1.395.786 1.893.507.498 1.134.756 1.88.773h13.334c.746-.017 1.373-.275 1.88-.773.506-.498.769-1.129.786-1.893v-7.52c-.017-.765-.28-1.396-.786-1.894-.507-.497-1.134-.755-1.88-.773H5.333zM8 11.107c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c0-.373.129-.689.386-.947.258-.257.574-.386.947-.386zm8 0c.373 0 .684.124.933.373.25.249.383.569.4.96v1.173c-.017.391-.15.711-.4.96-.249.25-.56.374-.933.374s-.684-.125-.933-.374c-.25-.249-.383-.569-.4-.96V12.44c.017-.391.15-.711.4-.96.249-.249.56-.373.933-.373z"/>
+                </svg>
+                B站 ({platformCounts.bilibili})
+              </button>
+              <button
+                onClick={() => { setActivePlatform('youtube'); setSearchTerm(''); }}
+                disabled={syncing}
+                className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  activePlatform === 'youtube'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    : 'bg-white/5 text-gray-400 border border-transparent hover:bg-white/10'
+                }`}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+                YouTube ({platformCounts.youtube})
+              </button>
+            </div>
+
+            {/* 搜索框 */}
+            <div className="mt-3 relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={`搜索${activePlatform === 'bilibili' ? 'UP主' : '频道'}...`}
+                className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 hover:text-white"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
             <button
               onClick={toggleSelectAll}
-              disabled={syncing}
+              disabled={syncing || filteredUploaders.length === 0}
               className="mt-3 w-full py-2 bg-white/5 rounded-xl text-sm text-gray-300 hover:bg-white/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${selectedMids.size === uploaders.length && uploaders.length > 0 ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
-                }`}>
-                {selectedMids.size === uploaders.length && uploaders.length > 0 && (
-                  <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="currentColor">
+              <div className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${
+                currentPlatformSelectedCount === filteredUploaders.length && filteredUploaders.length > 0 
+                  ? activePlatform === 'bilibili' ? 'bg-pink-500 border-pink-500' : 'bg-red-500 border-red-500'
+                  : 'border-gray-500'
+              }`}>
+                {currentPlatformSelectedCount === filteredUploaders.length && filteredUploaders.length > 0 && (
+                  <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
                   </svg>
                 )}
               </div>
-              {selectedMids.size === uploaders.length && uploaders.length > 0 ? '取消全选' : '全选'}
-              <span className="text-gray-500">({selectedMids.size}/{uploaders.length})</span>
+              {currentPlatformSelectedCount === filteredUploaders.length && filteredUploaders.length > 0 ? '取消全选' : '全选'}
+              <span className="text-gray-500">({currentPlatformSelectedCount}/{filteredUploaders.length})</span>
             </button>
           </div>
 
@@ -462,42 +634,65 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
               <div className="flex items-center justify-center py-12">
                 <div className="w-6 h-6 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
               </div>
-            ) : uploaders.length === 0 ? (
-              <div className="text-center py-8 text-gray-500 text-sm">暂无关注的UP主</div>
+            ) : filteredUploaders.length === 0 ? (
+              <div className="text-center py-8 text-gray-500 text-sm">
+                {searchTerm ? '没有找到匹配的博主' : `暂无关注的${activePlatform === 'bilibili' ? 'UP主' : 'YouTube频道'}`}
+              </div>
             ) : (
-              uploaders.map(uploader => (
-                <button
-                  key={uploader.id}
-                  onClick={() => toggleSelect(uploader.mid)}
-                  disabled={syncing}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors disabled:opacity-50 ${selectedMids.has(uploader.mid)
-                      ? 'bg-cyber-lime/10 border border-cyber-lime/30'
-                      : 'bg-white/5 border border-transparent hover:bg-white/10'
+              filteredUploaders.map(uploader => {
+                const isSelected = isUploaderSelected(uploader);
+                const platformColor = activePlatform === 'bilibili' ? 'pink' : 'red';
+                return (
+                  <button
+                    key={uploader.id}
+                    onClick={() => toggleSelect(uploader)}
+                    disabled={syncing}
+                    className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors disabled:opacity-50 ${
+                      isSelected
+                        ? `bg-${platformColor}-500/10 border border-${platformColor}-500/30`
+                        : 'bg-white/5 border border-transparent hover:bg-white/10'
                     }`}
-                >
-                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${selectedMids.has(uploader.mid) ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
-                    }`}>
-                    {selectedMids.has(uploader.mid) && (
-                      <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                      </svg>
-                    )}
-                  </div>
-                  <img src={uploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'} alt={uploader.name} className="w-10 h-10 rounded-full" referrerPolicy="no-referrer" />
-                  <div className="flex-1 min-w-0 text-left">
-                    <span className="text-white font-medium truncate block">{uploader.name}</span>
-                    {uploader.last_sync_at ? (
-                      <span className="text-[10px] text-gray-500">
-                        <span className="text-cyber-lime">{uploader.last_sync_count || 0} 个视频</span>
-                        <span className="mx-1">·</span>
-                        {formatTimeAgo(uploader.last_sync_at)}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-gray-500">暂无同步记录</span>
-                    )}
-                  </div>
-                </button>
-              ))
+                    style={isSelected ? {
+                      backgroundColor: activePlatform === 'bilibili' ? 'rgba(236, 72, 153, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                      borderColor: activePlatform === 'bilibili' ? 'rgba(236, 72, 153, 0.3)' : 'rgba(239, 68, 68, 0.3)'
+                    } : undefined}
+                  >
+                    <div 
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors`}
+                      style={{
+                        backgroundColor: isSelected ? (activePlatform === 'bilibili' ? '#ec4899' : '#ef4444') : 'transparent',
+                        borderColor: isSelected ? (activePlatform === 'bilibili' ? '#ec4899' : '#ef4444') : '#6b7280'
+                      }}
+                    >
+                      {isSelected && (
+                        <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                        </svg>
+                      )}
+                    </div>
+                    <img 
+                      src={uploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'} 
+                      alt={uploader.name} 
+                      className="w-10 h-10 rounded-full" 
+                      referrerPolicy="no-referrer" 
+                    />
+                    <div className="flex-1 min-w-0 text-left">
+                      <span className="text-white font-medium truncate block">{uploader.name}</span>
+                      {uploader.last_sync_at ? (
+                        <span className="text-[10px] text-gray-500">
+                          <span className={activePlatform === 'bilibili' ? 'text-pink-400' : 'text-red-400'}>
+                            {uploader.last_sync_count || 0} 个视频
+                          </span>
+                          <span className="mx-1">·</span>
+                          {formatTimeAgo(uploader.last_sync_at)}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-gray-500">暂无同步记录</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
             )}
           </div>
 
@@ -505,13 +700,16 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
           <div className="p-4 border-t border-white/10 shrink-0">
             <button
               onClick={handleStartSync}
-              disabled={selectedMids.size === 0 || syncing}
-              className={`w-full py-3 rounded-xl text-sm font-medium transition-all ${selectedMids.size === 0 || syncing
+              disabled={currentPlatformSelectedCount === 0 || syncing}
+              className={`w-full py-3 rounded-xl text-sm font-medium transition-all ${
+                currentPlatformSelectedCount === 0 || syncing
                   ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
-                  : 'bg-cyber-lime text-black hover:bg-lime-400'
-                }`}
+                  : activePlatform === 'bilibili'
+                    ? 'bg-pink-500 text-white hover:bg-pink-400'
+                    : 'bg-red-500 text-white hover:bg-red-400'
+              }`}
             >
-              开始同步 ({selectedMids.size} 个UP主)
+              开始同步 ({currentPlatformSelectedCount} 个{activePlatform === 'bilibili' ? 'UP主' : '频道'})
             </button>
           </div>
         </div>
@@ -570,24 +768,30 @@ const SyncButton: React.FC<SyncButtonProps> = ({ compact = false }) => {
                 新增视频 ({backgroundResult.newVideos.length})
               </div>
               <div className="max-h-60 overflow-y-auto space-y-2">
-                {backgroundResult.newVideos.slice(0, 5).map((video: any) => (
-                  <div
-                    key={video.bvid}
-                    onClick={() => window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank')}
-                    className="flex gap-3 p-2 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer transition-all"
-                  >
-                    <img
-                      src={video.pic?.replace('http:', 'https:')}
-                      alt={video.title}
-                      className="w-20 h-12 rounded-lg object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-white text-xs font-medium line-clamp-2">{video.title}</h4>
-                      <span className="text-gray-500 text-[10px]">{video.uploader_name}</span>
+                {backgroundResult.newVideos.slice(0, 5).map((video: any) => {
+                  const videoKey = video.bvid || video.video_id || video.title;
+                  const videoUrl = video.bvid 
+                    ? `https://www.bilibili.com/video/${video.bvid}`
+                    : `https://www.youtube.com/watch?v=${video.video_id}`;
+                  return (
+                    <div
+                      key={videoKey}
+                      onClick={() => window.open(videoUrl, '_blank')}
+                      className="flex gap-3 p-2 bg-white/5 hover:bg-white/10 rounded-xl cursor-pointer transition-all"
+                    >
+                      <img
+                        src={video.pic?.replace('http:', 'https:')}
+                        alt={video.title}
+                        className="w-20 h-12 rounded-lg object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-white text-xs font-medium line-clamp-2">{video.title}</h4>
+                        <span className="text-gray-500 text-[10px]">{video.uploader_name}</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {backgroundResult.newVideos.length > 5 && (
                   <p className="text-center text-gray-500 text-xs py-2">
                     还有 {backgroundResult.newVideos.length - 5} 个视频...

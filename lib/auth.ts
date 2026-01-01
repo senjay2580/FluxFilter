@@ -10,6 +10,7 @@ export interface User {
   username: string | null;
   password?: string;
   bilibili_cookie: string | null;
+  youtube_api_key: string | null;
   created_at: string;
   updated_at: string;
   last_login_at: string | null;
@@ -199,4 +200,19 @@ export async function updateUser(updates: Partial<User>): Promise<{ success: boo
  */
 export async function updateBilibiliCookie(cookie: string): Promise<{ success: boolean; error: string | null }> {
   return updateUser({ bilibili_cookie: cookie });
+}
+
+/**
+ * 获取当前用户的 YouTube API Key
+ */
+export async function getUserYouTubeApiKey(): Promise<string | null> {
+  const user = await getCurrentUser();
+  return user?.youtube_api_key || null;
+}
+
+/**
+ * 更新 YouTube API Key
+ */
+export async function updateYouTubeApiKey(apiKey: string): Promise<{ success: boolean; error: string | null }> {
+  return updateUser({ youtube_api_key: apiKey });
 }

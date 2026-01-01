@@ -70,6 +70,12 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/rss-proxy/, ''),
           },
+          // YouTube API 代理
+          '/youtube-api': {
+            target: 'https://www.googleapis.com/youtube/v3',
+            changeOrigin: true,
+            rewrite: (path) => path.replace(/^\/youtube-api/, ''),
+          },
         },
       },
       plugins: [

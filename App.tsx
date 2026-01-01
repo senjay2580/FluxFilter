@@ -368,16 +368,62 @@ const App = () => {
       const minLoadTime = initialLoading ? 500 : 0;
       const startTime = Date.now();
 
+      // 查询视频列表
       const { data, error: fetchError } = await supabase
         .from('video')
-        .select(`
-          *,
-          uploader:uploader!fk_video_uploader (name, face)
-        `)
+        .select('*')
         .eq('user_id', currentUser.id)
         .order('pubdate', { ascending: false });
 
       if (fetchError) throw fetchError;
+      
+      // 获取相关的 uploader 信息（分别处理 B站和 YouTube）
+      if (data && data.length > 0) {
+        // 分别处理 B站和 YouTube 视频
+        const biliVideos = data.filter((v: any) => v.platform !== 'youtube');
+        const ytVideos = data.filter((v: any) => v.platform === 'youtube');
+
+        // B站视频通过 mid 关联
+        const mids = [...new Set(biliVideos.map(v => v.mid).filter(Boolean))];
+        let biliUploaderMap = new Map();
+        if (mids.length > 0) {
+          const { data: uploaders } = await supabase
+            .from('uploader')
+            .select('mid, name, face')
+            .eq('user_id', currentUser.id)
+            .eq('platform', 'bilibili')
+            .in('mid', mids);
+          biliUploaderMap = new Map(uploaders?.map(u => [u.mid, u]) || []);
+        }
+
+        // YouTube 视频通过 channel_id 关联
+        const channelIds = [...new Set(ytVideos.map((v: any) => v.channel_id).filter(Boolean))];
+        let ytUploaderMap = new Map();
+        if (channelIds.length > 0) {
+          const { data: uploaders } = await supabase
+            .from('uploader')
+            .select('channel_id, name, face')
+            .eq('user_id', currentUser.id)
+            .eq('platform', 'youtube')
+            .in('channel_id', channelIds);
+          ytUploaderMap = new Map(uploaders?.map((u: any) => [u.channel_id, u]) || []);
+        }
+
+        data.forEach((video: any) => {
+          let uploader = null;
+          if (video.platform === 'youtube') {
+            uploader = ytUploaderMap.get(video.channel_id);
+          } else {
+            uploader = biliUploaderMap.get(video.mid);
+          }
+          if (uploader) {
+            video.uploader = {
+              name: uploader.name,
+              face: uploader.face
+            };
+          }
+        });
+      }
 
       // 等待最小加载时间
       const elapsed = Date.now() - startTime;

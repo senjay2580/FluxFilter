@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase, isSupabaseConfigured, getAIConfigs, upsertAIConfig } from '../../lib/supabase';
-import { getCurrentUser, updateBilibiliCookie, logout, getStoredUserId, type User } from '../../lib/auth';
+import { getCurrentUser, updateBilibiliCookie, updateYouTubeApiKey, logout, getStoredUserId, type User } from '../../lib/auth';
 import { clearCookieCache } from '../../lib/bilibili';
+import { clearYouTubeApiKeyCache } from '../../lib/youtube';
 import { invalidateCache, CACHE_KEYS } from '../../lib/cache';
 import { ClockIcon } from '../shared/Icons';
 import { transcribeService } from '../../lib/transcribe-service';
@@ -17,6 +18,8 @@ interface Uploader {
   is_active: boolean;
   last_sync_count: number | null;
   last_sync_at: string | null;
+  platform?: 'bilibili' | 'youtube';
+  channel_id?: string | null;
 }
 
 interface VideoItem {
@@ -26,6 +29,7 @@ interface VideoItem {
   pic: string | null;
   duration: number;
   pubdate: string;
+  platform?: 'bilibili' | 'youtube';
   uploader: {
     name: string;
     face: string | null;
@@ -61,6 +65,12 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [deletingVideo, setDeletingVideo] = useState<number | null>(null);
+  
+  // 平台筛选状态
+  const [uploaderPlatform, setUploaderPlatform] = useState<'bilibili' | 'youtube'>('bilibili');
+  const [videoPlatform, setVideoPlatform] = useState<'bilibili' | 'youtube'>('bilibili');
+  const [uploaderSearch, setUploaderSearch] = useState('');
+  const [videoSearch, setVideoSearch] = useState('');
 
   // UP主视频浏览弹窗状态
   const [browseUploader, setBrowseUploader] = useState<Uploader | null>(null);
@@ -95,11 +105,51 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
     return videos.find(v => v.id === openMenuId) || null;
   }, [openMenuId, videos]);
 
+  // 按平台筛选的 uploaders
+  const filteredUploaders = useMemo(() => {
+    let result = uploaders.filter(u => (u.platform || 'bilibili') === uploaderPlatform);
+    if (uploaderSearch.trim()) {
+      const term = uploaderSearch.toLowerCase();
+      result = result.filter(u => u.name.toLowerCase().includes(term));
+    }
+    return result;
+  }, [uploaders, uploaderPlatform, uploaderSearch]);
+
+  // 按平台筛选的 videos
+  const filteredVideos = useMemo(() => {
+    let result = videos.filter(v => (v.platform || 'bilibili') === videoPlatform);
+    if (videoSearch.trim()) {
+      const term = videoSearch.toLowerCase();
+      result = result.filter(v => 
+        v.title.toLowerCase().includes(term) || 
+        v.uploader?.name?.toLowerCase().includes(term)
+      );
+    }
+    return result;
+  }, [videos, videoPlatform, videoSearch]);
+
+  // 平台统计
+  const platformStats = useMemo(() => ({
+    uploaders: {
+      bilibili: uploaders.filter(u => (u.platform || 'bilibili') === 'bilibili').length,
+      youtube: uploaders.filter(u => u.platform === 'youtube').length,
+    },
+    videos: {
+      bilibili: videos.filter(v => (v.platform || 'bilibili') === 'bilibili').length,
+      youtube: videos.filter(v => v.platform === 'youtube').length,
+    }
+  }), [uploaders, videos]);
+
   // 用户信息
   const [user, setUser] = useState<User | null>(null);
   const [cookie, setCookie] = useState('');
   const [savingCookie, setSavingCookie] = useState(false);
   const [cookieMessage, setCookieMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // YouTube API Key
+  const [youtubeApiKey, setYoutubeApiKey] = useState('');
+  const [savingYoutubeKey, setSavingYoutubeKey] = useState(false);
+  const [youtubeKeyMessage, setYoutubeKeyMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // 获取数据
   const fetchData = useCallback(async () => {
@@ -109,6 +159,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       const currentUser = await getCurrentUser();
       setUser(currentUser);
       setCookie(currentUser?.bilibili_cookie || '');
+      setYoutubeApiKey(currentUser?.youtube_api_key || '');
 
       if (!currentUser?.id) {
         setUploaders([]);
@@ -125,23 +176,29 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
 
       setUploaders(uploaderData || []);
 
-      // 获取视频列表（含UP主信息）
+      // 获取视频列表
       const { data: videoData, count } = await supabase
         .from('video')
-        .select(`
-          id, bvid, title, pic, duration, pubdate,
-          uploader:uploader!fk_video_uploader (name, face)
-        `, { count: 'exact' })
+        .select('id, bvid, title, pic, duration, pubdate, mid', { count: 'exact' })
         .eq('user_id', currentUser.id)
         .order('pubdate', { ascending: false })
         .limit(100);
 
-      // 处理 uploader 数据（Supabase 返回数组，取第一个）
-      const processedVideos = (videoData || []).map((v: any) => ({
-        ...v,
-        uploader: Array.isArray(v.uploader) ? v.uploader[0] || null : v.uploader
-      }));
-      setVideos(processedVideos as VideoItem[]);
+      // 获取相关的 uploader 信息
+      let processedVideos = videoData || [];
+      if (videoData && videoData.length > 0) {
+        const mids = [...new Set(videoData.map((v: any) => v.mid).filter(Boolean))];
+        if (mids.length > 0 && uploaderData) {
+          const uploaderMap = new Map(uploaderData.map((u: any) => [u.mid, u]));
+          processedVideos = videoData.map((v: any) => ({
+            ...v,
+            uploader: uploaderMap.get(v.mid) || null
+          }));
+        } else {
+          processedVideos = videoData.map((v: any) => ({ ...v, uploader: null }));
+        }
+      }
+      setVideos(processedVideos as unknown as VideoItem[]);
       setVideoCount(count || 0);
     } catch (err) {
       console.error('获取数据失败:', err);
@@ -219,6 +276,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
       loadApiPool();
       loadAIConfig();
       setCookieMessage(null);
+      setYoutubeKeyMessage(null);
     }
   }, [isOpen, fetchData, loadApiPool, loadAIConfig]);
 
@@ -352,6 +410,32 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
     }
 
     setSavingCookie(false);
+  };
+
+  // 保存 YouTube API Key
+  const handleSaveYoutubeKey = async () => {
+    const trimmedKey = youtubeApiKey.trim();
+    
+    // 简单验证格式
+    if (trimmedKey && !trimmedKey.startsWith('AIza')) {
+      setYoutubeKeyMessage({ type: 'error', text: 'API Key 格式不正确，应以 AIza 开头' });
+      return;
+    }
+
+    setSavingYoutubeKey(true);
+    setYoutubeKeyMessage(null);
+
+    const result = await updateYouTubeApiKey(trimmedKey);
+
+    if (result.success) {
+      clearYouTubeApiKeyCache();
+      setUser(prev => prev ? { ...prev, youtube_api_key: trimmedKey } : prev);
+      setYoutubeKeyMessage({ type: 'success', text: trimmedKey ? 'API Key 保存成功！' : 'API Key 已清除' });
+    } else {
+      setYoutubeKeyMessage({ type: 'error', text: result.error || '保存失败' });
+    }
+
+    setSavingYoutubeKey(false);
   };
 
   // 退出登录
@@ -823,6 +907,56 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                 </ol>
               </details>
 
+              {/* YouTube API Key 配置 */}
+              <div className="p-4 bg-white/5 rounded-xl">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                  </svg>
+                  <p className="text-white font-medium">YouTube API Key</p>
+                  <span className="text-xs text-gray-500 bg-white/10 px-2 py-0.5 rounded">可选</span>
+                </div>
+                <p className="text-xs text-gray-500 mb-3">
+                  配置后可添加 YouTube 频道并同步视频。
+                </p>
+                <input
+                  type="password"
+                  value={youtubeApiKey}
+                  onChange={(e) => setYoutubeApiKey(e.target.value)}
+                  placeholder="粘贴你的 YouTube API Key..."
+                  className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500/50 font-mono"
+                />
+                {youtubeKeyMessage && (
+                  <p className={`mt-2 text-xs ${youtubeKeyMessage.type === 'success' ? 'text-green-400' : 'text-red-400'}`}>
+                    {youtubeKeyMessage.text}
+                  </p>
+                )}
+                <button
+                  onClick={handleSaveYoutubeKey}
+                  disabled={savingYoutubeKey}
+                  className="mt-3 w-full py-2 bg-red-500 text-white text-sm font-medium rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
+                  {savingYoutubeKey ? '保存中...' : '保存 API Key'}
+                </button>
+              </div>
+
+              {/* 获取 YouTube API Key 说明 - 折叠 */}
+              <details className="p-4 bg-white/5 rounded-xl">
+                <summary className="text-sm text-gray-400 cursor-pointer hover:text-white transition-colors">
+                  如何获取 YouTube API Key？（点击展开）
+                </summary>
+                <ol className="text-xs text-gray-500 space-y-1 list-decimal list-inside mt-3">
+                  <li>访问 <a href="https://console.cloud.google.com/" target="_blank" rel="noopener" className="text-red-400 hover:underline">Google Cloud Console</a></li>
+                  <li>创建新项目或选择已有项目</li>
+                  <li>在「API和服务」→「库」中搜索并启用「YouTube Data API v3」</li>
+                  <li>在「API和服务」→「凭据」中点击「创建凭据」→「API 密钥」</li>
+                  <li>复制生成的密钥（建议限制只能访问 YouTube Data API）</li>
+                </ol>
+                <p className="text-xs text-gray-500 mt-2">
+                  💡 免费配额：每天 10,000 单位，个人使用完全够用
+                </p>
+              </details>
+
               <div className="h-px bg-white/5 mx-2 my-2" />
 
 
@@ -837,109 +971,236 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
             </div>
           ) : activeTab === 'uploaders' ? (
             /* UP主列表 */
-            <div className="p-4 space-y-2">
-              {uploaders.length === 0 ? (
+            <div className="p-4 space-y-3">
+              {/* 平台切换 */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setUploaderPlatform('bilibili'); setUploaderSearch(''); }}
+                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    uploaderPlatform === 'bilibili'
+                      ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                      : 'bg-white/5 text-gray-400 border border-transparent hover:bg-white/10'
+                  }`}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.659.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906L17.813 4.653z"/>
+                  </svg>
+                  B站 ({platformStats.uploaders.bilibili})
+                </button>
+                <button
+                  onClick={() => { setUploaderPlatform('youtube'); setUploaderSearch(''); }}
+                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    uploaderPlatform === 'youtube'
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      : 'bg-white/5 text-gray-400 border border-transparent hover:bg-white/10'
+                  }`}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
+                  </svg>
+                  YouTube ({platformStats.uploaders.youtube})
+                </button>
+              </div>
+
+              {/* 搜索框 */}
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input
+                  type="text"
+                  value={uploaderSearch}
+                  onChange={(e) => setUploaderSearch(e.target.value)}
+                  placeholder={`搜索${uploaderPlatform === 'bilibili' ? 'UP主' : '频道'}...`}
+                  className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"
+                />
+                {uploaderSearch && (
+                  <button
+                    onClick={() => setUploaderSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 hover:text-white"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* 列表 */}
+              {filteredUploaders.length === 0 ? (
                 <div className="text-center py-8 text-gray-500 text-sm">
-                  暂无关注的UP主
+                  {uploaderSearch ? '没有找到匹配的博主' : `暂无关注的${uploaderPlatform === 'bilibili' ? 'UP主' : 'YouTube频道'}`}
                 </div>
               ) : (
-                uploaders.map(uploader => (
-                  <div
-                    key={uploader.id}
-                    className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
-                  >
-                    {/* 头像 */}
-                    <img
-                      src={uploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'}
-                      alt={uploader.name}
-                      className="w-10 h-10 rounded-full"
-                      referrerPolicy="no-referrer"
-                    />
+                <div className="space-y-2">
+                  {filteredUploaders.map(uploader => (
+                    <div
+                      key={uploader.id}
+                      className="flex items-center gap-3 p-3 bg-white/5 rounded-xl hover:bg-white/10 transition-colors"
+                    >
+                      {/* 头像 */}
+                      <img
+                        src={uploader.face || 'https://i0.hdslb.com/bfs/face/member/noface.jpg'}
+                        alt={uploader.name}
+                        className="w-10 h-10 rounded-full"
+                        referrerPolicy="no-referrer"
+                      />
 
-                    {/* 信息 */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white font-medium truncate">{uploader.name}</p>
-                      <div className="flex items-center justify-between gap-2 mt-0.5 whitespace-nowrap overflow-hidden">
-                        <span className="text-[10px] text-gray-500 font-mono shrink-0">
-                          MID: {uploader.mid.toString().length > 10
-                            ? `${uploader.mid.toString().slice(0, 10)}...`
-                            : uploader.mid}
-                        </span>
-                        {uploader.last_sync_count !== null && (
-                          <span className="text-[10px] text-cyber-lime font-medium shrink-0">上次 {uploader.last_sync_count} 个视频</span>
+                      {/* 信息 */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium truncate">{uploader.name}</p>
+                        <div className="flex items-center justify-between gap-2 mt-0.5 whitespace-nowrap overflow-hidden">
+                          <span className="text-[10px] text-gray-500 font-mono shrink-0">
+                            {uploaderPlatform === 'bilibili' 
+                              ? `MID: ${uploader.mid.toString().length > 10 ? `${uploader.mid.toString().slice(0, 10)}...` : uploader.mid}`
+                              : uploader.channel_id ? `ID: ${uploader.channel_id.slice(0, 12)}...` : ''
+                            }
+                          </span>
+                          {uploader.last_sync_count !== null && (
+                            <span className={`text-[10px] font-medium shrink-0 ${uploaderPlatform === 'bilibili' ? 'text-pink-400' : 'text-red-400'}`}>
+                              上次 {uploader.last_sync_count} 个视频
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 操作按钮 */}
+                      <div className="flex items-center gap-2">
+                        {/* 浏览视频 - 仅B站 */}
+                        {uploaderPlatform === 'bilibili' && (
+                          <button
+                            onClick={() => handleBrowseUploaderVideos(uploader)}
+                            className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center hover:bg-pink-500/20 transition-colors"
+                            title="浏览视频"
+                          >
+                            <svg className="w-4 h-4 text-pink-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <rect x="2" y="4" width="20" height="16" rx="2" />
+                              <path d="M10 9l5 3-5 3V9z" />
+                            </svg>
+                          </button>
                         )}
+
+                        {/* 跳转主页 */}
+                        <button
+                          onClick={() => {
+                            if (uploaderPlatform === 'bilibili') {
+                              window.open(`https://space.bilibili.com/${uploader.mid}`, '_blank');
+                            } else if (uploader.channel_id) {
+                              window.open(`https://www.youtube.com/channel/${uploader.channel_id}`, '_blank');
+                            }
+                          }}
+                          className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+                          title={uploaderPlatform === 'bilibili' ? '查看B站主页' : '查看YouTube频道'}
+                        >
+                          <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
+                          </svg>
+                        </button>
+
+                        {/* 删除 */}
+                        <button
+                          onClick={() => handleDeleteUploader(uploader.id, uploader.name)}
+                          disabled={deleting === uploader.id}
+                          className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 transition-colors"
+                          title="取消关注"
+                        >
+                          {deleting === uploader.id ? (
+                            <div className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                            </svg>
+                          )}
+                        </button>
                       </div>
                     </div>
-
-                    {/* 操作按钮 */}
-                    <div className="flex items-center gap-2">
-                      {/* 浏览视频 */}
-                      <button
-                        onClick={() => handleBrowseUploaderVideos(uploader)}
-                        className="w-8 h-8 rounded-lg bg-cyber-lime/10 flex items-center justify-center hover:bg-cyber-lime/20 transition-colors"
-                        title="浏览视频"
-                      >
-                        <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <rect x="2" y="4" width="20" height="16" rx="2" />
-                          <path d="M10 9l5 3-5 3V9z" />
-                        </svg>
-                      </button>
-
-                      {/* 跳转B站 */}
-                      <button
-                        onClick={() => window.open(`https://space.bilibili.com/${uploader.mid}`, '_blank')}
-                        className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
-                        title="查看B站主页"
-                      >
-                        <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                          <polyline points="15 3 21 3 21 9" />
-                          <line x1="10" y1="14" x2="21" y2="3" />
-                        </svg>
-                      </button>
-
-                      {/* 删除 */}
-                      <button
-                        onClick={() => handleDeleteUploader(uploader.id, uploader.name)}
-                        disabled={deleting === uploader.id}
-                        className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center hover:bg-red-500/20 transition-colors"
-                        title="取消关注"
-                      >
-                        {deleting === uploader.id ? (
-                          <div className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <svg className="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <polyline points="3 6 5 6 21 6" />
-                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                          </svg>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           ) : activeTab === 'videos' ? (
             /* 视频管理 - 视频列表 */
             <div className="p-4 space-y-3">
+              {/* 平台切换 */}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setVideoPlatform('bilibili'); setVideoSearch(''); }}
+                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    videoPlatform === 'bilibili'
+                      ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
+                      : 'bg-white/5 text-gray-400 border border-transparent hover:bg-white/10'
+                  }`}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M17.813 4.653h.854c1.51.054 2.769.578 3.773 1.574 1.004.995 1.524 2.249 1.56 3.76v7.36c-.036 1.51-.556 2.769-1.56 3.773s-2.262 1.524-3.773 1.56H5.333c-1.51-.036-2.769-.556-3.773-1.56S.036 18.858 0 17.347v-7.36c.036-1.511.556-2.765 1.56-3.76 1.004-.996 2.262-1.52 3.773-1.574h.774l-1.174-1.12a1.234 1.234 0 0 1-.373-.906c0-.356.124-.659.373-.907l.027-.027c.267-.249.573-.373.92-.373.347 0 .653.124.92.373L9.653 4.44c.071.071.134.142.187.213h4.267a.836.836 0 0 1 .16-.213l2.853-2.747c.267-.249.573-.373.92-.373.347 0 .662.151.929.4.267.249.391.551.391.907 0 .355-.124.657-.373.906L17.813 4.653z"/>
+                  </svg>
+                  B站 ({platformStats.videos.bilibili})
+                </button>
+                <button
+                  onClick={() => { setVideoPlatform('youtube'); setVideoSearch(''); }}
+                  className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                    videoPlatform === 'youtube'
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                      : 'bg-white/5 text-gray-400 border border-transparent hover:bg-white/10'
+                  }`}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z"/>
+                  </svg>
+                  YouTube ({platformStats.videos.youtube})
+                </button>
+              </div>
+
+              {/* 搜索框 */}
+              <div className="relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="m21 21-4.35-4.35" />
+                </svg>
+                <input
+                  type="text"
+                  value={videoSearch}
+                  onChange={(e) => setVideoSearch(e.target.value)}
+                  placeholder="搜索视频标题或UP主..."
+                  className="w-full pl-10 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50"
+                />
+                {videoSearch && (
+                  <button
+                    onClick={() => setVideoSearch('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 hover:text-white"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
               {/* 标题 */}
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm text-gray-400">共 {videoCount} 个视频</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-gray-400">
+                  共 {filteredVideos.length} 个视频
+                  {videoSearch && ` (搜索结果)`}
+                </p>
               </div>
 
               {/* 视频列表 */}
-              {videos.length === 0 ? (
+              {filteredVideos.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <svg className="w-12 h-12 mx-auto mb-3 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <rect x="2" y="4" width="20" height="16" rx="2" />
                     <path d="M10 9l5 3-5 3V9z" />
                   </svg>
-                  <p>暂无视频</p>
-                  <p className="text-xs mt-1">同步UP主后视频会出现在这里</p>
+                  <p>{videoSearch ? '没有找到匹配的视频' : `暂无${videoPlatform === 'bilibili' ? 'B站' : 'YouTube'}视频`}</p>
+                  <p className="text-xs mt-1">同步博主后视频会出现在这里</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {videos.map(video => (
+                  {filteredVideos.map(video => (
                     <div
                       key={video.id}
                       className="flex items-center gap-3 p-2 bg-white/5 rounded-xl hover:bg-white/10 transition-colors group"
@@ -951,6 +1212,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                             src={video.pic.startsWith('//') ? `https:${video.pic}` : video.pic}
                             alt={video.title}
                             className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-gray-600">
@@ -967,7 +1229,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
                         <p className="text-sm text-white truncate">{video.title}</p>
                         <div className="flex items-center justify-between gap-2 mt-1 min-w-0">
                           {video.uploader && (
-                            <span className="text-xs text-cyber-lime truncate shrink mr-auto">{video.uploader.name}</span>
+                            <span className={`text-xs truncate shrink mr-auto ${videoPlatform === 'bilibili' ? 'text-pink-400' : 'text-red-400'}`}>
+                              {video.uploader.name}
+                            </span>
                           )}
                           <div className="flex items-center gap-2 shrink-0 text-xs text-gray-500 font-mono whitespace-nowrap">
                             <span>{Math.floor(video.duration / 60)}:{String(video.duration % 60).padStart(2, '0')}</span>
@@ -995,7 +1259,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onLogout
               )}
 
               {/* 提示 */}
-              {videos.length > 0 && videoCount > 100 && (
+              {filteredVideos.length > 0 && videoCount > 100 && (
                 <p className="text-xs text-gray-500 text-center pt-2">
                   仅显示最近 100 个视频
                 </p>

@@ -44,10 +44,7 @@ const VideoDownloader: React.FC<VideoDownloaderProps> = ({ onNavigate }) => {
       console.log('[VideoDownloader] 获取视频列表, userId:', user.id);
       const { data, error } = await supabase
         .from('video')
-        .select(`
-          id, bvid, title, pic,
-          uploader:uploader!fk_video_uploader (name)
-        `)
+        .select('id, bvid, title, pic, mid')
         .eq('user_id', user.id)
         .order('pubdate', { ascending: false })
         .limit(100);
@@ -57,8 +54,26 @@ const VideoDownloader: React.FC<VideoDownloaderProps> = ({ onNavigate }) => {
         throw error;
       }
 
-      console.log('[VideoDownloader] 获取到视频:', data?.length);
-      setVideos((data as VideoItem[]) || []);
+      // 获取 uploader 信息
+      let processedVideos = data || [];
+      if (data && data.length > 0) {
+        const mids = [...new Set(data.map((v: any) => v.mid).filter(Boolean))];
+        if (mids.length > 0) {
+          const { data: uploaders } = await supabase
+            .from('uploader')
+            .select('mid, name')
+            .eq('user_id', user.id)
+            .in('mid', mids);
+          const uploaderMap = new Map(uploaders?.map((u: any) => [u.mid, u]) || []);
+          processedVideos = data.map((v: any) => ({
+            ...v,
+            uploader: uploaderMap.get(v.mid) || null
+          }));
+        }
+      }
+
+      console.log('[VideoDownloader] 获取到视频:', processedVideos?.length);
+      setVideos((processedVideos as VideoItem[]) || []);
     } catch (err) {
       console.error('[VideoDownloader] 获取视频列表失败:', err);
     } finally {

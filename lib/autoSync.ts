@@ -10,7 +10,17 @@
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import { getUploaderVideos, transformVideoToDbFormat } from './bilibili';
+import { getYouTubeChannelVideos, type YouTubeVideoItem } from './youtube';
 import type { Uploader } from './database.types';
+
+// YouTube Uploader 类型（包含 channel_id）
+interface YouTubeUploader {
+  id: number;
+  user_id: string;
+  name: string;
+  channel_id: string;
+  platform: 'youtube';
+}
 
 const SYNC_CHECK_KEY = 'fluxfilter_last_sync';
 const SYNC_INTERVAL_HOURS = 6; // 同步间隔（小时）
@@ -533,4 +543,235 @@ export function formatLastSyncTime(): string {
 // 工具函数
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+
+/**
+ * 触发 YouTube 同步 - 指定频道列表
+ * @param uploaders - YouTube 频道列表
+ * @param onProgress - 进度回调
+ * @param shouldCancel - 取消检查函数
+ */
+export async function triggerYouTubeSyncWithUploaders(
+  uploaders: YouTubeUploader[],
+  onProgress?: (msg: string) => void,
+  shouldCancel?: () => boolean
+): Promise<{
+  success: boolean;
+  message: string;
+  videosAdded?: number;
+  cancelled?: boolean;
+  newVideos?: Array<{video_id: string; title: string; pic: string; uploader_name: string}>;
+}> {
+  try {
+    return await syncYouTubeWithUploaders(uploaders, onProgress, shouldCancel);
+  } catch (error: any) {
+    console.error('YouTube 同步失败:', error);
+    const errMsg = error?.message || String(error);
+
+    if (errMsg.includes('API Key')) {
+      return { success: false, message: '⚠️ 请先在设置中配置 YouTube API Key' };
+    }
+    if (errMsg.includes('403') || errMsg.includes('配额')) {
+      return { success: false, message: '🛡️ YouTube API 配额已用尽，请明天再试' };
+    }
+
+    return { success: false, message: 'YouTube 同步失败: ' + errMsg };
+  }
+}
+
+/**
+ * 同步指定 YouTube 频道列表
+ */
+async function syncYouTubeWithUploaders(
+  uploaders: YouTubeUploader[],
+  onProgress?: (msg: string) => void,
+  shouldCancel?: () => boolean
+): Promise<{
+  success: boolean;
+  message: string;
+  videosAdded?: number;
+  cancelled?: boolean;
+  newVideos?: Array<{video_id: string; title: string; pic: string; uploader_name: string}>;
+}> {
+  if (!isSupabaseConfigured) {
+    return { success: false, message: '⚠️ 请先配置 Supabase 环境变量' };
+  }
+
+  if (!uploaders || uploaders.length === 0) {
+    return { success: true, message: '⚠️ 没有选择 YouTube 频道', videosAdded: 0 };
+  }
+
+  let totalAdded = 0;
+  let completedCount = 0;
+  const taskCount = uploaders.length;
+  const newVideos: Array<{video_id: string; title: string; pic: string; uploader_name: string}> = [];
+
+  // 今天0点的时间戳（用于过滤）
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayTimestamp = todayStart.getTime();
+
+  // 收集所有视频数据（包含 video 表所有必需字段）
+  type YouTubeVideoData = {
+    user_id: string;
+    platform: 'youtube';
+    video_id: string;
+    channel_id: string;
+    bvid: string;
+    mid: number;
+    aid: number;
+    title: string;
+    pic: string;
+    description: string;
+    duration: number;
+    view_count: number;
+    like_count: number;
+    reply_count: number;
+    danmaku_count: number;
+    favorite_count: number;
+    coin_count: number;
+    share_count: number;
+    pubdate: string;
+  };
+
+  const allVideos: YouTubeVideoData[] = [];
+
+  onProgress?.(`🚀 获取 ${taskCount} 个 YouTube 频道视频...`);
+
+  // 串行获取（YouTube API 配额有限，避免并发过多）
+  for (let i = 0; i < uploaders.length; i++) {
+    if (shouldCancel?.()) {
+      return { success: false, message: '已取消同步', videosAdded: 0, cancelled: true };
+    }
+
+    const channel = uploaders[i];
+    onProgress?.(`🔄 [${i + 1}/${taskCount}] ${channel.name}...`);
+
+    try {
+      const videos = await getYouTubeChannelVideos(channel.channel_id, 30);
+
+      // 过滤今天发布的视频
+      const todayVideos = videos.filter(v => {
+        const pubTime = new Date(v.publishedAt).getTime();
+        return pubTime >= todayTimestamp;
+      });
+
+      if (todayVideos.length === 0) {
+        completedCount++;
+        continue;
+      }
+
+      // 转换为数据库格式（需要填充 video 表的必需字段）
+      const videoDataList = todayVideos.map(video => ({
+        user_id: channel.user_id,
+        platform: 'youtube' as const,
+        // YouTube 特有字段
+        video_id: video.videoId,
+        channel_id: video.channelId,
+        // B站字段用默认值填充（video 表必需）
+        bvid: `YT_${video.videoId}`,  // 用 YT_ 前缀标识 YouTube 视频
+        mid: 0,  // YouTube 没有 mid，用 0 占位
+        aid: 0,
+        // 通用字段
+        title: video.title,
+        pic: video.thumbnail,
+        description: video.description || '',
+        duration: video.duration || 0,
+        view_count: video.viewCount || 0,
+        like_count: video.likeCount || 0,
+        reply_count: video.commentCount || 0,
+        danmaku_count: 0,
+        favorite_count: 0,
+        coin_count: 0,
+        share_count: 0,
+        pubdate: video.publishedAt,
+      }));
+
+      allVideos.push(...videoDataList);
+      completedCount++;
+
+      // 更新进度
+      const percent = Math.round((completedCount / taskCount) * 100);
+      onProgress?.(`🔄 [${completedCount}/${taskCount}] ${percent}%`);
+
+    } catch (err: any) {
+      console.error(`获取 ${channel.name} 视频失败:`, err);
+      completedCount++;
+      // 继续处理下一个频道
+    }
+  }
+
+  if (shouldCancel?.()) {
+    return { success: false, message: '已取消同步', videosAdded: 0, cancelled: true };
+  }
+
+  // 写入数据库
+  if (allVideos.length > 0) {
+    const userId = uploaders[0]?.user_id;
+    if (!userId) {
+      return { success: false, message: '用户ID未找到' };
+    }
+
+    // 查询已存在的视频
+    onProgress?.(`🔍 检查已存在的视频...`);
+    const allVideoIds = allVideos.map(v => v.video_id);
+    const { data: existingVideos } = await supabase
+      .from('video')
+      .select('video_id')
+      .eq('user_id', userId)
+      .eq('platform', 'youtube')
+      .in('video_id', allVideoIds);
+
+    const existingVideoIds = new Set(existingVideos?.map(v => v.video_id) || []);
+
+    // 过滤出真正新增的视频
+    const reallyNewVideos = allVideos.filter(v => !existingVideoIds.has(v.video_id));
+    totalAdded = reallyNewVideos.length;
+
+    // 记录新增视频信息
+    newVideos.push(...reallyNewVideos.map(v => ({
+      video_id: v.video_id,
+      title: v.title,
+      pic: v.pic,
+      uploader_name: uploaders.find(u => u.channel_id === v.channel_id)?.name || 'Unknown'
+    })));
+
+    // 只插入新视频（不使用 upsert，因为条件索引不支持）
+    if (reallyNewVideos.length > 0) {
+      const BATCH_SIZE = 200;
+      const batches = [];
+
+      for (let i = 0; i < reallyNewVideos.length; i += BATCH_SIZE) {
+        batches.push(reallyNewVideos.slice(i, i + BATCH_SIZE));
+      }
+
+      onProgress?.(`💾 写入 ${reallyNewVideos.length} 个新视频 (${batches.length} 批)...`);
+
+      // 并发写入所有批次（使用 insert 而非 upsert）
+      const writePromises = batches.map(batch =>
+        supabase.from('video').insert(batch)
+      );
+
+      const writeResults = await Promise.all(writePromises);
+      const failedBatches = writeResults.filter(r => r.error);
+
+      if (failedBatches.length > 0) {
+        console.error('部分批次写入失败:', failedBatches);
+      }
+    }
+  }
+
+  if (shouldCancel?.()) {
+    return { success: false, message: '已取消同步', videosAdded: totalAdded, cancelled: true };
+  }
+
+  markSynced();
+
+  return {
+    success: true,
+    message: `✅ YouTube 同步完成！新增 ${totalAdded} 个视频`,
+    videosAdded: totalAdded,
+    newVideos: newVideos.slice(0, 50),
+  };
 }

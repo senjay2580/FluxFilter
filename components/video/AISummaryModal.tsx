@@ -5,6 +5,10 @@ import {
   formatTimestamp,
   type SubtitleContent 
 } from '../../lib/bilibili';
+import { 
+  getYouTubeTranscript, 
+  type YouTubeCaption 
+} from '../../lib/youtube';
 import { generateVideoSummaryStream, isAIConfigured, type VideoSummaryResult } from '../../lib/video-summary-service';
 
 interface AISummaryModalProps {
@@ -15,20 +19,30 @@ interface AISummaryModalProps {
 
 type TabType = 'summary' | 'subtitle';
 
+// 检测是否为 YouTube 视频
+const isYouTubeVideo = (bvid: string) => bvid.startsWith('YT_');
+const getYouTubeVideoId = (bvid: string) => bvid.replace('YT_', '');
+
 const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose }) => {
   const [activeTab, setActiveTab] = useState<TabType>('summary');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   
+  // 平台检测
+  const isYT = isYouTubeVideo(bvid);
+  
   // AI总结数据
   const [summary, setSummary] = useState<VideoSummaryResult | null>(null);
   const [streamingText, setStreamingText] = useState<string>('');
   
-  // 字幕数据
+  // 字幕数据（B站格式）
   const [subtitles, setSubtitles] = useState<SubtitleContent | null>(null);
   const [subtitleLang, setSubtitleLang] = useState<string>('');
   const [fullSubtitleText, setFullSubtitleText] = useState<string>('');
+  
+  // YouTube 字幕数据
+  const [ytCaptions, setYtCaptions] = useState<YouTubeCaption[]>([]);
   
   // AbortController for canceling requests
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -39,21 +53,36 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
     setError(null);
 
     try {
-      const data = await getVideoSubtitles(bvid);
-      if (data) {
-        setSubtitles(data.content);
-        setSubtitleLang(data.language);
-        const fullText = data.content.body.map(item => item.content).join('\n');
-        setFullSubtitleText(fullText);
+      if (isYT) {
+        // YouTube 视频：使用 YouTube 字幕 API
+        const videoId = getYouTubeVideoId(bvid);
+        const result = await getYouTubeTranscript(videoId);
+        
+        if (result && result.captions.length > 0) {
+          setYtCaptions(result.captions);
+          setFullSubtitleText(result.fullText);
+          setSubtitleLang('auto');
+        } else {
+          setError('该 YouTube 视频暂无字幕，可尝试使用语音转文字功能');
+        }
       } else {
-        setError('该视频暂无字幕，无法生成总结');
+        // B站视频：使用原有逻辑
+        const data = await getVideoSubtitles(bvid);
+        if (data) {
+          setSubtitles(data.content);
+          setSubtitleLang(data.language);
+          const fullText = data.content.body.map(item => item.content).join('\n');
+          setFullSubtitleText(fullText);
+        } else {
+          setError('该视频暂无字幕，无法生成总结');
+        }
       }
     } catch (err) {
       setError('获取字幕失败，请检查网络');
     } finally {
       setLoading(false);
     }
-  }, [bvid]);
+  }, [bvid, isYT]);
 
   // 生成AI总结（流式）
   const generateSummary = useCallback(async () => {
@@ -137,17 +166,27 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
           text += `• ${section.title}: ${section.content}\n`;
         });
       }
-    } else if (activeTab === 'subtitle' && subtitles) {
+    } else if (activeTab === 'subtitle') {
       text = `【字幕】${title}\n\n`;
-      text += subtitles.body.map(item => 
-        `${formatTimestamp(item.from)} ${item.content}`
-      ).join('\n');
+      if (isYT && ytCaptions.length > 0) {
+        // YouTube 字幕格式
+        text += ytCaptions.map(cap => {
+          const mins = Math.floor(cap.start / 60);
+          const secs = Math.floor(cap.start % 60);
+          return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')} ${cap.text}`;
+        }).join('\n');
+      } else if (subtitles) {
+        // B站字幕格式
+        text += subtitles.body.map(item => 
+          `${formatTimestamp(item.from)} ${item.content}`
+        ).join('\n');
+      }
     }
 
     navigator.clipboard.writeText(text).then(() => {
       alert('已复制到剪贴板');
     });
-  }, [activeTab, summary, subtitles, title]);
+  }, [activeTab, summary, subtitles, ytCaptions, title, isYT]);
 
   // 禁止背景滚动
   useEffect(() => {
@@ -384,27 +423,50 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
                 </>
               )}
             </div>
-          ) : activeTab === 'subtitle' && subtitles ? (
+          ) : activeTab === 'subtitle' && (subtitles || ytCaptions.length > 0) ? (
             <div className="space-y-1">
-              {subtitles.body.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  className="flex gap-3 py-1.5 hover:bg-white/5 rounded px-2 -mx-2 transition-colors group"
-                >
-                  <span className="text-cyber-lime/70 font-mono text-xs shrink-0 pt-0.5 group-hover:text-cyber-lime">
-                    {formatTimestamp(item.from)}
-                  </span>
-                  <span className="text-gray-300 text-sm leading-relaxed">
-                    {item.content}
-                  </span>
-                </div>
-              ))}
+              {isYT ? (
+                // YouTube 字幕显示
+                ytCaptions.map((cap, idx) => {
+                  const mins = Math.floor(cap.start / 60);
+                  const secs = Math.floor(cap.start % 60);
+                  const timestamp = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                  return (
+                    <div 
+                      key={idx} 
+                      className="flex gap-3 py-1.5 hover:bg-white/5 rounded px-2 -mx-2 transition-colors group"
+                    >
+                      <span className="text-red-400/70 font-mono text-xs shrink-0 pt-0.5 group-hover:text-red-400">
+                        {timestamp}
+                      </span>
+                      <span className="text-gray-300 text-sm leading-relaxed">
+                        {cap.text}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : subtitles ? (
+                // B站字幕显示
+                subtitles.body.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    className="flex gap-3 py-1.5 hover:bg-white/5 rounded px-2 -mx-2 transition-colors group"
+                  >
+                    <span className="text-cyber-lime/70 font-mono text-xs shrink-0 pt-0.5 group-hover:text-cyber-lime">
+                      {formatTimestamp(item.from)}
+                    </span>
+                    <span className="text-gray-300 text-sm leading-relaxed">
+                      {item.content}
+                    </span>
+                  </div>
+                ))
+              ) : null}
             </div>
           ) : null}
         </div>
 
         {/* 底部操作栏 */}
-        {!loading && !error && (summary || subtitles) && (
+        {!loading && !error && (summary || subtitles || ytCaptions.length > 0) && (
           <div className="border-t border-white/10 px-4 py-3 flex gap-3 shrink-0">
             <button
               onClick={handleCopy}
@@ -417,15 +479,28 @@ const AISummaryModal: React.FC<AISummaryModalProps> = ({ bvid, title, onClose })
               复制全部
             </button>
             <button
-              onClick={() => window.open(`https://www.bilibili.com/video/${bvid}`, '_blank')}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/15 rounded-xl text-white transition-colors flex items-center gap-2"
+              onClick={() => {
+                const url = isYT 
+                  ? `https://www.youtube.com/watch?v=${getYouTubeVideoId(bvid)}`
+                  : `https://www.bilibili.com/video/${bvid}`;
+                window.open(url, '_blank');
+              }}
+              className={`px-4 py-2.5 rounded-xl text-white transition-colors flex items-center gap-2 ${
+                isYT ? 'bg-red-500/20 hover:bg-red-500/30' : 'bg-white/10 hover:bg-white/15'
+              }`}
             >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
-                <polyline points="15 3 21 3 21 9" />
-                <line x1="10" y1="14" x2="21" y2="3" />
-              </svg>
-              B站
+              {isYT ? (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              )}
+              {isYT ? 'YouTube' : 'B站'}
             </button>
           </div>
         )}
