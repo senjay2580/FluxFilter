@@ -10,6 +10,12 @@ import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
+import { Table } from '@tiptap/extension-table';
+import { TableRow } from '@tiptap/extension-table-row';
+import { TableCell } from '@tiptap/extension-table-cell';
+import { TableHeader } from '@tiptap/extension-table-header';
+import { marked } from 'marked';
 import DeleteConfirmModal from '../shared/DeleteConfirmModal';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
 
@@ -82,19 +88,46 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
   const [showHeadingMenu, setShowHeadingMenu] = useState(false);
   const [showColorMenu, setShowColorMenu] = useState(false);
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const [selectionMenu, setSelectionMenu] = useState<{ x: number; y: number; text: string } | null>(null);
+  const [aiProcessing, setAiProcessing] = useState<string | null>(null);
+  const [diffModal, setDiffModal] = useState<{ original: string; modified: string; action: string; from: number; to: number } | null>(null);
   const headingMenuRef = useRef<HTMLDivElement>(null);
   const colorMenuRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const selectionRangeRef = useRef<{ from: number; to: number } | null>(null);
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        bulletList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+        orderedList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
       }),
       Underline,
       TextStyle,
       Color,
       Image.configure({ inline: true }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: {
+          class: 'text-blue-500 underline',
+        },
+      }),
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: 'border-collapse w-full',
+        },
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Placeholder.configure({ placeholder: placeholder || '开始写笔记...' }),
     ],
     content,
@@ -108,6 +141,244 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
       },
     },
   });
+
+  // 监听粘贴事件，解析 Markdown
+  useEffect(() => {
+    if (!editor) return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const text = e.clipboardData?.getData('text/plain');
+      if (!text) return;
+
+      // 检测 Markdown 语法
+      const hasMarkdown = 
+        /^#{1,6}\s/m.test(text) ||           // 标题
+        /^\s*[-*+]\s/m.test(text) ||         // 无序列表
+        /^\s*\d+\.\s/m.test(text) ||         // 有序列表
+        /^\s*>/m.test(text) ||               // 引用
+        /\*\*[^*]+\*\*/.test(text) ||        // 粗体
+        /\*[^*]+\*/.test(text) ||            // 斜体
+        /`[^`]+`/.test(text) ||              // 行内代码
+        /```[\s\S]+```/.test(text) ||        // 代码块
+        /\[.+\]\(.+\)/.test(text);           // 链接
+
+      if (hasMarkdown) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 使用 marked 解析 Markdown
+        const html = marked.parse(text, { 
+          async: false, 
+          breaks: true,
+          gfm: true,
+        }) as string;
+
+        // 直接设置内容（替换当前内容或追加）
+        const currentHtml = editor.getHTML();
+        const isEmpty = currentHtml === '<p></p>' || !currentHtml;
+
+        if (isEmpty) {
+          editor.commands.setContent(html);
+        } else {
+          // 在当前位置插入
+          editor.commands.setContent(currentHtml + html);
+          editor.commands.focus('end');
+        }
+      }
+    };
+
+    // 在 capture 阶段监听，确保优先处理
+    document.addEventListener('paste', handlePaste, true);
+    
+    return () => {
+      document.removeEventListener('paste', handlePaste, true);
+    };
+  }, [editor]);
+
+  // 监听选中文字，显示 AI 操作菜单
+  useEffect(() => {
+    if (!editor) return;
+
+    const handleSelectionChange = () => {
+      const { from, to } = editor.state.selection;
+      const selectedText = editor.state.doc.textBetween(from, to, ' ');
+      
+      if (selectedText.trim().length > 5) {
+        // 获取选区位置
+        const { view } = editor;
+        const coords = view.coordsAtPos(from);
+        
+        selectionRangeRef.current = { from, to };
+        setSelectionMenu({
+          x: coords.left,
+          y: coords.top - 50,
+          text: selectedText,
+        });
+      } else {
+        setSelectionMenu(null);
+        selectionRangeRef.current = null;
+      }
+    };
+
+    editor.on('selectionUpdate', handleSelectionChange);
+    
+    return () => {
+      editor.off('selectionUpdate', handleSelectionChange);
+    };
+  }, [editor]);
+
+  // AI 流式处理选中文字 - 弹窗对比模式
+  const handleAIAction = async (action: 'format' | 'translate' | 'summarize') => {
+    if (!editor || !selectionMenu || !selectionRangeRef.current) return;
+
+    const modelId = localStorage.getItem('ai_model') || 'deepseek-chat';
+    const apiKey = localStorage.getItem(`ai_api_key_${modelId}`) || '';
+    
+    if (!apiKey) {
+      alert('请先在设置中配置 AI 模型的 API Key');
+      return;
+    }
+
+    setAiProcessing(action);
+    setSelectionMenu(null);
+
+    const { from, to } = selectionRangeRef.current;
+    const selectedText = selectionMenu.text;
+
+    // 构建 prompt
+    const prompts: Record<string, string> = {
+      format: `你是一个 Markdown 排版专家。请将以下文本排版成美观易读的格式。
+
+⚠️ 【绝对禁止】
+- 绝对不能删除原文的任何内容！
+- 绝对不能丢失原文的任何序号（一、二、三 或 1、2、3）！
+- 如果原文有"一、xxx"和"二、xxx"，输出必须也有！
+
+【允许的操作】
+✅ 添加换行和空行（段落之间必须空行）
+✅ 添加 Markdown 格式（**加粗**、列表、引用、分割线）
+✅ 修复明显错别字和标点
+
+【排版要求】
+- 每个主题/段落之间空一行
+- 关键词 **加粗**
+- 重要观点用 > 引用
+- 主题切换用 ---
+
+原文（必须完整保留所有内容和序号）：
+${selectedText}
+
+输出排版后的 Markdown：`,
+      translate: `请将以下文本翻译成中文（如果已是中文则翻译成英文）。保持原意，翻译要自然流畅：
+
+${selectedText}
+
+直接输出翻译结果，不要任何解释。`,
+      summarize: `请对以下文本进行精炼总结，提取核心要点，使其更加简洁：
+
+${selectedText}
+
+直接输出总结内容，不要任何解释。`,
+    };
+
+    try {
+      const models: Record<string, string> = {
+        'deepseek-chat': 'https://api.deepseek.com/chat/completions',
+        'deepseek-reasoner': 'https://api.deepseek.com/chat/completions',
+        'glm-4.5': 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+        'qwen3-max': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        'qwen-plus': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      };
+      
+      const apiUrl = models[modelId] || localStorage.getItem('ai_base_url') || models['deepseek-chat'];
+      const customModel = localStorage.getItem('ai_custom_model');
+      const modelName = modelId === 'custom' ? customModel : modelId;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [{ role: 'user', content: prompts[action] }],
+          stream: true,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`API 请求失败: ${response.status}`);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('无法读取响应流');
+
+      const decoder = new TextDecoder();
+      let result = '';
+
+      // 先弹出弹窗，显示原文和空的 AI 生成区域
+      setDiffModal({
+        original: selectedText,
+        modified: '',
+        action,
+        from,
+        to,
+      });
+      setAiProcessing(null);
+
+      // 流式更新弹窗内容
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n').filter(line => line.startsWith('data: '));
+
+        for (const line of lines) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+
+          try {
+            const json = JSON.parse(data);
+            const content = json.choices?.[0]?.delta?.content || '';
+            if (content) {
+              result += content;
+              // 流式更新弹窗
+              setDiffModal(prev => prev ? { ...prev, modified: result } : null);
+            }
+          } catch {}
+        }
+      }
+    } catch (error) {
+      console.error('AI 处理失败:', error);
+      alert('AI 处理失败，请重试');
+      setDiffModal(null);
+    } finally {
+      setAiProcessing(null);
+    }
+  };
+
+  // 确认替换 - 将 AI 生成的内容解析为 HTML 后插入
+  const handleAcceptDiff = () => {
+    if (!editor || !diffModal) return;
+    const { from, to, modified } = diffModal;
+    
+    // 使用 marked 将文本解析为 HTML
+    const html = marked.parse(modified, { 
+      async: false, 
+      breaks: true,
+      gfm: true,
+    }) as string;
+    
+    editor.chain().focus().deleteRange({ from, to }).insertContentAt(from, html).run();
+    setDiffModal(null);
+    selectionRangeRef.current = null;
+  };
+
+  // 取消替换
+  const handleRejectDiff = () => {
+    setDiffModal(null);
+    selectionRangeRef.current = null;
+  };
 
   // 插入图片
   const insertImage = () => {
@@ -347,11 +618,177 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
 
       {/* 编辑区域 - Tiptap EditorContent */}
       <div
-        className="flex-1 overflow-y-auto bg-white"
+        className="flex-1 overflow-y-auto bg-white relative"
         onClick={() => { setShowHeadingMenu(false); setShowColorMenu(false); }}
       >
         <EditorContent editor={editor} className="h-full" />
       </div>
+
+      {/* AI 选中文字操作菜单 */}
+      {selectionMenu && !aiProcessing && createPortal(
+        <div
+          className="fixed z-[99999999] bg-[#1C1C1E] rounded-xl shadow-2xl border border-white/10 p-1 flex gap-1 animate-fade-in"
+          style={{
+            left: Math.max(10, Math.min(selectionMenu.x, window.innerWidth - 280)),
+            top: Math.max(10, selectionMenu.y),
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {/* 复制按钮 */}
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(selectionMenu.text);
+              setSelectionMenu(null);
+            }}
+            className="px-3 py-2 rounded-lg text-white text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            复制
+          </button>
+          <div className="w-px h-6 bg-white/10 self-center" />
+          <button
+            onClick={() => handleAIAction('format')}
+            className="px-3 py-2 rounded-lg text-white text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 7h16M4 12h16M4 17h10" />
+            </svg>
+            格式化
+          </button>
+          <button
+            onClick={() => handleAIAction('translate')}
+            className="px-3 py-2 rounded-lg text-white text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2v3M22 22l-5-10-5 10M14 18h6" />
+            </svg>
+            翻译
+          </button>
+          <button
+            onClick={() => handleAIAction('summarize')}
+            className="px-3 py-2 rounded-lg text-white text-xs font-medium hover:bg-white/10 transition-colors flex items-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            总结
+          </button>
+        </div>,
+        document.body
+      )}
+
+      {/* AI 处理中提示 */}
+      {aiProcessing && createPortal(
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[99999999] bg-[#1C1C1E] rounded-full px-4 py-2 shadow-2xl border border-white/10 flex items-center gap-2 animate-fade-in">
+          <svg className="w-4 h-4 text-purple-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+            <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+          </svg>
+          <span className="text-white text-xs font-medium">
+            {aiProcessing === 'format' && 'AI 格式化中...'}
+            {aiProcessing === 'translate' && 'AI 翻译中...'}
+            {aiProcessing === 'summarize' && 'AI 总结中...'}
+          </span>
+        </div>,
+        document.body
+      )}
+
+      {/* AI 对比弹窗 */}
+      {diffModal && createPortal(
+        <div className="fixed inset-0 z-[99999999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
+            {/* 弹窗头部 */}
+            <div className="px-5 py-4 border-b border-[#E5E5EA] flex items-center justify-between bg-[#F9F9F9]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                  </svg>
+                </div>
+                <span className="font-semibold text-[#1C1C1E]">
+                  {diffModal.action === 'format' && 'AI 格式化'}
+                  {diffModal.action === 'translate' && 'AI 翻译'}
+                  {diffModal.action === 'summarize' && 'AI 总结'}
+                </span>
+              </div>
+              <button
+                onClick={handleRejectDiff}
+                className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-5 h-5 text-[#8E8E93]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* 对比内容 */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {/* 原文 */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-red-400" />
+                  <span className="text-xs font-medium text-[#8E8E93]">原文</span>
+                </div>
+                <div className="p-4 bg-red-50 border border-red-100 rounded-xl text-sm text-[#1C1C1E] leading-relaxed whitespace-pre-wrap">
+                  {diffModal.original}
+                </div>
+              </div>
+
+              {/* 箭头 */}
+              <div className="flex justify-center">
+                <svg className="w-6 h-6 text-[#C7C7CC]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 5v14M19 12l-7 7-7-7" />
+                </svg>
+              </div>
+
+              {/* AI 生成 */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-green-400" />
+                  <span className="text-xs font-medium text-[#8E8E93]">AI 生成</span>
+                  {!diffModal.modified && (
+                    <svg className="w-3 h-3 text-green-500 animate-spin ml-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                    </svg>
+                  )}
+                </div>
+                <div className="p-4 bg-green-50 border border-green-100 rounded-xl text-sm text-[#1C1C1E] leading-relaxed whitespace-pre-wrap min-h-[60px]">
+                  {diffModal.modified || (
+                    <span className="text-[#8E8E93] italic">正在生成...</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="px-5 py-4 border-t border-[#E5E5EA] flex gap-3 bg-[#F9F9F9]">
+              <button
+                onClick={handleRejectDiff}
+                className="flex-1 py-3 rounded-xl text-[#1C1C1E] text-sm font-medium bg-[#E5E5EA] hover:bg-[#D1D1D6] transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleAcceptDiff}
+                disabled={!diffModal.modified}
+                className="flex-1 py-3 rounded-xl text-white text-sm font-medium transition-colors disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg, #007AFF 0%, #5856D6 100%)' }}
+              >
+                替换原文
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Tiptap 编辑器样式 */}
       <style>{`
@@ -380,12 +817,21 @@ const RichEditor: React.FC<RichEditorProps> = ({ content, onChange, placeholder 
         .ProseMirror h1 { font-size: 1.75em; font-weight: 700; margin: 0.5em 0; }
         .ProseMirror h2 { font-size: 1.5em; font-weight: 600; margin: 0.5em 0; }
         .ProseMirror h3 { font-size: 1.25em; font-weight: 600; margin: 0.5em 0; }
-        .ProseMirror ul, .ProseMirror ol { padding-left: 1.5em; margin: 0.5em 0; }
+        .ProseMirror ul { padding-left: 1.5em; margin: 0.5em 0; list-style-type: disc; }
+        .ProseMirror ol { padding-left: 1.5em; margin: 0.5em 0; list-style-type: decimal; }
+        .ProseMirror ul li, .ProseMirror ol li { display: list-item; margin: 0.25em 0; }
+        .ProseMirror ul ul { list-style-type: circle; }
+        .ProseMirror ul ul ul { list-style-type: square; }
         .ProseMirror blockquote { border-left: 3px solid #007AFF; padding-left: 1em; margin: 0.5em 0; color: #666; }
         .ProseMirror pre { background: #F2F2F7; padding: 0.75em 1em; border-radius: 8px; overflow-x: auto; }
         .ProseMirror code { background: #F2F2F7; padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.9em; }
         .ProseMirror hr { border: none; border-top: 1px solid #E5E5EA; margin: 1em 0; }
         .ProseMirror img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+        .ProseMirror table { border-collapse: collapse; width: 100%; margin: 1em 0; overflow: hidden; border-radius: 8px; }
+        .ProseMirror th, .ProseMirror td { border: 1px solid #E5E5EA; padding: 8px 12px; text-align: left; min-width: 80px; }
+        .ProseMirror th { background: #F2F2F7; font-weight: 600; }
+        .ProseMirror tr:nth-child(even) td { background: #FAFAFA; }
+        .ProseMirror .selectedCell { background: rgba(0, 122, 255, 0.1); }
       `}</style>
     </div>
   );
@@ -604,7 +1050,105 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
   const [categoryId, setCategoryId] = useState<string>(note?.category || '');
   const [saving, setSaving] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [generatingTitle, setGeneratingTitle] = useState(false);
+  const [savedTip, setSavedTip] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Ctrl+S 保存快捷键
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [title, content, color, categoryId]);
+
+  // AI 生成标题
+  const generateAITitle = async () => {
+    // 提取纯文本内容
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    const textContent = tempDiv.textContent || '';
+    
+    if (!textContent.trim() || textContent.length < 10) {
+      alert('请先输入足够的内容（至少10个字）');
+      return;
+    }
+
+    const modelId = localStorage.getItem('ai_model') || 'deepseek-chat';
+    const apiKey = localStorage.getItem(`ai_api_key_${modelId}`) || '';
+    
+    if (!apiKey) {
+      alert('请先在设置中配置 AI 模型的 API Key');
+      return;
+    }
+
+    setGeneratingTitle(true);
+    
+    try {
+      // 获取模型配置
+      const models: Record<string, string> = {
+        'deepseek-chat': 'https://api.deepseek.com/chat/completions',
+        'deepseek-reasoner': 'https://api.deepseek.com/chat/completions',
+        'glm-4.5': 'https://open.bigmodel.cn/api/paas/v4/chat/completions',
+        'qwen3-max': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        'qwen-plus': 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+      };
+      
+      const apiUrl = models[modelId] || localStorage.getItem('ai_base_url') || models['deepseek-chat'];
+      const customModel = localStorage.getItem('ai_custom_model');
+      const modelName = modelId === 'custom' ? customModel : modelId;
+
+      // 截取内容（最多2000字）
+      const truncatedContent = textContent.slice(0, 2000);
+      
+      const prompt = `请为以下文章生成一个标题。
+
+要求：
+1. 严格限制在20字以内
+2. 直白告诉读者这篇文章在讲什么
+3. 语言要干练、优雅、生动
+4. 有语言的艺术感，让人一看就想读
+5. 只返回标题本身，不要任何解释或标点符号
+
+文章内容：
+${truncatedContent}`;
+
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: modelName,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 50,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API 请求失败: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const generatedTitle = data.choices?.[0]?.message?.content?.trim() || '';
+      
+      if (generatedTitle) {
+        // 确保不超过20字
+        setTitle(generatedTitle.slice(0, 20));
+      }
+    } catch (error) {
+      console.error('生成标题失败:', error);
+      alert('生成标题失败，请检查 API 配置');
+    } finally {
+      setGeneratingTitle(false);
+    }
+  };
 
   // 菜单通过 Portal 渲染，不需要 useEffect 监听点击外部
   // 点击背景关闭已在 Portal 的 onMouseDown 中处理
@@ -628,6 +1172,9 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
       category: categoryId || undefined,
     });
     setSaving(false);
+    // 显示保存成功提示
+    setSavedTip(true);
+    setTimeout(() => setSavedTip(false), 1500);
   };
 
   return createPortal(
@@ -765,21 +1312,59 @@ const NoteEditor: React.FC<NoteEditorProps> = ({ note, categories, onSave, onClo
             className="px-4 sm:px-5 py-2 text-sm font-semibold rounded-full transition-all disabled:opacity-50"
             style={{ backgroundColor: '#007AFF', color: 'white' }}
           >
-            {saving ? '...' : '完成'}
+            {saving ? '...' : '保存'}
           </button>
         </div>
+
+        {/* 保存成功提示 */}
+        {savedTip && (
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/80 text-white text-sm rounded-full animate-fade-in">
+            ✓ 已保存
+          </div>
+        )}
       </div>
 
       {/* 标题输入 - Apple 风格，移动端优化 */}
       <div className="px-3 sm:px-4 py-3 sm:py-4" style={{ backgroundColor: 'white', borderBottom: '0.5px solid #E5E5EA' }}>
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="标题"
-          className="w-full bg-transparent text-xl sm:text-2xl font-bold focus:outline-none"
-          style={{ color: '#1C1C1E', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif' }}
-        />
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="标题"
+            className="flex-1 bg-transparent text-xl sm:text-2xl font-bold focus:outline-none"
+            style={{ color: '#1C1C1E', fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif' }}
+          />
+          {/* AI 生成标题按钮 */}
+          <button
+            onClick={generateAITitle}
+            disabled={generatingTitle}
+            className="shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 disabled:opacity-50"
+            style={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)',
+            }}
+            title="AI 生成标题"
+          >
+            {generatingTitle ? (
+              <>
+                <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                  <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                </svg>
+                <span>生成中</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <span>AI标题</span>
+              </>
+            )}
+          </button>
+        </div>
         {/* 显示当前分类标签 */}
         {categoryId && (
           <div className="mt-2 flex items-center gap-2">
@@ -1036,6 +1621,8 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
           return;
         }
         console.log('笔记创建成功:', newNote);
+        // 新建后切换到编辑模式，继续编辑
+        setEditingNote(newNote);
       } else if (editingNote) {
         // 更新
         const { error } = await supabase
@@ -1047,9 +1634,11 @@ const NotesPage: React.FC<NotesPageProps> = ({ isOpen, onClose }) => {
           console.error('更新笔记失败:', error);
           return;
         }
+        // 更新本地状态
+        setEditingNote({ ...editingNote, ...data, updated_at: new Date().toISOString() } as Note);
       }
 
-      setEditingNote(null);
+      // 不关闭编辑器，只刷新列表
       await loadNotes();
     } catch (err) {
       console.error('保存笔记异常:', err);

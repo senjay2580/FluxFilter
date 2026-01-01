@@ -170,7 +170,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                  transform-gpu flex flex-col"
         style={{
           contentVisibility: 'auto',
-          containIntrinsicSize: '0 280px'
+          containIntrinsicSize: '0 240px'
         }}
         onClick={handleClick}
       >
@@ -179,7 +179,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
         ) : (
           <>
             {/* Thumbnail */}
-            <div className="relative aspect-[16/10] w-full overflow-hidden bg-gray-800/50">
+            <div className="relative aspect-video w-full overflow-hidden bg-gray-800/50">
               <img
                 src={thumbnail || ''}
                 alt={title}
@@ -261,18 +261,18 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
             </div>
 
             {/* Content Section - 平台渐变背景 */}
-            <div className={`p-3.5 overflow-hidden flex-1 ${
+            <div className={`p-2.5 overflow-hidden ${
               isYouTube 
                 ? 'bg-gradient-to-r from-red-950/80 via-[#0d0d10] to-[#0d0d10]' 
                 : 'bg-gradient-to-r from-pink-500/30 via-[#0d0d10] to-[#0d0d10]'
             }`}>
-              <div className="flex gap-2.5 items-start">
+              <div className="flex gap-2 items-start">
                 {/* 头像 */}
                 <div className="shrink-0">
                   <img
                     src={avatar}
                     alt={author}
-                    className="w-9 h-9 rounded-full border border-white/20 object-cover bg-gray-700"
+                    className="w-8 h-8 rounded-full border border-white/20 object-cover bg-gray-700"
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23666"><circle cx="12" cy="8" r="4"/><path d="M12 14c-6 0-8 3-8 6v1h16v-1c0-3-2-6-8-6z"/></svg>';
