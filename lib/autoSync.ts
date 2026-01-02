@@ -10,7 +10,7 @@
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import { getUploaderVideos, transformVideoToDbFormat } from './bilibili';
-import { getYouTubeChannelVideos, type YouTubeVideoItem } from './youtube';
+import { getYouTubeChannelVideos } from './youtube';
 import type { Uploader } from './database.types';
 
 // YouTube Uploader 类型（包含 channel_id）
@@ -138,7 +138,6 @@ async function syncWithUploaders(
   }
 
   let totalAdded = 0;
-  const results: string[] = [];
   let completedCount = 0;
   const newVideos: Array<{bvid: string; title: string; pic: string; uploader_name: string}> = [];
 
@@ -150,12 +149,6 @@ async function syncWithUploaders(
   // 智能调度：仅在必要时启用公平调度
   // ============================================
   const taskCount = uploaders.length;
-  
-  // 极速配置：最大并发（所有请求同时发出）
-  const CONCURRENCY = Math.min(taskCount, 20); // 最多 20 并发
-  
-  // 公平调度阈值
-  const needFairSchedule = taskCount >= 20;
   
   // ============================================
   // 阶段1：并发获取所有 UP 主的视频（纯网络请求）
@@ -321,25 +314,60 @@ async function syncWithUploaders(
 
     // 4. 写入所有视频（包括更新）
     if (allVideos.length > 0) {
+      // 过滤：只保留 mid 在 uploaders 列表中的视频（避免外键约束错误）
+      const uploaderMids = new Set(uploaders.map(u => u.mid));
+      const validVideos = allVideos.filter(v => uploaderMids.has(v.mid));
+      
+      if (validVideos.length < allVideos.length) {
+        console.warn(`⚠️ 过滤掉 ${allVideos.length - validVideos.length} 个未知UP主的视频`);
+      }
+      
+      if (validVideos.length === 0) {
+        return {
+          success: true,
+          message: `✅ 同步完成！新增 ${totalAdded} 个视频`,
+          videosAdded: totalAdded,
+          newVideos: newVideos.slice(0, 50),
+        };
+      }
+      
       const BATCH_SIZE = 200;
       const batches = [];
 
-      for (let i = 0; i < allVideos.length; i += BATCH_SIZE) {
-        batches.push(allVideos.slice(i, i + BATCH_SIZE));
+      for (let i = 0; i < validVideos.length; i += BATCH_SIZE) {
+        batches.push(validVideos.slice(i, i + BATCH_SIZE));
       }
 
-      onProgress?.(`💾 写入 ${allVideos.length} 个视频 (${batches.length} 批)...`);
+      onProgress?.(`💾 写入 ${validVideos.length} 个视频 (${batches.length} 批)...`);
 
       // 并发写入所有批次
-      const writePromises = batches.map(batch =>
-        supabase.from('video').upsert(batch, { onConflict: 'user_id,bvid' })
-      );
+      const writePromises = batches.map(batch => {
+        // 添加 platform 字段（默认 bilibili）
+        const batchWithPlatform = batch.map(v => ({ ...v, platform: 'bilibili' }));
+        return supabase.from('video').upsert(batchWithPlatform, { 
+          onConflict: 'user_id,platform,bvid',
+          ignoreDuplicates: false 
+        });
+      });
 
       const writeResults = await Promise.all(writePromises);
       const failedBatches = writeResults.filter(r => r.error);
 
       if (failedBatches.length > 0) {
-        console.error('部分批次写入失败:', failedBatches);
+        console.error('部分批次写入失败:', failedBatches.map(r => ({
+          error: r.error?.message,
+          code: r.error?.code,
+          details: r.error?.details,
+          hint: r.error?.hint,
+        })));
+        // 如果是外键约束错误，提示用户
+        const fkError = failedBatches.find(r => 
+          r.error?.message?.includes('fk_video_uploader') || 
+          r.error?.code === '23503'
+        );
+        if (fkError) {
+          console.warn('⚠️ 外键约束错误：部分视频的UP主不在关注列表中');
+        }
       }
     }
   }
@@ -447,9 +475,14 @@ async function syncFromSupabase(
       });
 
       // 批量 upsert（一次请求插入多个）
+      // 添加 platform 字段
+      const videoDataWithPlatform = videoDataList.map(v => ({ ...v, platform: 'bilibili' }));
       const { error: insertError } = await supabase
         .from('video')
-        .upsert(videoDataList, { onConflict: 'user_id,bvid' });
+        .upsert(videoDataWithPlatform, { 
+          onConflict: 'user_id,platform,bvid',
+          ignoreDuplicates: false 
+        });
 
       if (!insertError) {
         totalAdded += todayVideos.length;
@@ -457,7 +490,12 @@ async function syncFromSupabase(
         console.log(`✅ ${up.name}: 同步 ${todayVideos.length} 个今日视频`);
       } else {
         results.push(`${up.name}: 写入失败`);
-        console.error(`❌ ${up.name} 写入失败:`, insertError);
+        console.error(`❌ ${up.name} 写入失败:`, {
+          error: insertError.message,
+          code: insertError.code,
+          details: insertError.details,
+          hint: insertError.hint,
+        });
       }
 
       // 限流：等待后再处理下一个UP主
