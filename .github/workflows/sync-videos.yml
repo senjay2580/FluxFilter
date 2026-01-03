@@ -1,61 +1,28 @@
-# ============================================
-# GitHub Actions 定时任务 - 同步B站视频
-# 免费方案，替代 Vercel Cron
-# ============================================
-
-name: Sync Bilibili Videos
+name: 定时同步B站视频
 
 on:
-  # 定时任务暂时关闭
-  # schedule:
-  #   # 北京时间 6:30 = UTC 22:30 (前一天)
-  #   - cron: '30 22 * * *'
-  #   # 北京时间 17:00 = UTC 9:00
-  #   - cron: '0 9 * * *'
-  
-  # 仅支持手动触发
-  workflow_dispatch:
+  schedule:
+    # 每天北京时间 11:00 执行 (UTC 3:00)
+    - cron: '0 3 * * *'
+  workflow_dispatch: # 允许手动触发
 
 jobs:
   sync:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Debug - Check Secrets
-        run: |
-          echo "VERCEL_URL length: ${#VERCEL_URL}"
-          echo "CRON_SECRET length: ${#CRON_SECRET}"
-          echo "Target URL: $VERCEL_URL/api/sync"
-        env:
-          VERCEL_URL: ${{ secrets.VERCEL_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Trigger Sync API
-        run: |
-          echo "📡 正在调用同步 API..."
-          RESPONSE=$(curl -X POST "${{ secrets.VERCEL_URL }}/api/sync" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            -H "Content-Type: application/json" \
-            -w "\n\nHTTP_STATUS:%{http_code}" \
-            --max-time 120 \
-            2>&1)
-          
-          HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS:" | cut -d: -f2)
-          BODY=$(echo "$RESPONSE" | sed '/HTTP_STATUS:/d')
-          
-          echo "📋 响应状态码: $HTTP_STATUS"
-          echo "📄 响应内容:"
-          echo "$BODY"
-          
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "❌ API 调用失败"
-            exit 1
-          fi
-          
-          echo "✅ API 调用成功"
-        env:
-          VERCEL_URL: ${{ secrets.VERCEL_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
-      - name: Log Result
-        run: echo "✅ 视频同步任务完成 - $(date)"
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run sync script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/github-sync.js
