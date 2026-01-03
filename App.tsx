@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useSyncExternalStore, Suspense, lazy } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import { Tab, FilterType, DateFilter } from './types';
 import VideoCard from './components/video/VideoCard';
 import { HomeIcon, ClockIcon, SearchIcon, CalendarIcon, SlidersIcon, SettingsIcon, RssIcon, PlusIcon } from './components/shared/Icons';
@@ -35,6 +35,8 @@ const ResourceCenter = lazy(() => import('./components/pages/ResourceCenter'));
 const VideoAnalyzer = lazy(() => import('./components/tools/VideoAnalyzer'));
 const InsightFloatingBall = lazy(() => import('./components/shared/InsightFloatingBall'));
 const RecycleBin = lazy(() => import('./components/pages/RecycleBin'));
+const DailyWorkflow = lazy(() => import('./components/pages/DailyWorkflow'));
+const WorkflowPromptModal = lazy(() => import('./components/layout/WorkflowPromptModal'));
 const App = () => {
   // 全局策展状态
   const insightLoading = useSyncExternalStore(
@@ -71,7 +73,7 @@ const App = () => {
   const [isAddUploaderOpen, setIsAddUploaderOpen] = useState(false);
   const [isTodoOpen, setIsTodoOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialView, setSettingsInitialView] = useState<'main' | 'todo' | 'reminder' | 'collector' | 'downloader' | 'transcriber'>('main');
+  const [settingsInitialView, setSettingsInitialView] = useState<'main' | 'todo' | 'reminder' | 'collector' | 'downloader' | 'transcriber' | 'insights' | 'devcommunity'>('main');
   const [searchTerm, setSearchTerm] = useState('');
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isAppsModalOpen, setIsAppsModalOpen] = useState(false);
@@ -81,8 +83,12 @@ const App = () => {
   const [isVideoAnalyzerOpen, setIsVideoAnalyzerOpen] = useState(false);
   const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
   const [recycleBinCount, setRecycleBinCount] = useState(0);
-  const [cleanupConfirm, setCleanupConfirm] = useState(false);
   const [deleteConfirmVideo, setDeleteConfirmVideo] = useState<{ bvid: string; title: string; url: string } | null>(null);
+
+  // 工作流状态
+  const [isDailyWorkflowOpen, setIsDailyWorkflowOpen] = useState(false);
+  const [showWorkflowPrompt, setShowWorkflowPrompt] = useState(false);
+  const [workflowPromptShownToday, setWorkflowPromptShownToday] = useState(false);
 
   // AI总结弹窗状态 - 全局单例
   const [aiSummaryVideo, setAiSummaryVideo] = useState<{ bvid: string; title: string } | null>(null);
@@ -171,6 +177,9 @@ const App = () => {
     clearCookieCache(); // 清除Cookie缓存，使用新用户的Cookie
     // 加载 AI 配置
     await loadAIConfigFromDB();
+    // 显示工作流提示
+    setShowWorkflowPrompt(true);
+    setWorkflowPromptShownToday(true);
   };
 
   // 退出登录
@@ -768,46 +777,7 @@ const App = () => {
       .slice(0, 5);
   }, [videos]);
 
-  // 非今天发布的视频（用于清理功能）
-  const oldVideos = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return videos.filter(v => {
-      const pubDate = new Date(v.pubdate || v.created_at);
-      pubDate.setHours(0, 0, 0, 0);
-      return pubDate.getTime() < today.getTime();
-    });
-  }, [videos]);
 
-  // 清理非今天发布的视频（软删除到回收站）
-  const cleanupOldVideos = useCallback(async () => {
-    if (!currentUser?.id || oldVideos.length === 0) return;
-
-    try {
-      const oldBvids = oldVideos.map(v => v.bvid);
-      
-      // 乐观更新 UI
-      setVideos(prev => prev.filter(v => !oldBvids.includes(v.bvid)));
-
-      const { error } = await supabase
-        .from('video')
-        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-        .eq('user_id', currentUser.id)
-        .in('bvid', oldBvids);
-
-      if (error) throw error;
-
-      // 更新回收站数量
-      setRecycleBinCount(prev => prev + oldVideos.length);
-      showToast(`已清理 ${oldVideos.length} 个旧视频到回收站`);
-    } catch (err) {
-      console.error('清理失败:', err);
-      fetchVideos();
-      showToast('清理失败，请重试');
-    }
-
-    setCleanupConfirm(false);
-  }, [currentUser?.id, oldVideos, fetchVideos]);
 
   // Infinite Scroll Handler - 节流优化 + 固定功能栏显示
   useEffect(() => {
@@ -867,8 +837,52 @@ const App = () => {
   }
 
   return (
-    <PullToRefresh onRefresh={handlePullRefresh} scrollContainerRef={mainRef} disabled={showTimeline}>
-      <div className="h-screen bg-cyber-dark font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden flex flex-col">
+    <>
+      {/* 每日工作流 - 独立页面，在最外层 */}
+      <Suspense fallback={null}>
+        <DailyWorkflow
+          isOpen={isDailyWorkflowOpen}
+          onClose={() => setIsDailyWorkflowOpen(false)}
+          onNodeClick={(nodeCode) => {
+            // 根据节点代码跳转到相应页面
+            switch (nodeCode) {
+              case 'daily_info':
+                subPageSourceRef.current = activeTab;
+                // 使用 flushSync 确保状态同步更新，避免闪现
+                flushSync(() => {
+                  setSettingsInitialView('insights');
+                });
+                setIsDailyWorkflowOpen(false);
+                setActiveTab('settings');
+                break;
+              case 'dev_hotspot':
+                subPageSourceRef.current = activeTab;
+                flushSync(() => {
+                  setSettingsInitialView('devcommunity');
+                });
+                setIsDailyWorkflowOpen(false);
+                setActiveTab('settings');
+                break;
+              case 'video_collection':
+                subPageSourceRef.current = activeTab;
+                flushSync(() => {
+                  setSettingsInitialView('collector');
+                });
+                setIsDailyWorkflowOpen(false);
+                setActiveTab('settings');
+                break;
+              case 'notes':
+                subPageSourceRef.current = activeTab;
+                setIsDailyWorkflowOpen(false);
+                setIsNotesOpen(true);
+                break;
+            }
+          }}
+        />
+      </Suspense>
+
+      <PullToRefresh onRefresh={handlePullRefresh} scrollContainerRef={mainRef} disabled={showTimeline}>
+        <div className="h-screen bg-cyber-dark font-sans selection:bg-cyber-lime selection:text-black relative overflow-hidden flex flex-col">
 
         {/* PWA 安装提示 */}
         <Suspense fallback={null}>
@@ -1172,18 +1186,6 @@ const App = () => {
                       AI
                     </button>
 
-                    {/* 清理旧视频按钮 */}
-                    <button
-                      onClick={() => setCleanupConfirm(true)}
-                      className="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 bg-white/5 border-white/10 text-gray-300 hover:bg-rose-500/20 hover:border-rose-500/30 hover:text-rose-300"
-                      title="删除非今天发布的视频"
-                    >
-                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                      清理
-                    </button>
                   </div>
                 </div>
               )}
@@ -1307,6 +1309,19 @@ const App = () => {
                 </Suspense>
               )}
 
+              {/* 工作流提示弹窗 - 仅在登录后首次显示 */}
+              {showWorkflowPrompt && !workflowPromptShownToday && (
+                <Suspense fallback={null}>
+                  <WorkflowPromptModal
+                    onClose={() => setShowWorkflowPrompt(false)}
+                    onEnter={() => {
+                      setShowWorkflowPrompt(false);
+                      setIsDailyWorkflowOpen(true);
+                    }}
+                  />
+                </Suspense>
+              )}
+
               {/* 全局 AI总结弹窗 - 单例 */}
               {aiSummaryVideo && (
                 <Suspense fallback={null}>
@@ -1385,68 +1400,6 @@ const App = () => {
                         className="w-full py-3 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors"
                       >
                         直接删除
-                      </button>
-                    </div>
-                  </div>
-                </div>,
-                document.body
-              )}
-
-              {/* 清理旧视频确认框 */}
-              {cleanupConfirm && createPortal(
-                <div
-                  className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
-                  onClick={(e) => { if (e.target === e.currentTarget) setCleanupConfirm(false); }}
-                >
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                  <div
-                    className="relative w-full max-w-sm rounded-2xl overflow-hidden p-6"
-                    style={{
-                      backgroundColor: 'rgba(30,30,35,0.98)',
-                      backdropFilter: 'blur(20px)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      animation: 'scaleIn 0.2s ease-out'
-                    }}
-                  >
-                    <button
-                      onClick={() => setCleanupConfirm(false)}
-                      className="absolute top-3 right-3 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
-                    >
-                      <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
-                        <path d="M18 6L6 18M6 6l12 12" />
-                      </svg>
-                    </button>
-
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center">
-                        <svg className="w-6 h-6 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <polyline points="3 6 5 6 21 6" />
-                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-white">清理旧视频</h3>
-                        <p className="text-xs text-gray-500">移到回收站，可随时恢复</p>
-                      </div>
-                    </div>
-
-                    <p className="text-sm text-gray-400 mb-6">
-                      将删除 <span className="text-rose-400 font-bold">{oldVideos.length}</span> 个非今天发布的视频到回收站。
-                    </p>
-
-                    <div className="flex gap-3">
-                      <button
-                        onClick={() => setCleanupConfirm(false)}
-                        className="flex-1 py-3 bg-white/10 text-white font-medium rounded-xl hover:bg-white/15 transition-colors"
-                      >
-                        取消
-                      </button>
-                      <button
-                        onClick={cleanupOldVideos}
-                        disabled={oldVideos.length === 0}
-                        className="flex-1 py-3 bg-rose-500 text-white font-medium rounded-xl hover:bg-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        确定清理
                       </button>
                     </div>
                   </div>
@@ -1605,18 +1558,18 @@ const App = () => {
                           <span className="text-sm font-semibold text-white">快捷访问</span>
                         </div>
 
-                        <div className="flex justify-center gap-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:content-start">
+                        <div className="grid grid-cols-4 gap-1.5 lg:grid-cols-2 lg:gap-3 lg:content-start">
                           {/* 收藏夹 */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('collector'); setActiveTab('settings'); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1a1c20] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#252830] transition-all active:scale-[0.98]"
+                            className="relative h-12 bg-[#1a1c20] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#252830] transition-all active:scale-[0.98]"
                           >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg className="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                             </svg>
                             <span className="hidden lg:block text-sm text-cyan-400 font-medium">收藏</span>
                             {collectedCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-cyan-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-cyan-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
                                 {collectedCount > 99 ? '99+' : collectedCount}
                               </span>
                             )}
@@ -1625,15 +1578,15 @@ const App = () => {
                           {/* 提醒 */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('reminder'); setActiveTab('settings'); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1f1b16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#2a241c] transition-all active:scale-[0.98]"
+                            className="relative h-12 bg-[#1f1b16] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#2a241c] transition-all active:scale-[0.98]"
                           >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg className="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <circle cx="12" cy="12" r="10" />
                               <polyline points="12 6 12 12 16 14" />
                             </svg>
                             <span className="hidden lg:block text-sm text-amber-400 font-medium">提醒</span>
                             {reminderCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-amber-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-amber-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
                                 {reminderCount > 99 ? '99+' : reminderCount}
                               </span>
                             )}
@@ -1642,15 +1595,15 @@ const App = () => {
                           {/* TODO */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('todo'); setActiveTab('settings'); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a22] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e232e] transition-all active:scale-[0.98]"
+                            className="relative h-12 bg-[#161a22] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e232e] transition-all active:scale-[0.98]"
                           >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M9 11l3 3L22 4" />
                               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                             </svg>
                             <span className="hidden lg:block text-sm text-blue-400 font-medium">待办</span>
                             {todoCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-blue-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-blue-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
                                 {todoCount > 99 ? '99+' : todoCount}
                               </span>
                             )}
@@ -1659,10 +1612,10 @@ const App = () => {
                           {/* 笔记 */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setIsNotesOpen(true); }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1d161d] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#271e27] transition-all active:scale-[0.98]"
+                            className="relative h-12 bg-[#1d161d] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#271e27] transition-all active:scale-[0.98]"
                             title="笔记"
                           >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg className="w-5 h-5 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                               <polyline points="14 2 14 8 20 8" />
                               <line x1="16" y1="13" x2="8" y2="13" />
@@ -1670,7 +1623,7 @@ const App = () => {
                             </svg>
                             <span className="hidden lg:block text-sm text-purple-300 font-medium">笔记</span>
                             {notesCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-purple-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-purple-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
                                 {notesCount > 99 ? '99+' : notesCount}
                               </span>
                             )}
@@ -1683,10 +1636,10 @@ const App = () => {
                               setSettingsInitialView('transcriber');
                               setActiveTab('settings');
                             }}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#191621] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#211e2b] transition-all active:scale-[0.98]"
+                            className="relative h-12 bg-[#191621] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#211e2b] transition-all active:scale-[0.98]"
                             title="音频转写"
                           >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                               <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                               <line x1="12" y1="19" x2="12" y2="23" />
@@ -1698,10 +1651,10 @@ const App = () => {
                           {/* 回收站 */}
                           <button
                             onClick={() => setIsRecycleBinOpen(true)}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1a1618] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#241e20] transition-all active:scale-[0.98]"
+                            className="relative h-12 bg-[#1a1618] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#241e20] transition-all active:scale-[0.98]"
                             title="回收站"
                           >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg className="w-5 h-5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <polyline points="3 6 5 6 21 6" />
                               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                               <line x1="10" y1="11" x2="10" y2="17" />
@@ -1709,23 +1662,38 @@ const App = () => {
                             </svg>
                             <span className="hidden lg:block text-sm text-rose-400 font-medium">回收站</span>
                             {recycleBinCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-rose-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
                                 {recycleBinCount > 99 ? '99+' : recycleBinCount}
                               </span>
                             )}
                           </button>
 
+                          {/* 工作流 */}
+                          <button
+                            onClick={() => setIsDailyWorkflowOpen(true)}
+                            className="relative h-12 bg-[#1a1f16] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#232d1e] transition-all active:scale-[0.98]"
+                            title="每日工作流"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 text-lime-400">
+                              <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5">
+                                <path d="M3.375 7.5a3 3 0 1 0 6 0a3 3 0 0 0-6 0m11.25 11a3 3 0 1 0 6 0a3 3 0 0 0-6 0m-8.25-14V.75m0 9.75v12.75"/>
+                                <path d="M9.375 7.5h5.25a3 3 0 0 1 3 3v5"/>
+                              </g>
+                            </svg>
+                            <span className="hidden lg:block text-sm text-lime-400 font-medium">工作流</span>
+                          </button>
+
                           {/* 应用 */}
                           <button
                             onClick={() => setIsAppsModalOpen(true)}
-                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#161a16] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e231e] transition-all active:scale-[0.98]"
+                            className="relative h-12 bg-[#161a16] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e231e] transition-all active:scale-[0.98]"
                             title="应用"
                           >
-                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <rect x="3" y="3" width="7" height="7" rx="1" />
-                              <rect x="14" y="3" width="7" height="7" rx="1" />
-                              <rect x="3" y="14" width="7" height="7" rx="1" />
-                              <rect x="14" y="14" width="7" height="7" rx="1" />
+                            <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                              <rect x="14" y="14" width="7" height="7" rx="1.5" />
                             </svg>
                             <span className="hidden lg:block text-sm text-cyber-lime font-medium">应用</span>
                           </button>
@@ -2528,6 +2496,7 @@ const App = () => {
         )}
       </div>
     </PullToRefresh>
+    </>
   );
 };
 

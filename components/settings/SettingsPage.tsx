@@ -26,13 +26,15 @@ interface SettingsPageProps {
 const SettingsPage: React.FC<SettingsPageProps> = ({
   isOpen, onClose, initialView = 'main', onOpenNotes, onOpenLearningLog, onOpenResourceCenter, onNavigate
 }) => {
+  // 直接使用 initialView 作为初始值，并在 initialView 变化时同步更新
   const [currentView, setCurrentView] = useState<SettingsView>(initialView);
   const [toast, setToast] = useState<string | null>(null);
 
   // 策展状态
   const [insightStatus, setInsightStatus] = useState<'idle' | 'loading' | 'done'>('idle');
 
-  useEffect(() => { if (isOpen) setCurrentView(initialView); }, [isOpen, initialView]);
+  // 当 initialView 变化时立即同步（不等 isOpen）
+  useEffect(() => { setCurrentView(initialView); }, [initialView]);
 
   // 监听策展状态
   useEffect(() => {

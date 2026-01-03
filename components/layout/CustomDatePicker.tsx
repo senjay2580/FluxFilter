@@ -6,16 +6,24 @@ import type { VideoWithUploader } from '../../lib/database.types';
 // 通用视频类型（支持旧格式和新格式）
 type VideoItem = { createdAt?: Date; pubdate?: string | null; created_at?: string };
 
+// 工作流完成率数据类型
+export interface WorkflowCompletionData {
+  [date: string]: number; // date: 'YYYY-MM-DD', value: 完成率 0-100
+}
+
 interface CustomDatePickerProps {
   isOpen: boolean;
   onClose: () => void;
   onApply: (filter: DateFilter) => void;
   currentFilter: DateFilter;
   videos: VideoItem[] | VideoWithUploader[];
+  // 新增：工作流完成率数据
+  workflowData?: WorkflowCompletionData;
+  mode?: 'video' | 'workflow'; // 默认 video
 }
 
-// 5级热力图颜色配置
-const HEAT_LEVELS = [
+// 视频热力图颜色配置
+const VIDEO_HEAT_LEVELS = [
   { min: 0, max: 0, bg: 'bg-white/5', label: '无视频' },
   { min: 1, max: 2, bg: 'bg-emerald-900/60', label: '1-2个' },
   { min: 3, max: 4, bg: 'bg-emerald-500/70', label: '3-4个' },
@@ -23,11 +31,32 @@ const HEAT_LEVELS = [
   { min: 7, max: Infinity, bg: 'bg-red-500/90', label: '7+个' },
 ];
 
-const getHeatLevel = (count: number) => {
-  return HEAT_LEVELS.find(l => count >= l.min && count <= l.max) || HEAT_LEVELS[0];
+// 工作流完成率颜色配置
+const WORKFLOW_HEAT_LEVELS = [
+  { min: 0, max: 0, bg: 'bg-white/5', label: '未开始' },
+  { min: 1, max: 25, bg: 'bg-emerald-900/60', label: '1-25%' },
+  { min: 26, max: 50, bg: 'bg-emerald-600/70', label: '26-50%' },
+  { min: 51, max: 75, bg: 'bg-emerald-400/80', label: '51-75%' },
+  { min: 76, max: 100, bg: 'bg-cyber-lime/90', label: '76-100%' },
+];
+
+const getVideoHeatLevel = (count: number) => {
+  return VIDEO_HEAT_LEVELS.find(l => count >= l.min && count <= l.max) || VIDEO_HEAT_LEVELS[0];
 };
 
-const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, onApply, currentFilter, videos }) => {
+const getWorkflowHeatLevel = (rate: number) => {
+  return WORKFLOW_HEAT_LEVELS.find(l => rate >= l.min && rate <= l.max) || WORKFLOW_HEAT_LEVELS[0];
+};
+
+const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ 
+  isOpen, 
+  onClose, 
+  onApply, 
+  currentFilter, 
+  videos,
+  workflowData,
+  mode = 'video'
+}) => {
   const today = new Date();
   // 默认选中今天的日期
   const initYear = currentFilter.year !== undefined ? currentFilter.year : today.getFullYear();
@@ -163,13 +192,25 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
           {calendarDays.map((date, idx) => {
             if (!date) return <div key={idx} className="aspect-square" />;
 
-            // 使用本地时间生成 key（与 videoCountByDate 一致）
+            // 使用本地时间生成 key
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const dateKey = `${year}-${month}-${day}`;
-            const count = videoCountByDate[dateKey] || 0;
-            const heat = getHeatLevel(count);
+            
+            // 根据模式获取热力值和颜色
+            let heat;
+            let displayValue: number | null = null;
+            
+            if (mode === 'workflow' && workflowData) {
+              const rate = workflowData[dateKey] || 0;
+              heat = getWorkflowHeatLevel(rate);
+              displayValue = rate > 0 ? Math.round(rate) : null;
+            } else {
+              const count = videoCountByDate[dateKey] || 0;
+              heat = getVideoHeatLevel(count);
+              displayValue = count > 0 ? count : null;
+            }
 
             return (
               <button
@@ -182,11 +223,13 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
                   hover:scale-110 hover:z-10
                 `}
               >
-                <span className={`font-medium ${count > 0 ? 'text-white' : 'text-gray-400'}`}>
+                <span className={`font-medium ${displayValue ? 'text-white' : 'text-gray-400'}`}>
                   {date.getDate()}
                 </span>
-                {count > 0 && (
-                  <span className="text-[8px] text-white/80">{count}</span>
+                {displayValue !== null && (
+                  <span className="text-[8px] text-white/80">
+                    {mode === 'workflow' ? `${displayValue}%` : displayValue}
+                  </span>
                 )}
               </button>
             );
@@ -196,7 +239,7 @@ const CustomDatePicker: React.FC<CustomDatePickerProps> = ({ isOpen, onClose, on
         {/* 图例 */}
         <div className="mt-4 pt-3 border-t border-white/10">
           <div className="flex items-center justify-center gap-2 flex-wrap">
-            {HEAT_LEVELS.map((level, idx) => (
+            {(mode === 'workflow' ? WORKFLOW_HEAT_LEVELS : VIDEO_HEAT_LEVELS).map((level, idx) => (
               <div key={idx} className="flex items-center gap-1">
                 <div className={`w-3 h-3 rounded ${level.bg}`} />
                 <span className="text-[10px] text-gray-400">{level.label}</span>
