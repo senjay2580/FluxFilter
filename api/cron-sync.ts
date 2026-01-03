@@ -44,13 +44,6 @@ async function getUploaderVideos(mid: number, cookie: string): Promise<any[]> {
     let pic = archive.cover || '';
     if (pic.startsWith('//')) pic = `https:${pic}`;
     
-    // 获取发布时间：优先使用 module_author 的 pub_ts，其次使用当前时间
-    let pubdate = item.modules?.module_author?.pub_ts;
-    if (!pubdate) {
-      // 如果没有 pub_ts，使用当前时间戳
-      pubdate = Math.floor(Date.now() / 1000);
-    }
-    
     videos.push({
       aid: parseInt(archive.aid) || 0,
       bvid: archive.bvid,
@@ -58,7 +51,7 @@ async function getUploaderVideos(mid: number, cookie: string): Promise<any[]> {
       pic,
       description: archive.desc || '',
       duration: parseDurationText(archive.duration_text),
-      pubdate: pubdate, // Unix 时间戳（秒）
+      pubdate: item.modules?.module_author?.pub_ts || Math.floor(Date.now() / 1000), // 动态发布时间戳（秒）
     });
   }
 
@@ -147,6 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const todayTimestamp = Math.floor(todayStart.getTime() / 1000);
 
         const allVideos: any[] = [];
+        const allRawVideos: any[] = []; // 保留原始视频数据用于通知
         const newVideoTitles: string[] = [];
         let successCount = 0;
         let failCount = 0;
@@ -163,6 +157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               
               for (const video of todayVideos) {
                 allVideos.push(transformVideo(video, user.id, uploader.mid));
+                allRawVideos.push(video); // 保存原始视频数据
                 newVideoTitles.push(`${uploader.name}: ${video.title}`);
               }
               console.log(`✅ ${uploader.name}: ${videos.length} 个视频`);
@@ -191,6 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           const existingBvids = new Set(existing?.map(v => v.bvid) || []);
           const newVideos = allVideos.filter(v => !existingBvids.has(v.bvid));
+          const newRawVideos = allRawVideos.filter(v => !existingBvids.has(v.bvid));
 
           // 5. 插入新视频
           if (newVideos.length > 0) {
@@ -210,11 +206,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               content: newVideoTitles.slice(0, 5).join('\n') + (newVideoTitles.length > 5 ? `\n...等 ${newVideoTitles.length} 个` : ''),
               data: {
                 videos_added: newVideos.length,
-                new_videos: newVideos.slice(0, 10).map(v => ({
+                new_videos: newRawVideos.slice(0, 10).map(v => ({
                   bvid: v.bvid,
                   title: v.title,
                   pic: v.pic,
-                  pubdate: v.pubdate, // ISO 格式的发布时间
+                  pubdate: new Date(v.pubdate * 1000).toISOString(), // 转换为 ISO 格式
                 })),
               },
               is_read: false, // 确保新通知为未读状态

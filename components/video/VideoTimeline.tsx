@@ -1330,16 +1330,19 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
         </div>
       )}
 
-      {/* 未读指示点 */}
+      {/* Icon */}
       {!isSelecting && (
-        <div className={`w-2 h-2 rounded-full shrink-0 ${
-          notification.is_read ? 'bg-gray-700' : 'bg-cyber-lime'
-        }`} />
+        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500/30 to-emerald-600/10 flex items-center justify-center shrink-0">
+          <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M23 7l-7 5 7 5V7z"/>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+          </svg>
+        </div>
       )}
       
       {/* 内容 */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 mb-1">
           <span className={`text-sm font-medium truncate ${
             notification.is_read ? 'text-gray-400' : 'text-white'
           }`}>
@@ -1351,6 +1354,11 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
             </span>
           )}
         </div>
+        {notification.content && (
+          <p className="text-gray-500 text-xs line-clamp-2 leading-relaxed">
+            {notification.content}
+          </p>
+        )}
       </div>
       
       {/* 时间 */}
