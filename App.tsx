@@ -218,6 +218,24 @@ const App = () => {
     // 每分钟刷新一次
     const interval = setInterval(loadUnreadCount, 60000);
     return () => clearInterval(interval);
+  }, [currentUser?.id]); // 用户登录后重新加载
+
+  // 监听通知状态变化事件，刷新未读数量
+  useEffect(() => {
+    const handleNotificationChange = () => {
+      const userId = getStoredUserId();
+      if (!userId) return;
+
+      supabase
+        .from('notification')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false)
+        .then(({ count }) => setUnreadNotificationCount(count || 0));
+    };
+
+    window.addEventListener('notification-change', handleNotificationChange);
+    return () => window.removeEventListener('notification-change', handleNotificationChange);
   }, []);
 
   // 加载快捷入口数量

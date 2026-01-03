@@ -44,6 +44,13 @@ async function getUploaderVideos(mid: number, cookie: string): Promise<any[]> {
     let pic = archive.cover || '';
     if (pic.startsWith('//')) pic = `https:${pic}`;
     
+    // 获取发布时间：优先使用 module_author 的 pub_ts，其次使用当前时间
+    let pubdate = item.modules?.module_author?.pub_ts;
+    if (!pubdate) {
+      // 如果没有 pub_ts，使用当前时间戳
+      pubdate = Math.floor(Date.now() / 1000);
+    }
+    
     videos.push({
       aid: parseInt(archive.aid) || 0,
       bvid: archive.bvid,
@@ -51,7 +58,7 @@ async function getUploaderVideos(mid: number, cookie: string): Promise<any[]> {
       pic,
       description: archive.desc || '',
       duration: parseDurationText(archive.duration_text),
-      pubdate: item.modules?.module_author?.pub_ts || Math.floor(Date.now() / 1000),
+      pubdate: pubdate, // Unix 时间戳（秒）
     });
   }
 
@@ -207,8 +214,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   bvid: v.bvid,
                   title: v.title,
                   pic: v.pic,
+                  pubdate: v.pubdate, // ISO 格式的发布时间
                 })),
               },
+              is_read: false, // 确保新通知为未读状态
             };
 
             await supabase.from('notification').insert(notification);

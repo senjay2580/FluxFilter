@@ -200,6 +200,23 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [notificationsLoading, setNotificationsLoading] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+  
+  // 通知批量管理状态
+  const [isSelectingNotifications, setIsSelectingNotifications] = useState(false);
+  const [selectedNotificationIds, setSelectedNotificationIds] = useState<Set<number>>(new Set());
+  const [notificationConfirmAction, setNotificationConfirmAction] = useState<{
+    type: 'delete' | 'deleteRead' | 'deleteAll';
+    ids?: number[];
+    title: string;
+    message: string;
+  } | null>(null);
+  const [notificationToast, setNotificationToast] = useState<string | null>(null);
+
+  const showNotificationToast = (msg: string) => {
+    setNotificationToast(msg);
+    setTimeout(() => setNotificationToast(null), 2000);
+  };
 
   // 加载通知
   const loadNotifications = useCallback(async () => {
@@ -239,6 +256,8 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
 
       setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
+      // 通知 App.tsx 刷新未读数量
+      window.dispatchEvent(new Event('notification-change'));
     } catch (err) {
       console.error('标记已读失败:', err);
     }
@@ -258,10 +277,148 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
 
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
+      // 通知 App.tsx 刷新未读数量
+      window.dispatchEvent(new Event('notification-change'));
     } catch (err) {
       console.error('标记全部已读失败:', err);
     }
   }, []);
+
+  // 删除通知
+  const deleteNotification = useCallback(async (id: number) => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+
+    try {
+      await supabase
+        .from('notification')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      setNotifications(prev => {
+        const notification = prev.find(n => n.id === id);
+        if (notification && !notification.is_read) {
+          setUnreadCount(c => Math.max(0, c - 1));
+        }
+        return prev.filter(n => n.id !== id);
+      });
+      setSelectedNotification(null);
+      // 通知 App.tsx 刷新未读数量
+      window.dispatchEvent(new Event('notification-change'));
+    } catch (err) {
+      console.error('删除通知失败:', err);
+    }
+  }, []);
+
+  // 批量删除通知
+  const deleteNotifications = useCallback(async (ids: number[]) => {
+    const userId = getStoredUserId();
+    if (!userId || ids.length === 0) return;
+
+    try {
+      await supabase
+        .from('notification')
+        .delete()
+        .eq('user_id', userId)
+        .in('id', ids);
+
+      setNotifications(prev => {
+        const deletedUnread = prev.filter(n => ids.includes(n.id) && !n.is_read).length;
+        setUnreadCount(c => Math.max(0, c - deletedUnread));
+        return prev.filter(n => !ids.includes(n.id));
+      });
+      setSelectedNotificationIds(new Set());
+      setIsSelectingNotifications(false);
+      showNotificationToast(`已删除 ${ids.length} 条通知`);
+      window.dispatchEvent(new Event('notification-change'));
+    } catch (err) {
+      console.error('批量删除通知失败:', err);
+      showNotificationToast('删除失败，请重试');
+    }
+  }, []);
+
+  // 清理已读通知
+  const deleteReadNotifications = useCallback(async () => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+
+    const readIds = notifications.filter(n => n.is_read).map(n => n.id);
+    if (readIds.length === 0) {
+      showNotificationToast('没有已读通知');
+      return;
+    }
+
+    try {
+      await supabase
+        .from('notification')
+        .delete()
+        .eq('user_id', userId)
+        .eq('is_read', true);
+
+      setNotifications(prev => prev.filter(n => !n.is_read));
+      showNotificationToast(`已清理 ${readIds.length} 条已读通知`);
+      window.dispatchEvent(new Event('notification-change'));
+    } catch (err) {
+      console.error('清理已读通知失败:', err);
+      showNotificationToast('清理失败，请重试');
+    }
+  }, [notifications]);
+
+  // 删除全部通知
+  const deleteAllNotifications = useCallback(async () => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+
+    try {
+      await supabase
+        .from('notification')
+        .delete()
+        .eq('user_id', userId);
+
+      setNotifications([]);
+      setUnreadCount(0);
+      showNotificationToast('已清空所有通知');
+      window.dispatchEvent(new Event('notification-change'));
+    } catch (err) {
+      console.error('删除全部通知失败:', err);
+      showNotificationToast('删除失败，请重试');
+    }
+  }, []);
+
+  // 长按开始选择通知
+  const handleNotificationLongPress = useCallback((id: number) => {
+    if (navigator.vibrate) navigator.vibrate(20);
+    setIsSelectingNotifications(true);
+    setSelectedNotificationIds(new Set([id]));
+  }, []);
+
+  // 切换选择通知
+  const toggleSelectNotification = useCallback((id: number) => {
+    setSelectedNotificationIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(id)) {
+        newSet.delete(id);
+      } else {
+        newSet.add(id);
+      }
+      return newSet;
+    });
+  }, []);
+
+  // 全选/取消全选通知
+  const toggleSelectAllNotifications = useCallback(() => {
+    if (selectedNotificationIds.size === notifications.length) {
+      setSelectedNotificationIds(new Set());
+    } else {
+      setSelectedNotificationIds(new Set(notifications.map(n => n.id)));
+    }
+  }, [notifications, selectedNotificationIds.size]);
+
+  // 已读通知数量
+  const readNotificationCount = useMemo(() => {
+    return notifications.filter(n => n.is_read).length;
+  }, [notifications]);
 
   // 切换到通知 Tab 时加载
   useEffect(() => {
@@ -440,17 +597,45 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              {unreadCount > 0 && (
+              {isSelectingNotifications ? (
                 <button
-                  onClick={markAllAsRead}
-                  className="px-3 py-1.5 text-xs text-cyber-lime bg-cyber-lime/10 hover:bg-cyber-lime/20 rounded-lg transition-colors"
+                  onClick={() => { setIsSelectingNotifications(false); setSelectedNotificationIds(new Set()); }}
+                  className="px-3 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
                 >
-                  全部已读
+                  取消
+                </button>
+              ) : notifications.length > 0 && (
+                <button
+                  onClick={() => setIsSelectingNotifications(true)}
+                  className="px-3 py-1.5 text-sm text-cyber-lime hover:bg-cyber-lime/10 rounded-lg transition-colors"
+                >
+                  选择
                 </button>
               )}
             </div>
           )}
         </div>
+
+        {/* 通知选择模式工具栏 */}
+        {activeTab === 'notifications' && isSelectingNotifications && (
+          <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-t border-white/5">
+            <button
+              onClick={toggleSelectAllNotifications}
+              className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                selectedNotificationIds.size === notifications.length ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
+              }`}>
+                {selectedNotificationIds.size === notifications.length && (
+                  <svg className="w-3 h-3 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </div>
+              <span>全选 ({selectedNotificationIds.size}/{notifications.length})</span>
+            </button>
+          </div>
+        )}
         
         {/* 时间轴子标题 */}
         {activeTab === 'timeline' && currentGroup && (
@@ -568,7 +753,7 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
           </div>
         ) : (
           /* 通知列表 */
-          <div className="max-w-xl mx-auto px-4 py-4">
+          <div className="max-w-xl mx-auto px-4 py-4 pb-48">
             {notificationsLoading ? (
               <div className="flex flex-col items-center justify-center py-20">
                 <div className="w-8 h-8 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
@@ -584,98 +769,254 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
                 <p className="text-xs mt-1">定时同步的结果会显示在这里</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {notifications.map((notification) => (
-                  <div
+                  <NotificationItem
                     key={notification.id}
-                    onClick={() => !notification.is_read && markAsRead(notification.id)}
-                    className={`relative p-4 rounded-2xl border transition-all cursor-pointer ${
-                      notification.is_read
-                        ? 'bg-white/5 border-white/5'
-                        : 'bg-cyber-lime/5 border-cyber-lime/20 hover:border-cyber-lime/40'
-                    }`}
-                  >
-                    {/* 未读标记 */}
-                    {!notification.is_read && (
-                      <div className="absolute top-4 right-4 w-2 h-2 bg-cyber-lime rounded-full" />
-                    )}
-                    
-                    {/* 通知图标 */}
-                    <div className="flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        notification.type === 'sync_result' ? 'bg-green-500/20' : 'bg-blue-500/20'
-                      }`}>
-                        {notification.type === 'sync_result' ? (
-                          <svg className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/>
-                          </svg>
-                        ) : (
-                          <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-                          </svg>
-                        )}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        {/* 标题 */}
-                        <h3 className={`text-sm font-medium ${notification.is_read ? 'text-gray-300' : 'text-white'}`}>
-                          {notification.title}
-                        </h3>
-                        
-                        {/* 内容 */}
-                        {notification.content && (
-                          <p className="text-xs text-gray-500 mt-1 line-clamp-3 whitespace-pre-line">
-                            {notification.content}
-                          </p>
-                        )}
-                        
-                        {/* 新增视频预览 */}
-                        {notification.data?.new_videos && notification.data.new_videos.length > 0 && (
-                          <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
-                            {notification.data.new_videos.slice(0, 4).map((video: any) => (
-                              <div
-                                key={video.bvid}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank');
-                                }}
-                                className="shrink-0 w-20 cursor-pointer group"
-                              >
-                                <div className="relative w-20 h-12 rounded-lg overflow-hidden bg-white/10">
-                                  <img
-                                    src={video.pic?.replace('http:', 'https:')}
-                                    alt=""
-                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                </div>
-                                <p className="text-[10px] text-gray-400 mt-1 line-clamp-1 group-hover:text-cyber-lime transition-colors">
-                                  {video.title}
-                                </p>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        
-                        {/* 时间 */}
-                        <p className="text-[10px] text-gray-600 mt-2">
-                          {new Date(notification.created_at).toLocaleString('zh-CN', {
-                            month: 'numeric',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    notification={notification}
+                    isSelecting={isSelectingNotifications}
+                    isSelected={selectedNotificationIds.has(notification.id)}
+                    onSelect={() => toggleSelectNotification(notification.id)}
+                    onLongPress={() => handleNotificationLongPress(notification.id)}
+                    onClick={() => {
+                      if (isSelectingNotifications) {
+                        toggleSelectNotification(notification.id);
+                      } else {
+                        if (!notification.is_read) markAsRead(notification.id);
+                        setSelectedNotification(notification);
+                      }
+                    }}
+                  />
                 ))}
               </div>
             )}
           </div>
         )}
       </div>
+
+      {/* 通知批量操作底部栏 */}
+      {activeTab === 'notifications' && !isSelectingNotifications && notifications.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[#0a0a0d]/95 backdrop-blur-xl border-t border-white/10 p-3 pb-safe z-20">
+          <div className="max-w-xl mx-auto flex items-center gap-3">
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllAsRead}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-cyber-lime/10 hover:bg-cyber-lime/20 rounded-xl transition-colors"
+              >
+                <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+                <span className="text-cyber-lime text-sm font-medium">全部已读 ({unreadCount})</span>
+              </button>
+            )}
+            {readNotificationCount > 0 && (
+              <button
+                onClick={() => setNotificationConfirmAction({
+                  type: 'deleteRead',
+                  title: '清理已读',
+                  message: `确定删除 ${readNotificationCount} 条已读通知吗？`
+                })}
+                className="flex-1 flex items-center justify-center gap-2 py-3 bg-orange-500/10 hover:bg-orange-500/20 rounded-xl transition-colors mb-3"
+              >
+                <svg className="w-4 h-4 text-orange-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
+                <span className="text-orange-400 text-sm font-medium">清理已读 ({readNotificationCount})</span>
+              </button>
+            )}
+            <button
+              onClick={() => setNotificationConfirmAction({
+                type: 'deleteAll',
+                title: '清空全部',
+                message: `确定删除全部 ${notifications.length} 条通知吗？此操作不可恢复。`
+              })}
+              className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-colors mb-3"
+            >
+              <svg className="w-4 h-4 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span className="text-red-400 text-sm font-medium">清空</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 通知选择模式底部操作栏 */}
+      {activeTab === 'notifications' && isSelectingNotifications && selectedNotificationIds.size > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 bg-[#0a0a0d]/95 backdrop-blur-xl border-t border-white/10 p-3 pb-safe z-20">
+          <div className="max-w-xl mx-auto">
+            <button
+              onClick={() => setNotificationConfirmAction({
+                type: 'delete',
+                ids: Array.from(selectedNotificationIds),
+                title: '删除通知',
+                message: `确定删除选中的 ${selectedNotificationIds.size} 条通知吗？`
+              })}
+              className="w-full flex items-center justify-center gap-2 py-3 bg-red-500/20 hover:bg-red-500/30 rounded-xl transition-colors mb-3"
+            >
+              <svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              <span className="text-red-400 font-medium">删除选中 ({selectedNotificationIds.size})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 通知确认弹窗 */}
+      {notificationConfirmAction && createPortal(
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-black/80" onClick={() => setNotificationConfirmAction(null)} />
+          <div className="relative bg-[#1a1a1f] rounded-2xl p-6 max-w-sm w-full border border-white/10 shadow-2xl animate-scale-in">
+            <h3 className="text-white text-lg font-bold text-center mb-2">{notificationConfirmAction.title}</h3>
+            <p className="text-gray-400 text-sm text-center mb-6">{notificationConfirmAction.message}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setNotificationConfirmAction(null)}
+                className="flex-1 py-3 bg-white/10 hover:bg-white/15 rounded-xl text-white font-medium transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (notificationConfirmAction.type === 'delete' && notificationConfirmAction.ids) {
+                    deleteNotifications(notificationConfirmAction.ids);
+                  } else if (notificationConfirmAction.type === 'deleteRead') {
+                    deleteReadNotifications();
+                  } else if (notificationConfirmAction.type === 'deleteAll') {
+                    deleteAllNotifications();
+                  }
+                  setNotificationConfirmAction(null);
+                }}
+                className="flex-1 py-3 bg-red-500 text-white hover:bg-red-600 rounded-xl font-medium transition-colors"
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 通知 Toast */}
+      {notificationToast && createPortal(
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[99999] px-4 py-2 bg-black/90 backdrop-blur-xl rounded-full text-white text-sm font-medium shadow-xl border border-white/10 animate-fade-in">
+          {notificationToast}
+        </div>,
+        document.body
+      )}
+
+      {/* 通知详情弹窗 */}
+      {selectedNotification && createPortal(
+        <div className="fixed inset-0 z-[99999]" onClick={() => setSelectedNotification(null)}>
+          {/* 遮罩 */}
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+          
+          {/* 弹窗内容 */}
+          <div 
+            className="absolute inset-x-4 top-1/2 -translate-y-1/2 max-w-lg mx-auto bg-[#0a0a12] rounded-3xl border border-white/10 overflow-hidden max-h-[80vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* 头部 */}
+            <div className="p-4 border-b border-white/10 flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500/30 to-emerald-600/10 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-white font-semibold">{selectedNotification.title}</h3>
+                <p className="text-gray-500 text-xs mt-0.5">
+                  {new Date(selectedNotification.created_at).toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+              {/* 关闭按钮 */}
+              <button
+                onClick={() => setSelectedNotification(null)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+              >
+                <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            
+            {/* 视频列表 */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {selectedNotification.data?.new_videos && selectedNotification.data.new_videos.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedNotification.data.new_videos.map((video: any) => (
+                    <div
+                      key={video.bvid}
+                      onClick={() => window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank')}
+                      className="flex gap-3 p-2 rounded-xl bg-white/5 hover:bg-white/10 cursor-pointer transition-colors group"
+                    >
+                      {/* 封面 */}
+                      <div className="relative w-32 aspect-video rounded-lg overflow-hidden bg-white/5 shrink-0">
+                        <img
+                          src={video.pic?.replace('http:', 'https:')}
+                          alt=""
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          referrerPolicy="no-referrer"
+                        />
+                        {/* 发布时间标签 - 左上角绿色 */}
+                        {video.pubdate && (
+                          <div className="absolute top-1 left-1 px-1.5 py-0.5 bg-black/70 rounded text-[10px] text-cyber-lime font-mono">
+                            {new Date(video.pubdate).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        )}
+                        {/* 播放按钮 */}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/40 transition-colors">
+                          <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 scale-75 group-hover:scale-100 transition-all">
+                            <svg className="w-5 h-5 text-black ml-0.5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* 信息 */}
+                      <div className="flex-1 min-w-0 py-1 flex flex-col justify-between">
+                        <h4 className="text-white text-sm font-medium line-clamp-2 leading-snug group-hover:text-cyber-lime transition-colors">
+                          {video.title}
+                        </h4>
+                        {video.pubdate && (
+                          <p className="text-cyber-lime text-xs font-medium flex items-center gap-1">
+                            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="10"/>
+                              <path d="M12 6v6l4 2"/>
+                            </svg>
+                            {new Date(video.pubdate).toLocaleString('zh-CN', {
+                              month: 'numeric',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>暂无视频详情</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* 底部抽屉菜单 */}
       {menuVideo && onToggleWatchLater && createPortal(
@@ -903,10 +1244,131 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
           from { opacity: 0; transform: scale(0.9); }
           to { opacity: 1; transform: scale(1); }
         }
+        @keyframes scale-in {
+          from { opacity: 0; transform: scale(0.95); }
+          to { opacity: 1; transform: scale(1); }
+        }
+        .animate-scale-in { animation: scale-in 0.2s ease-out; }
+        @keyframes fade-in {
+          from { opacity: 0; transform: translate(-50%, -10px); }
+          to { opacity: 1; transform: translate(-50%, 0); }
+        }
+        .animate-fade-in { animation: fade-in 0.2s ease-out; }
         .pb-safe {
           padding-bottom: env(safe-area-inset-bottom, 16px);
         }
       `}</style>
+    </div>
+  );
+};
+
+// 通知项组件
+interface NotificationItemProps {
+  notification: Notification;
+  isSelecting: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+  onLongPress: () => void;
+  onClick: () => void;
+}
+
+const NotificationItem: React.FC<NotificationItemProps> = ({
+  notification,
+  isSelecting,
+  isSelected,
+  onSelect,
+  onLongPress,
+  onClick
+}) => {
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const handleTouchStart = () => {
+    if (!isSelecting) {
+      longPressTimer.current = setTimeout(() => {
+        onLongPress();
+      }, 500);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handleClick = () => {
+    onClick();
+  };
+
+  return (
+    <div
+      className={`flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer active:scale-[0.98] ${
+        isSelected
+          ? 'bg-cyber-lime/10 border border-cyber-lime/30'
+          : notification.is_read
+            ? 'bg-white/[0.02] hover:bg-white/[0.05] border border-transparent'
+            : 'bg-cyber-lime/5 hover:bg-cyber-lime/10 border border-transparent'
+      }`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onMouseDown={handleTouchStart}
+      onMouseUp={handleTouchEnd}
+      onMouseLeave={handleTouchEnd}
+      onClick={handleClick}
+    >
+      {/* 选择框 */}
+      {isSelecting && (
+        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+          isSelected ? 'bg-cyber-lime border-cyber-lime' : 'border-gray-500'
+        }`}>
+          {isSelected && (
+            <svg className="w-3.5 h-3.5 text-black" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+        </div>
+      )}
+
+      {/* 未读指示点 */}
+      {!isSelecting && (
+        <div className={`w-2 h-2 rounded-full shrink-0 ${
+          notification.is_read ? 'bg-gray-700' : 'bg-cyber-lime'
+        }`} />
+      )}
+      
+      {/* 内容 */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-medium truncate ${
+            notification.is_read ? 'text-gray-400' : 'text-white'
+          }`}>
+            {notification.title}
+          </span>
+          {notification.data?.new_videos?.length > 0 && (
+            <span className="shrink-0 px-1.5 py-0.5 bg-cyber-lime/20 text-cyber-lime text-[10px] rounded-full font-medium">
+              {notification.data.new_videos.length} 个视频
+            </span>
+          )}
+        </div>
+      </div>
+      
+      {/* 时间 */}
+      <span className="text-[11px] text-gray-600 shrink-0">
+        {new Date(notification.created_at).toLocaleString('zh-CN', {
+          month: 'numeric',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })}
+      </span>
+      
+      {/* 箭头 */}
+      {!isSelecting && (
+        <svg className="w-4 h-4 text-gray-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M9 18l6-6-6-6"/>
+        </svg>
+      )}
     </div>
   );
 };
