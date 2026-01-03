@@ -2,6 +2,19 @@ import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from '
 import { createPortal } from 'react-dom';
 import type { VideoWithUploader } from '../../lib/database.types';
 import { ClockIcon } from '../shared/Icons';
+import { supabase } from '../../lib/supabase';
+import { getStoredUserId } from '../../lib/auth';
+
+// 通知类型
+interface Notification {
+  id: number;
+  type: string;
+  title: string;
+  content: string | null;
+  data: any;
+  is_read: boolean;
+  created_at: string;
+}
 
 interface VideoTimelineProps {
   videos: VideoWithUploader[];
@@ -175,12 +188,87 @@ const DateHeader = memo(({ date, count }: { date: string; count: number }) => (
 DateHeader.displayName = 'DateHeader';
 
 const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoClick, watchLaterIds, onToggleWatchLater, onDelete }) => {
+  const [activeTab, setActiveTab] = useState<'timeline' | 'notifications'>('notifications');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [openMenuBvid, setOpenMenuBvid] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(getDateKey(Date.now())); // 默认今天
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dateRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  // 通知相关状态
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // 加载通知
+  const loadNotifications = useCallback(async () => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+
+    setNotificationsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('notification')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      setNotifications(data || []);
+      setUnreadCount(data?.filter(n => !n.is_read).length || 0);
+    } catch (err) {
+      console.error('加载通知失败:', err);
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, []);
+
+  // 标记通知为已读
+  const markAsRead = useCallback(async (id: number) => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+
+    try {
+      await supabase
+        .from('notification')
+        .update({ is_read: true })
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('标记已读失败:', err);
+    }
+  }, []);
+
+  // 标记所有为已读
+  const markAllAsRead = useCallback(async () => {
+    const userId = getStoredUserId();
+    if (!userId) return;
+
+    try {
+      await supabase
+        .from('notification')
+        .update({ is_read: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+      setUnreadCount(0);
+    } catch (err) {
+      console.error('标记全部已读失败:', err);
+    }
+  }, []);
+
+  // 切换到通知 Tab 时加载
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      loadNotifications();
+    }
+  }, [activeTab, loadNotifications]);
 
   // 当前打开菜单的视频
   const menuVideo = useMemo(() => {
@@ -284,56 +372,94 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
             </svg>
           </button>
           
-          {/* 中间标题区域 */}
-          <div className="flex-1 flex flex-col items-center justify-center">
-            <h1 className="text-white font-bold text-base flex items-center justify-center gap-2">
-              {currentGroup?.dateLabel || '时间轴'}
-            </h1>
-            <p className="text-gray-500 text-xs mt-0.5">
-              {todayStats.count} 个视频 · {todayStats.uploaders} 位UP主
+          {/* 中间 Tab 切换 */}
+          <div className="flex-1 flex justify-center">
+            <div className="flex bg-white/5 rounded-xl p-1">
+              <button
+                onClick={() => setActiveTab('timeline')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  activeTab === 'timeline'
+                    ? 'bg-cyber-lime text-black'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                时间轴
+              </button>
+              <button
+                onClick={() => setActiveTab('notifications')}
+                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all relative ${
+                  activeTab === 'notifications'
+                    ? 'bg-cyber-lime text-black'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                通知
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* 右侧按钮区域 */}
+          {activeTab === 'timeline' ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={gotoPrevDay}
+                disabled={currentDateIndex >= allGroupedVideos.length - 1}
+                className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M15 18l-6-6 6-6"/>
+                </svg>
+              </button>
+              <button
+                onClick={() => setShowDatePicker(!showDatePicker)}
+                className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
+                  showDatePicker ? 'bg-cyber-lime text-black' : 'bg-white/10 hover:bg-white/20 text-white'
+                }`}
+              >
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+              </button>
+              <button
+                onClick={gotoNextDay}
+                disabled={currentDateIndex <= 0}
+                className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllAsRead}
+                  className="px-3 py-1.5 text-xs text-cyber-lime bg-cyber-lime/10 hover:bg-cyber-lime/20 rounded-lg transition-colors"
+                >
+                  全部已读
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* 时间轴子标题 */}
+        {activeTab === 'timeline' && currentGroup && (
+          <div className="px-4 pb-2 text-center">
+            <p className="text-gray-500 text-xs">
+              {currentGroup.dateLabel} · {todayStats.count} 个视频 · {todayStats.uploaders} 位UP主
             </p>
           </div>
-
-          {/* 左右切换和日期选择 */}
-          <div className="flex items-center gap-2">
-            {/* 前一天 */}
-            <button
-              onClick={gotoPrevDay}
-              disabled={currentDateIndex >= allGroupedVideos.length - 1}
-              className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M15 18l-6-6 6-6"/>
-              </svg>
-            </button>
-
-            {/* 日期选择 */}
-            <button
-              onClick={() => setShowDatePicker(!showDatePicker)}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-                showDatePicker ? 'bg-cyber-lime text-black' : 'bg-white/10 hover:bg-white/20 text-white'
-              }`}
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-            </button>
-
-            {/* 后一天 */}
-            <button
-              onClick={gotoNextDay}
-              disabled={currentDateIndex <= 0}
-              className="w-9 h-9 flex items-center justify-center rounded-lg bg-white/10 hover:bg-white/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 18l6-6-6-6"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* 日期选择器弹出层 */}
@@ -357,7 +483,8 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
             <div className="overflow-y-auto max-h-[calc(70vh-52px)] p-3">
               {(() => {
                 // 按月份分组
-                const monthGroups = new Map<string, typeof allGroupedVideos>();
+                type GroupWithMonth = { date: string; dateLabel: string; videos: VideoWithUploader[]; monthLabel: string };
+                const monthGroups = new Map<string, GroupWithMonth[]>();
                 allGroupedVideos.forEach(group => {
                   const date = new Date(group.date);
                   const monthKey = `${date.getFullYear()}-${date.getMonth()}`;
@@ -372,7 +499,7 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
                   <div key={monthKey} className="mb-4 last:mb-0">
                     {/* 月份标题 */}
                     <div className="text-xs text-gray-500 mb-2 px-1">
-                      {(days[0] as any).monthLabel}
+                      {days[0].monthLabel}
                     </div>
 
                     {/* 日期网格 */}
@@ -408,35 +535,146 @@ const VideoTimeline: React.FC<VideoTimelineProps> = ({ videos, onClose, onVideoC
         </>
       )}
 
-      {/* 时间轴内容 */}
+      {/* 内容区域 */}
       <div ref={scrollContainerRef} className="h-[calc(100vh-64px)] overflow-y-auto overscroll-none">
-        <div className="max-w-xl mx-auto px-4 py-6 pl-20">
-          {!currentGroup ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-              <svg className="w-16 h-16 mb-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              <p>暂无视频数据</p>
-            </div>
-          ) : (
-            <div>
-              {currentGroup.videos.map((video, index) => (
-                <TimelineNode
-                  key={video.bvid}
-                  video={video}
-                  isFirst={index === 0}
-                  isLast={index === currentGroup.videos.length - 1}
-                  onClick={() => handleVideoClick(video.bvid)}
-                  onMenuClick={() => setOpenMenuBvid(openMenuBvid === video.bvid ? null : video.bvid)}
-                  isMenuOpen={openMenuBvid === video.bvid}
-                />
-              ))}
-            </div>
-          )}
-        </div>
+        {activeTab === 'timeline' ? (
+          /* 时间轴内容 */
+          <div className="max-w-xl mx-auto px-4 py-6 pl-20">
+            {!currentGroup ? (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+                <svg className="w-16 h-16 mb-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                  <line x1="16" y1="2" x2="16" y2="6"/>
+                  <line x1="8" y1="2" x2="8" y2="6"/>
+                  <line x1="3" y1="10" x2="21" y2="10"/>
+                </svg>
+                <p>暂无视频数据</p>
+              </div>
+            ) : (
+              <div>
+                {currentGroup.videos.map((video, index) => (
+                  <TimelineNode
+                    key={video.bvid}
+                    video={video}
+                    isFirst={index === 0}
+                    isLast={index === currentGroup.videos.length - 1}
+                    onClick={() => handleVideoClick(video.bvid)}
+                    onMenuClick={() => setOpenMenuBvid(openMenuBvid === video.bvid ? null : video.bvid)}
+                    isMenuOpen={openMenuBvid === video.bvid}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          /* 通知列表 */
+          <div className="max-w-xl mx-auto px-4 py-4">
+            {notificationsLoading ? (
+              <div className="flex flex-col items-center justify-center py-20">
+                <div className="w-8 h-8 border-2 border-cyber-lime border-t-transparent rounded-full animate-spin" />
+                <p className="text-gray-500 mt-4">加载中...</p>
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-500">
+                <svg className="w-16 h-16 mb-4 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <p>暂无通知</p>
+                <p className="text-xs mt-1">定时同步的结果会显示在这里</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {notifications.map((notification) => (
+                  <div
+                    key={notification.id}
+                    onClick={() => !notification.is_read && markAsRead(notification.id)}
+                    className={`relative p-4 rounded-2xl border transition-all cursor-pointer ${
+                      notification.is_read
+                        ? 'bg-white/5 border-white/5'
+                        : 'bg-cyber-lime/5 border-cyber-lime/20 hover:border-cyber-lime/40'
+                    }`}
+                  >
+                    {/* 未读标记 */}
+                    {!notification.is_read && (
+                      <div className="absolute top-4 right-4 w-2 h-2 bg-cyber-lime rounded-full" />
+                    )}
+                    
+                    {/* 通知图标 */}
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        notification.type === 'sync_result' ? 'bg-green-500/20' : 'bg-blue-500/20'
+                      }`}>
+                        {notification.type === 'sync_result' ? (
+                          <svg className="w-5 h-5 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9"/>
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                          </svg>
+                        )}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        {/* 标题 */}
+                        <h3 className={`text-sm font-medium ${notification.is_read ? 'text-gray-300' : 'text-white'}`}>
+                          {notification.title}
+                        </h3>
+                        
+                        {/* 内容 */}
+                        {notification.content && (
+                          <p className="text-xs text-gray-500 mt-1 line-clamp-3 whitespace-pre-line">
+                            {notification.content}
+                          </p>
+                        )}
+                        
+                        {/* 新增视频预览 */}
+                        {notification.data?.new_videos && notification.data.new_videos.length > 0 && (
+                          <div className="flex gap-2 mt-3 overflow-x-auto pb-1">
+                            {notification.data.new_videos.slice(0, 4).map((video: any) => (
+                              <div
+                                key={video.bvid}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  window.open(`https://www.bilibili.com/video/${video.bvid}`, '_blank');
+                                }}
+                                className="shrink-0 w-20 cursor-pointer group"
+                              >
+                                <div className="relative w-20 h-12 rounded-lg overflow-hidden bg-white/10">
+                                  <img
+                                    src={video.pic?.replace('http:', 'https:')}
+                                    alt=""
+                                    className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                </div>
+                                <p className="text-[10px] text-gray-400 mt-1 line-clamp-1 group-hover:text-cyber-lime transition-colors">
+                                  {video.title}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* 时间 */}
+                        <p className="text-[10px] text-gray-600 mt-2">
+                          {new Date(notification.created_at).toLocaleString('zh-CN', {
+                            month: 'numeric',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 底部抽屉菜单 */}

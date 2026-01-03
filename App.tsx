@@ -34,6 +34,7 @@ const LearningLog = lazy(() => import('./components/pages/LearningLog'));
 const ResourceCenter = lazy(() => import('./components/pages/ResourceCenter'));
 const VideoAnalyzer = lazy(() => import('./components/tools/VideoAnalyzer'));
 const InsightFloatingBall = lazy(() => import('./components/shared/InsightFloatingBall'));
+const RecycleBin = lazy(() => import('./components/pages/RecycleBin'));
 const App = () => {
   // 全局策展状态
   const insightLoading = useSyncExternalStore(
@@ -78,6 +79,9 @@ const App = () => {
   const [learningLogInitialData, setLearningLogInitialData] = useState<{ url: string; title: string; cover: string }>({ url: '', title: '', cover: '' });
   const [isResourceCenterOpen, setIsResourceCenterOpen] = useState(false);
   const [isVideoAnalyzerOpen, setIsVideoAnalyzerOpen] = useState(false);
+  const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
+  const [recycleBinCount, setRecycleBinCount] = useState(0);
+  const [cleanupConfirm, setCleanupConfirm] = useState(false);
   const [deleteConfirmVideo, setDeleteConfirmVideo] = useState<{ bvid: string; title: string; url: string } | null>(null);
 
   // AI总结弹窗状态 - 全局单例
@@ -192,6 +196,30 @@ const App = () => {
   // 时间轴
   const [showTimeline, setShowTimeline] = useState(false);
 
+  // 未读通知数量
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+
+  // 加载未读通知数量
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      const userId = getStoredUserId();
+      if (!userId) return;
+
+      const { count } = await supabase
+        .from('notification')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_read', false);
+
+      setUnreadNotificationCount(count || 0);
+    };
+
+    loadUnreadCount();
+    // 每分钟刷新一次
+    const interval = setInterval(loadUnreadCount, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
   // 加载快捷入口数量
   useEffect(() => {
     const loadCounts = async () => {
@@ -223,6 +251,14 @@ const App = () => {
         .select('*', { count: 'exact', head: true })
         .eq('user_id', userId);
       setNotesCount(nCount || 0);
+
+      // 回收站数量
+      const { count: rCount } = await supabase
+        .from('video')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .eq('is_deleted', true);
+      setRecycleBinCount(rCount || 0);
     };
 
     loadCounts();
@@ -368,11 +404,12 @@ const App = () => {
       const minLoadTime = initialLoading ? 500 : 0;
       const startTime = Date.now();
 
-      // 查询视频列表
+      // 查询视频列表（排除已删除的视频）
       const { data, error: fetchError } = await supabase
         .from('video')
         .select('*')
         .eq('user_id', currentUser.id)
+        .or('is_deleted.is.null,is_deleted.eq.false')
         .order('pubdate', { ascending: false });
 
       if (fetchError) throw fetchError;
@@ -571,19 +608,22 @@ const App = () => {
       setIsLearningLogOpen(true);
     }
 
-    // 异步删除视频
+    // 软删除视频（移到回收站）
     try {
       setVideos(prev => prev.filter(v => v.bvid !== bvid));
 
       const { error } = await supabase
         .from('video')
-        .delete()
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
         .eq('bvid', bvid)
         .eq('user_id', currentUser.id);
 
       if (error) throw error;
 
-      showToast('视频已删除');
+      // 更新回收站数量
+      setRecycleBinCount(prev => prev + 1);
+
+      showToast('已移到回收站');
     } catch (err) {
       console.error('删除视频失败:', err);
       fetchVideos();
@@ -591,7 +631,7 @@ const App = () => {
     }
 
     setDeleteConfirmVideo(null);
-  }, [currentUser?.id, fetchVideos, videos]);
+  }, [currentUser?.id, fetchVideos, videos, activeTab]);
 
   // 兼容旧的删除方法（直接删除不确认）
   const handleDeleteVideo = useCallback(async (bvid: string) => {
@@ -709,6 +749,47 @@ const App = () => {
       })
       .slice(0, 5);
   }, [videos]);
+
+  // 非今天发布的视频（用于清理功能）
+  const oldVideos = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return videos.filter(v => {
+      const pubDate = new Date(v.pubdate || v.created_at);
+      pubDate.setHours(0, 0, 0, 0);
+      return pubDate.getTime() < today.getTime();
+    });
+  }, [videos]);
+
+  // 清理非今天发布的视频（软删除到回收站）
+  const cleanupOldVideos = useCallback(async () => {
+    if (!currentUser?.id || oldVideos.length === 0) return;
+
+    try {
+      const oldBvids = oldVideos.map(v => v.bvid);
+      
+      // 乐观更新 UI
+      setVideos(prev => prev.filter(v => !oldBvids.includes(v.bvid)));
+
+      const { error } = await supabase
+        .from('video')
+        .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+        .eq('user_id', currentUser.id)
+        .in('bvid', oldBvids);
+
+      if (error) throw error;
+
+      // 更新回收站数量
+      setRecycleBinCount(prev => prev + oldVideos.length);
+      showToast(`已清理 ${oldVideos.length} 个旧视频到回收站`);
+    } catch (err) {
+      console.error('清理失败:', err);
+      fetchVideos();
+      showToast('清理失败，请重试');
+    }
+
+    setCleanupConfirm(false);
+  }, [currentUser?.id, oldVideos, fetchVideos]);
 
   // Infinite Scroll Handler - 节流优化 + 固定功能栏显示
   useEffect(() => {
@@ -926,17 +1007,21 @@ const App = () => {
                     )}
                   </div>
                   <SyncButton compact />
-                  {/* 时间轴按钮 */}
+                  {/* 通知按钮 */}
                   <button
                     onClick={() => setShowTimeline(true)}
-                    className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 hover:bg-cyber-lime/10 transition-colors"
-                    title="时间轴"
+                    className="w-8 h-8 rounded-full bg-white/5 border border-white/10 flex items-center justify-center hover:border-cyber-lime/50 hover:bg-cyber-lime/10 transition-colors relative"
+                    title="通知"
                   >
                     <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <line x1="12" y1="20" x2="12" y2="10" />
-                      <line x1="18" y1="20" x2="18" y2="4" />
-                      <line x1="6" y1="20" x2="6" y2="16" />
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
                     </svg>
+                    {unreadNotificationCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold">
+                        {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                      </span>
+                    )}
                   </button>
                   <button
                     onClick={() => setIsCalendarOpen(true)}
@@ -1068,6 +1153,19 @@ const App = () => {
                       </svg>
                       AI
                     </button>
+
+                    {/* 清理旧视频按钮 */}
+                    <button
+                      onClick={() => setCleanupConfirm(true)}
+                      className="whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium transition-all border flex items-center gap-1.5 bg-white/5 border-white/10 text-gray-300 hover:bg-rose-500/20 hover:border-rose-500/30 hover:text-rose-300"
+                      title="删除非今天发布的视频"
+                    >
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                      清理
+                    </button>
                   </div>
                 </div>
               )}
@@ -1169,6 +1267,28 @@ const App = () => {
                 />
               </Suspense>
 
+              {/* 回收站 */}
+              {isRecycleBinOpen && (
+                <Suspense fallback={<SimpleLoader />}>
+                  <RecycleBin
+                    onClose={() => setIsRecycleBinOpen(false)}
+                    onRestore={() => {
+                      fetchVideos();
+                      // 刷新回收站数量
+                      const userId = getStoredUserId();
+                      if (userId) {
+                        supabase
+                          .from('video')
+                          .select('*', { count: 'exact', head: true })
+                          .eq('user_id', userId)
+                          .eq('is_deleted', true)
+                          .then(({ count }) => setRecycleBinCount(count || 0));
+                      }
+                    }}
+                  />
+                </Suspense>
+              )}
+
               {/* 全局 AI总结弹窗 - 单例 */}
               {aiSummaryVideo && (
                 <Suspense fallback={null}>
@@ -1247,6 +1367,68 @@ const App = () => {
                         className="w-full py-3 bg-red-500 text-white font-medium rounded-xl hover:bg-red-600 transition-colors"
                       >
                         直接删除
+                      </button>
+                    </div>
+                  </div>
+                </div>,
+                document.body
+              )}
+
+              {/* 清理旧视频确认框 */}
+              {cleanupConfirm && createPortal(
+                <div
+                  className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
+                  onClick={(e) => { if (e.target === e.currentTarget) setCleanupConfirm(false); }}
+                >
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                  <div
+                    className="relative w-full max-w-sm rounded-2xl overflow-hidden p-6"
+                    style={{
+                      backgroundColor: 'rgba(30,30,35,0.98)',
+                      backdropFilter: 'blur(20px)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      animation: 'scaleIn 0.2s ease-out'
+                    }}
+                  >
+                    <button
+                      onClick={() => setCleanupConfirm(false)}
+                      className="absolute top-3 right-3 w-6 h-6 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-colors"
+                    >
+                      <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                        <path d="M18 6L6 18M6 6l12 12" />
+                      </svg>
+                    </button>
+
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-full bg-rose-500/20 flex items-center justify-center">
+                        <svg className="w-6 h-6 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="3 6 5 6 21 6" />
+                          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">清理旧视频</h3>
+                        <p className="text-xs text-gray-500">移到回收站，可随时恢复</p>
+                      </div>
+                    </div>
+
+                    <p className="text-sm text-gray-400 mb-6">
+                      将删除 <span className="text-rose-400 font-bold">{oldVideos.length}</span> 个非今天发布的视频到回收站。
+                    </p>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => setCleanupConfirm(false)}
+                        className="flex-1 py-3 bg-white/10 text-white font-medium rounded-xl hover:bg-white/15 transition-colors"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={cleanupOldVideos}
+                        disabled={oldVideos.length === 0}
+                        className="flex-1 py-3 bg-rose-500 text-white font-medium rounded-xl hover:bg-rose-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        确定清理
                       </button>
                     </div>
                   </div>
@@ -1493,6 +1675,26 @@ const App = () => {
                               <line x1="8" y1="23" x2="16" y2="23" />
                             </svg>
                             <span className="hidden lg:block text-sm text-violet-400 font-medium">转写</span>
+                          </button>
+
+                          {/* 回收站 */}
+                          <button
+                            onClick={() => setIsRecycleBinOpen(true)}
+                            className="relative w-11 h-11 lg:w-full lg:h-14 bg-[#1a1618] border border-white/10 rounded-xl flex items-center justify-center lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#241e20] transition-all active:scale-[0.98]"
+                            title="回收站"
+                          >
+                            <svg className="w-5 h-5 lg:w-6 lg:h-6 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <polyline points="3 6 5 6 21 6" />
+                              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                              <line x1="10" y1="11" x2="10" y2="17" />
+                              <line x1="14" y1="11" x2="14" y2="17" />
+                            </svg>
+                            <span className="hidden lg:block text-sm text-rose-400 font-medium">回收站</span>
+                            {recycleBinCount > 0 && (
+                              <span className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 bg-rose-500 rounded-full text-[9px] font-bold text-white flex items-center justify-center border border-cyber-dark z-10">
+                                {recycleBinCount > 99 ? '99+' : recycleBinCount}
+                              </span>
+                            )}
                           </button>
 
                           {/* 应用 */}
