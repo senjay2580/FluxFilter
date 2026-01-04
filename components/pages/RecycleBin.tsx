@@ -26,18 +26,18 @@ interface RecycleBinProps {
   onRestore?: () => void; // 恢复后刷新首页
 }
 
-// 格式化删除时间分组
+// 格式化发布时间分组
 const formatDateGroup = (dateStr: string): string => {
   const date = new Date(dateStr);
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
-  const deleteDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const pubDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 
-  if (deleteDate.getTime() === today.getTime()) return '今天';
-  if (deleteDate.getTime() === yesterday.getTime()) return '昨天';
+  if (pubDate.getTime() === today.getTime()) return '今天';
+  if (pubDate.getTime() === yesterday.getTime()) return '昨天';
   
-  const diffDays = Math.floor((today.getTime() - deleteDate.getTime()) / (24 * 60 * 60 * 1000));
+  const diffDays = Math.floor((today.getTime() - pubDate.getTime()) / (24 * 60 * 60 * 1000));
   if (diffDays < 7) return `${diffDays}天前`;
   if (diffDays < 30) return `${Math.floor(diffDays / 7)}周前`;
   
@@ -77,7 +77,7 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ onClose, onRestore }) => {
         .select('id, bvid, title, pic, duration, deleted_at, pubdate, platform, video_id, mid')
         .eq('user_id', userId)
         .eq('is_deleted', true)
-        .order('deleted_at', { ascending: false });
+        .order('pubdate', { ascending: false });
 
       if (error) throw error;
 
@@ -114,12 +114,12 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ onClose, onRestore }) => {
     fetchDeletedVideos();
   }, [fetchDeletedVideos]);
 
-  // 按删除日期分组
+  // 按发布日期分组
   const groupedVideos = useMemo(() => {
     const groups = new Map<string, DeletedVideo[]>();
     
     videos.forEach(video => {
-      const groupKey = formatDateGroup(video.deleted_at);
+      const groupKey = formatDateGroup(video.pubdate);
       if (!groups.has(groupKey)) {
         groups.set(groupKey, []);
       }
@@ -129,21 +129,12 @@ const RecycleBin: React.FC<RecycleBinProps> = ({ onClose, onRestore }) => {
     return Array.from(groups.entries());
   }, [videos]);
 
-  // 今天的视频 IDs
-  const todayVideoIds = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return videos
-      .filter(v => new Date(v.deleted_at) >= today)
-      .map(v => v.id);
-  }, [videos]);
-
-  // 非今天的视频 IDs
+  // 非今天发布的视频 IDs
   const oldVideoIds = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return videos
-      .filter(v => new Date(v.deleted_at) < today)
+      .filter(v => new Date(v.pubdate) < today)
       .map(v => v.id);
   }, [videos]);
 
@@ -587,9 +578,15 @@ const VideoItem: React.FC<VideoItemProps> = ({
       {/* 信息 */}
       <div className="flex-1 min-w-0">
         <h4 className="text-white text-sm font-medium line-clamp-2 leading-snug">{video.title}</h4>
-        <p className="text-gray-500 text-xs mt-1 truncate">
-          {video.uploader?.name || '未知UP主'}
-        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-gray-500 text-xs truncate">
+            {video.uploader?.name || '未知UP主'}
+          </p>
+          <span className="text-gray-600 text-xs">·</span>
+          <p className="text-gray-500 text-xs shrink-0">
+            {new Date(video.pubdate).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
+          </p>
+        </div>
       </div>
 
       {/* 操作按钮 */}
