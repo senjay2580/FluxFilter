@@ -8,6 +8,8 @@ import {
 import { getStoredUserId } from '../../lib/auth';
 import type { Resource, ResourceFolder } from '../../lib/database.types';
 import { useSwipeBack } from '../../hooks/useSwipeBack';
+import AISearchModal from '../shared/AISearchModal';
+import type { SearchableItem } from '../../lib/resource-ai-search';
 
 interface ResourceCenterProps { isOpen: boolean; onClose: () => void; }
 interface FolderNode extends ResourceFolder { children: FolderNode[]; }
@@ -92,6 +94,8 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
 
   // 移动端侧边栏状态
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // AI搜索弹窗
+  const [showAISearch, setShowAISearch] = useState(false);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2000); };
 
@@ -278,27 +282,72 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
   };
 
   const handleDelete = async (id: number) => {
-    try { await deleteResource(id); setResources(p => p.filter(r => r.id !== id)); showToast('已删除'); }
-    catch { showToast('删除失败'); }
+    try {
+      await deleteResource(id);
+      // 重新加载数据确保缓存一致性
+      await loadData();
+      showToast('已删除');
+    } catch (e) {
+      console.error('删除资源失败:', e);
+      showToast('删除失败');
+    }
     setDeleteConfirmId(null);
   };
 
   const handleBatchDelete = async () => {
     if (!selectedIds.size) return;
-    try { await deleteResources([...selectedIds]); setResources(p => p.filter(r => !selectedIds.has(r.id))); showToast(`已删除 ${selectedIds.size} 项`); }
-    catch { showToast('删除失败'); }
-    setSelectMode(false); setSelectedIds(new Set());
+    const count = selectedIds.size;
+    try {
+      await deleteResources([...selectedIds]);
+      // 重新加载数据确保缓存一致性
+      await loadData();
+      showToast(`已删除 ${count} 项`);
+    } catch (e) {
+      console.error('删除资源失败:', e);
+      showToast('删除失败');
+    }
+    setSelectMode(false);
+    setSelectedIds(new Set());
   };
 
   const handleBatchDeleteFolders = async () => {
     if (!selectedFolderIds.size) return;
+    const count = selectedFolderIds.size;
     try {
-      for (const id of selectedFolderIds) await deleteResourceFolder(id);
-      setFolders(p => p.filter(f => !selectedFolderIds.has(f.id)));
-      setResources(p => p.filter(r => !selectedFolderIds.has(r.folder_id || -1)));
-      showToast(`已删除 ${selectedFolderIds.size} 个文件夹`);
-    } catch { showToast('删除失败'); }
-    setFolderSelectMode(false); setSelectedFolderIds(new Set());
+      // 获取所有要删除的文件夹ID（包括子文件夹）
+      const allFolderIdsToDelete = new Set<number>();
+      const collectChildFolders = (folderId: number) => {
+        allFolderIdsToDelete.add(folderId);
+        folders.filter(f => f.parent_id === folderId).forEach(child => collectChildFolders(child.id));
+      };
+      selectedFolderIds.forEach(id => collectChildFolders(id));
+
+      // 删除所有文件夹（从子到父的顺序）
+      const sortedIds = [...allFolderIdsToDelete].sort((a, b) => {
+        const depthA = folders.filter(f => f.id === a)[0]?.parent_id ? 1 : 0;
+        const depthB = folders.filter(f => f.id === b)[0]?.parent_id ? 1 : 0;
+        return depthB - depthA;
+      });
+
+      for (const id of sortedIds) {
+        await deleteResourceFolder(id);
+      }
+
+      // 重新加载数据确保缓存一致性
+      await loadData();
+      // 重置选中的文件夹
+      if (selectedFolderId && allFolderIdsToDelete.has(selectedFolderId)) {
+        setSelectedFolderId(null);
+      }
+      showToast(`已删除 ${count} 个文件夹`);
+    } catch (e) {
+      console.error('删除文件夹失败:', e);
+      showToast('删除失败');
+      // 即使失败也重新加载以恢复正确状态
+      await loadData();
+    }
+    setFolderSelectMode(false);
+    setSelectedFolderIds(new Set());
   };
 
   const handleExport = () => {
@@ -343,6 +392,19 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
     const children = folders.filter(f => f.parent_id === folderId);
     return [folderId, ...children.flatMap(c => getAllChildFolderIds(c.id))];
   }, [folders]);
+
+  // 构建AI搜索数据
+  const aiSearchItems: SearchableItem[] = useMemo(() => {
+    return resources.map(r => {
+      const folder = folders.find(f => f.id === r.folder_id);
+      return {
+        id: r.id,
+        name: r.name,
+        url: r.url,
+        folder: folder?.name,
+      };
+    });
+  }, [resources, folders]);
 
   const filteredResources = resources.filter(r => {
     let matchFolder = true;
@@ -740,6 +802,18 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" /></svg>
               <input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="搜索..." className="w-full pl-9 pr-3 py-2.5 rounded-xl text-sm bg-white/5 border border-white/10 text-white placeholder-gray-500 focus:outline-none focus:border-cyber-lime/50" />
             </div>
+            {/* AI搜索按钮 */}
+            <button 
+              onClick={() => setShowAISearch(true)} 
+              className="p-2.5 rounded-xl bg-gradient-to-r from-cyber-lime/20 to-emerald-500/20 border border-cyber-lime/30 active:scale-95 transition-transform"
+              title="AI智能搜索"
+            >
+              <svg className="w-4 h-4 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="M21 21l-4.35-4.35" />
+                <path d="M11 8v6M8 11h6" />
+              </svg>
+            </button>
             {selectMode ? (
               <>
                 <button onClick={selectAll} className="px-3 py-2 text-xs text-cyber-lime active:bg-cyber-lime/10 rounded-lg">全选</button>
@@ -843,6 +917,13 @@ const ResourceCenter: React.FC<ResourceCenterProps> = ({ isOpen, onClose }) => {
         </div>
       </div>
 
+
+      {/* AI搜索弹窗 */}
+      <AISearchModal 
+        isOpen={showAISearch} 
+        onClose={() => setShowAISearch(false)} 
+        items={aiSearchItems} 
+      />
 
       {/* Toast */}
       {toast && <div className="fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-black/90 border border-white/20 rounded-full text-white text-sm z-[999999]">{toast}</div>}
