@@ -9,53 +9,160 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // B站 Cookie（从环境变量获取）
 const DEFAULT_COOKIE = process.env.BILIBILI_COOKIE || '';
 
+// 重试配置
+const RETRY_CONFIG = {
+  maxRetries: 3,           // 最大重试次数
+  baseDelay: 1000,         // 基础延迟 1s
+  maxDelay: 10000,         // 最大延迟 10s
+  timeout: 15000,          // 请求超时 15s
+  retryableStatusCodes: [408, 429, 500, 502, 503, 504], // 可重试的状态码
+};
+
+/**
+ * 带超时的 fetch
+ */
+async function fetchWithTimeout(url: string, options: RequestInit, timeout: number): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * 计算指数退避延迟
+ */
+function getRetryDelay(attempt: number): number {
+  const delay = Math.min(
+    RETRY_CONFIG.baseDelay * Math.pow(2, attempt) + Math.random() * 1000,
+    RETRY_CONFIG.maxDelay
+  );
+  return delay;
+}
+
+/**
+ * 判断错误是否可重试
+ */
+function isRetryableError(error: any, statusCode?: number): boolean {
+  // 网络错误、超时错误可重试
+  if (error?.name === 'AbortError') return true;
+  if (error?.message?.includes('network') || error?.message?.includes('timeout')) return true;
+  
+  // 特定状态码可重试
+  if (statusCode && RETRY_CONFIG.retryableStatusCodes.includes(statusCode)) return true;
+  
+  return false;
+}
+
+/**
+ * 带重试的请求封装
+ */
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  context: string = ''
+): Promise<Response> {
+  let lastError: any;
+  
+  for (let attempt = 0; attempt <= RETRY_CONFIG.maxRetries; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, options, RETRY_CONFIG.timeout);
+      
+      // 检查是否需要重试
+      if (!response.ok && isRetryableError(null, response.status)) {
+        if (attempt < RETRY_CONFIG.maxRetries) {
+          const delay = getRetryDelay(attempt);
+          console.log(`⚠️ ${context} 请求失败 (${response.status})，${delay}ms 后重试 (${attempt + 1}/${RETRY_CONFIG.maxRetries})`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+      }
+      
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      
+      if (isRetryableError(error) && attempt < RETRY_CONFIG.maxRetries) {
+        const delay = getRetryDelay(attempt);
+        console.log(`⚠️ ${context} 请求异常 (${error.message})，${delay}ms 后重试 (${attempt + 1}/${RETRY_CONFIG.maxRetries})`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      
+      throw error;
+    }
+  }
+  
+  throw lastError;
+}
+
 /**
  * 使用动态接口获取UP主视频（和前端一致，限流更宽松）
+ * 带重试机制
  */
-async function getUploaderVideos(mid: number, cookie: string): Promise<any[]> {
+async function getUploaderVideos(mid: number, cookie: string, uploaderName?: string): Promise<any[]> {
   const url = `https://api.bilibili.com/x/polymer/web-dynamic/v1/feed/space?host_mid=${mid}`;
+  const context = uploaderName ? `UP主[${uploaderName}]` : `UP主[${mid}]`;
   
-  const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Referer': 'https://www.bilibili.com',
-      'Origin': 'https://www.bilibili.com',
-      'Cookie': cookie || DEFAULT_COOKIE,
-    },
-  });
+  try {
+    const response = await fetchWithRetry(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.bilibili.com',
+        'Origin': 'https://www.bilibili.com',
+        'Cookie': cookie || DEFAULT_COOKIE,
+      },
+    }, context);
 
-  const data = await response.json();
-  
-  if (data.code !== 0) {
-    console.error(`获取UP主[${mid}]视频失败:`, data.message);
+    const data = await response.json();
+    
+    if (data.code !== 0) {
+      // B站业务错误码，部分可重试
+      if (data.code === -352 || data.code === -412) {
+        // 风控/限流，记录但不抛错
+        console.warn(`⚠️ ${context} 被限流 (code: ${data.code}): ${data.message}`);
+        return [];
+      }
+      console.error(`❌ ${context} 获取失败:`, data.message);
+      return [];
+    }
+
+    // 从动态中提取视频
+    const videos: any[] = [];
+    const items = data.data?.items || [];
+    
+    for (const item of items) {
+      if (item.type !== 'DYNAMIC_TYPE_AV') continue;
+      
+      const archive = item.modules?.module_dynamic?.major?.archive;
+      if (!archive) continue;
+      
+      let pic = archive.cover || '';
+      if (pic.startsWith('//')) pic = `https:${pic}`;
+      
+      videos.push({
+        aid: parseInt(archive.aid) || 0,
+        bvid: archive.bvid,
+        title: archive.title,
+        pic,
+        description: archive.desc || '',
+        duration: parseDurationText(archive.duration_text),
+        pubdate: item.modules?.module_author?.pub_ts || Math.floor(Date.now() / 1000),
+      });
+    }
+
+    return videos;
+  } catch (error: any) {
+    console.error(`❌ ${context} 请求失败 (已重试):`, error.message);
     return [];
   }
-
-  // 从动态中提取视频
-  const videos: any[] = [];
-  const items = data.data?.items || [];
-  
-  for (const item of items) {
-    if (item.type !== 'DYNAMIC_TYPE_AV') continue;
-    
-    const archive = item.modules?.module_dynamic?.major?.archive;
-    if (!archive) continue;
-    
-    let pic = archive.cover || '';
-    if (pic.startsWith('//')) pic = `https:${pic}`;
-    
-    videos.push({
-      aid: parseInt(archive.aid) || 0,
-      bvid: archive.bvid,
-      title: archive.title,
-      pic,
-      description: archive.desc || '',
-      duration: parseDurationText(archive.duration_text),
-      pubdate: item.modules?.module_author?.pub_ts || Math.floor(Date.now() / 1000), // 动态发布时间戳（秒）
-    });
-  }
-
-  return videos;
 }
 
 // 解析时长文本 "12:34" -> 秒数
@@ -145,10 +252,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         let successCount = 0;
         let failCount = 0;
 
-        // 3. 获取每个 UP 主的视频
+        // 3. 获取每个 UP 主的视频（带重试）
         for (const uploader of uploaders) {
           try {
-            const videos = await getUploaderVideos(uploader.mid, user.bilibili_cookie);
+            const videos = await getUploaderVideos(uploader.mid, user.bilibili_cookie, uploader.name);
             
             if (videos.length > 0) {
               successCount++;
@@ -160,63 +267,97 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 allRawVideos.push(video); // 保存原始视频数据
                 newVideoTitles.push(`${uploader.name}: ${video.title}`);
               }
-              console.log(`✅ ${uploader.name}: ${videos.length} 个视频`);
+              console.log(`✅ ${uploader.name}: ${videos.length} 个视频，今日 ${todayVideos.length} 个`);
             } else {
               failCount++;
+              console.log(`⚠️ ${uploader.name} (mid: ${uploader.mid}): 无视频数据，可能被限流或UP主无动态`);
             }
 
-            // 限流：每个UP主之间等待300ms
-            await new Promise(r => setTimeout(r, 300));
-          } catch (err) {
+            // 限流：每个UP主之间等待500ms（增加间隔减少限流风险）
+            await new Promise(r => setTimeout(r, 500));
+          } catch (err: any) {
             failCount++;
-            console.error(`获取UP主[${uploader.mid}]失败:`, err);
+            console.error(`❌ UP主[${uploader.name}]失败:`, err.message);
           }
         }
 
         console.log(`统计: 成功 ${successCount}, 失败 ${failCount}`);
 
-        // 4. 查询已存在的视频
+        // 4. 查询已存在的视频（带重试）
         if (allVideos.length > 0) {
           const bvids = allVideos.map(v => v.bvid);
-          const { data: existing } = await supabase
-            .from('video')
-            .select('bvid')
-            .eq('user_id', user.id)
-            .in('bvid', bvids);
+          
+          let existing: any[] = [];
+          for (let attempt = 0; attempt <= 2; attempt++) {
+            const { data, error } = await supabase
+              .from('video')
+              .select('bvid')
+              .eq('user_id', user.id)
+              .in('bvid', bvids);
+            
+            if (!error) {
+              existing = data || [];
+              break;
+            }
+            if (attempt < 2) {
+              console.log(`⚠️ 查询已存在视频失败，重试中... (${attempt + 1}/2)`);
+              await new Promise(r => setTimeout(r, 1000));
+            }
+          }
 
-          const existingBvids = new Set(existing?.map(v => v.bvid) || []);
+          const existingBvids = new Set(existing.map(v => v.bvid));
           const newVideos = allVideos.filter(v => !existingBvids.has(v.bvid));
           const newRawVideos = allRawVideos.filter(v => !existingBvids.has(v.bvid));
 
-          // 5. 插入新视频
+          // 5. 插入新视频（带重试）
           if (newVideos.length > 0) {
-            const { error: insertError } = await supabase
-              .from('video')
-              .upsert(newVideos, { onConflict: 'user_id,platform,bvid' });
+            let insertSuccess = false;
+            for (let attempt = 0; attempt <= 2; attempt++) {
+              const { error: insertError } = await supabase
+                .from('video')
+                .upsert(newVideos, { onConflict: 'user_id,platform,bvid' });
 
-            if (insertError) {
-              console.error('插入视频失败:', insertError);
+              if (!insertError) {
+                insertSuccess = true;
+                console.log(`✅ 成功插入 ${newVideos.length} 个新视频`);
+                break;
+              }
+              
+              if (attempt < 2) {
+                console.log(`⚠️ 插入视频失败 (${insertError.message})，重试中... (${attempt + 1}/2)`);
+                await new Promise(r => setTimeout(r, 1000));
+              } else {
+                console.error('❌ 插入视频最终失败:', insertError);
+              }
             }
 
-            // 6. 创建通知
-            const notification = {
-              user_id: user.id,
-              type: 'sync_result',
-              title: `同步完成：新增 ${newVideos.length} 个视频`,
-              content: newVideoTitles.slice(0, 5).join('\n') + (newVideoTitles.length > 5 ? `\n...等 ${newVideoTitles.length} 个` : ''),
-              data: {
-                videos_added: newVideos.length,
-                new_videos: newRawVideos.slice(0, 10).map(v => ({
-                  bvid: v.bvid,
-                  title: v.title,
-                  pic: v.pic,
-                  pubdate: new Date(v.pubdate * 1000).toISOString(), // 转换为 ISO 格式
-                })),
-              },
-              is_read: false, // 确保新通知为未读状态
-            };
+            // 6. 创建通知（带重试）
+            if (insertSuccess) {
+              const notification = {
+                user_id: user.id,
+                type: 'sync_result',
+                title: `同步完成：新增 ${newVideos.length} 个视频`,
+                content: newVideoTitles.slice(0, 5).join('\n') + (newVideoTitles.length > 5 ? `\n...等 ${newVideoTitles.length} 个` : ''),
+                data: {
+                  videos_added: newVideos.length,
+                  new_videos: newRawVideos.slice(0, 10).map(v => ({
+                    bvid: v.bvid,
+                    title: v.title,
+                    pic: v.pic,
+                    pubdate: new Date(v.pubdate * 1000).toISOString(),
+                  })),
+                },
+                is_read: false,
+              };
 
-            await supabase.from('notification').insert(notification);
+              for (let attempt = 0; attempt <= 2; attempt++) {
+                const { error } = await supabase.from('notification').insert(notification);
+                if (!error) break;
+                if (attempt < 2) {
+                  await new Promise(r => setTimeout(r, 500));
+                }
+              }
+            }
           }
 
           results.push({ userId: user.id, videosAdded: newVideos.length });
