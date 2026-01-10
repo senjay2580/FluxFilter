@@ -441,7 +441,13 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
 
       {/* 嵌入式播放器 */}
       {showEmbeddedPlayer && (
-        <EmbeddedPlayer bvid={bvid} title={title} onClose={() => setShowEmbeddedPlayer(false)} />
+        <EmbeddedPlayer 
+          bvid={bvid} 
+          title={title} 
+          onClose={() => setShowEmbeddedPlayer(false)} 
+          platform={platform as 'bilibili' | 'youtube'}
+          videoId={videoId || undefined}
+        />
       )}
 
       {/* 标题 Tooltip */}
