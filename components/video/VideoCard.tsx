@@ -6,6 +6,7 @@ import { formatDuration } from '../../lib/bilibili';
 import type { VideoWithUploader } from '../../lib/database.types';
 import EmbeddedPlayer from './EmbeddedPlayer';
 import { parseLinksToElements } from '../../lib/parseLinks';
+import { openExternal } from '../../lib/openExternal';
 
 // 支持两种数据格式：旧的 Video 类型和新的 VideoWithUploader 类型
 interface VideoCardProps {
@@ -382,16 +383,16 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                     <span className="text-[15px] text-white font-medium">下载视频</span>
                   </button>
                 )}
-                <a 
-                  href={isYouTube 
-                    ? `https://www.youtube.com/watch?v=${videoId}` 
-                    : `https://www.bilibili.com/video/${bvid}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => { 
-                    e.stopPropagation(); 
-                    onMenuToggle?.(null); 
-                  }} 
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // PWA standalone 下 <a target="_blank"> 不可靠，必须在点击的同步栈内调 window.open
+                    const url = isYouTube
+                      ? `https://www.youtube.com/watch?v=${videoId}`
+                      : `https://www.bilibili.com/video/${bvid}`;
+                    openExternal(url);
+                    onMenuToggle?.(null);
+                  }}
                   className="w-full flex items-center gap-4 px-4 py-3.5"
                 >
                   <div className={`w-9 h-9 rounded-full flex items-center justify-center ${isYouTube ? 'bg-red-500/15' : 'bg-white/10'}`}>
@@ -404,7 +405,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                     )}
                   </div>
                   <span className="text-[15px] text-white font-medium">{isYouTube ? '在YouTube打开' : '在B站打开'}</span>
-                </a>
+                </button>
                 {onDelete && (
                   <button onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(true); }} className="w-full flex items-center gap-4 px-4 py-3.5">
                     <div className="w-9 h-9 rounded-full bg-red-500/15 flex items-center justify-center"><svg className="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg></div>

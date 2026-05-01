@@ -1,5 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
+import { openExternal } from '../../lib/openExternal';
 
 interface EmbeddedPlayerProps {
   bvid: string;
@@ -9,15 +10,9 @@ interface EmbeddedPlayerProps {
   videoId?: string; // YouTube video ID
 }
 
-// 检测是否为移动端
-const isMobile = (): boolean => {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
-    (window.innerWidth <= 768);
-};
-
 const EmbeddedPlayer: React.FC<EmbeddedPlayerProps> = ({ bvid, title, onClose, platform = 'bilibili', videoId }) => {
   const isYouTube = platform === 'youtube';
-  
+
   // B站嵌入播放器URL（使用官方嵌入方式）
   const embedUrl = isYouTube
     ? `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`
@@ -26,19 +21,6 @@ const EmbeddedPlayer: React.FC<EmbeddedPlayerProps> = ({ bvid, title, onClose, p
   const fullUrl = isYouTube
     ? `https://www.youtube.com/watch?v=${videoId}`
     : `https://www.bilibili.com/video/${bvid}`;
-
-  // 移动端直接跳转到原站
-  React.useEffect(() => {
-    if (isMobile()) {
-      window.open(fullUrl, '_blank');
-      onClose();
-    }
-  }, [fullUrl, onClose]);
-
-  // 移动端不渲染播放器
-  if (isMobile()) {
-    return null;
-  }
 
   // 禁止背景滚动
   React.useEffect(() => {
@@ -73,7 +55,7 @@ const EmbeddedPlayer: React.FC<EmbeddedPlayerProps> = ({ bvid, title, onClose, p
 
         {/* 在原站打开 */}
         <button
-          onClick={() => window.open(fullUrl, '_blank')}
+          onClick={() => openExternal(fullUrl)}
           className={`flex items-center gap-1.5 ${isYouTube ? 'text-red-400 hover:text-red-300' : 'text-pink-400 hover:text-pink-300'} active:scale-95 transition-all`}
         >
           {isYouTube ? (
