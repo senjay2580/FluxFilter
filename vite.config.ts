@@ -126,6 +126,11 @@ export default defineConfig(({ mode }) => {
           },
           workbox: {
             globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+            // 新 SW 一激活就接管所有打开的标签页 + 跳过 waiting 状态，
+            // 否则用户改完代码 push 后还得关掉所有 Fluxf 标签页才能见到更新。
+            skipWaiting: true,
+            clientsClaim: true,
+            cleanupOutdatedCaches: true,
             runtimeCaching: [
               {
                 urlPattern: /^https:\/\/i[0-9]\.hdslb\.com\/.*/i,
