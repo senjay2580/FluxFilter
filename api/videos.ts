@@ -69,15 +69,14 @@ export default async function handler(request: Request) {
         .lte('pubdate', endOfDay.toISOString());
     }
 
+    // 时间窗按 CN 时区（UTC+8）解释 YYYY-MM-DD，避免 Vercel Edge UTC 默认导致的偏移
     if (dateFrom) {
-      const start = new Date(dateFrom);
-      start.setHours(0, 0, 0, 0);
+      const start = new Date(`${dateFrom}T00:00:00+08:00`);
       query = query.gte('pubdate', start.toISOString());
     }
 
     if (dateTo) {
-      const end = new Date(dateTo);
-      end.setHours(23, 59, 59, 999);
+      const end = new Date(`${dateTo}T23:59:59.999+08:00`);
       query = query.lte('pubdate', end.toISOString());
     }
 
