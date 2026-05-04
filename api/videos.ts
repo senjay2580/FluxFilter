@@ -1,12 +1,15 @@
 /**
  * 视频列表 API
- * 
+ *
  * GET /api/videos - 获取视频列表
  * Query Params:
  *   - user_id: 用户ID（必须）
- *   - limit: 每页数量（默认20）
- *   - offset: 偏移量
- *   - date: 指定日期（YYYY-MM-DD）
+ *   - limit: 每页数量（默认20，上限500）
+ *   - offset: 偏移量（用于分页批量拉取）
+ *   - date: 指定日期（YYYY-MM-DD，单日）
+ *   - date_from: 起始日期（YYYY-MM-DD，含）
+ *   - date_to: 结束日期（YYYY-MM-DD，含）
+ *   - q: 关键词，title + description 双匹配（ilike）
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -30,9 +33,12 @@ export default async function handler(request: Request) {
   const url = new URL(request.url);
   
   const userId = url.searchParams.get('user_id');
-  const limit = parseInt(url.searchParams.get('limit') || '20');
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20'), 1), 500);
   const offset = parseInt(url.searchParams.get('offset') || '0');
   const dateParam = url.searchParams.get('date');
+  const dateFrom = url.searchParams.get('date_from');
+  const dateTo = url.searchParams.get('date_to');
+  const q = (url.searchParams.get('q') || '').trim();
 
   // user_id 是必须的
   if (!userId) {
@@ -61,6 +67,23 @@ export default async function handler(request: Request) {
       query = query
         .gte('pubdate', startOfDay.toISOString())
         .lte('pubdate', endOfDay.toISOString());
+    }
+
+    if (dateFrom) {
+      const start = new Date(dateFrom);
+      start.setHours(0, 0, 0, 0);
+      query = query.gte('pubdate', start.toISOString());
+    }
+
+    if (dateTo) {
+      const end = new Date(dateTo);
+      end.setHours(23, 59, 59, 999);
+      query = query.lte('pubdate', end.toISOString());
+    }
+
+    if (q) {
+      const safe = q.replace(/[%,]/g, ' ');
+      query = query.or(`title.ilike.%${safe}%,description.ilike.%${safe}%`);
     }
 
     const { data, error, count } = await query;
