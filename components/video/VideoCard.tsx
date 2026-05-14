@@ -280,7 +280,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                   {/* UP主 · pubdate · 三点按钮 — bilibili-style meta row */}
                   <div className="flex items-center justify-between gap-2 mt-1.5">
                     <div className="flex items-center gap-1 min-w-0 flex-1">
-                      <span className="text-[12px] text-gray-400 hover:text-white transition-colors truncate">
+                      <span className="text-[12px] font-normal text-gray-400 hover:text-white transition-colors truncate">
                         {author}
                       </span>
                       {pubdate && (
@@ -294,7 +294,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                     {onAddToWatchlist && (
                       <button
                         onClick={handleMoreClick}
-                        className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-opacity duration-200 active:scale-95 md:opacity-0 md:group-hover:opacity-100 ${drawerOpen ? 'bg-white/10 md:opacity-100' : 'hover:bg-white/5'}`}
+                        className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-[opacity,transform] duration-200 active:scale-95 md:opacity-0 md:group-hover:opacity-100 ${drawerOpen ? 'bg-white/10 md:opacity-100' : 'hover:bg-white/5'}`}
                       >
                         <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
                           <circle cx="5" cy="12" r="2" />
