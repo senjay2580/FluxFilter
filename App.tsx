@@ -971,19 +971,6 @@ const App = () => {
             <div className="absolute top-10 left-1/2 -translate-x-1/2 w-96 h-48 bg-emerald-300/20 rounded-full blur-[60px] animate-glow-pulse" style={{ animationDelay: '1s' }} />
           </div>
 
-          {/* 动态渐变光斑 - 根据Tab变化 */}
-          <div className="absolute inset-0">
-            <div
-              className={`absolute top-1/4 -left-1/4 w-[60%] h-[50%] rounded-full blur-[120px] transition-all duration-1000 ${activeTab === 'home' ? 'bg-emerald-600/20' :
-                activeTab === 'watchLater' ? 'bg-amber-500/15' :
-                  activeTab === 'rss' ? 'bg-blue-500/15' :
-                    'bg-purple-500/15'
-                }`}
-            />
-            {/* 底部微弱光斑 */}
-            <div className="absolute -bottom-1/4 right-1/4 w-[40%] h-[30%] bg-cyan-500/10 rounded-full blur-[100px]" />
-          </div>
-
           {/* 噪点纹理 - 仅在 PC 端渲染以节省移动端 GPU 资源 */}
           <div className="hidden lg:block absolute inset-0 opacity-[0.02]" style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
@@ -1558,18 +1545,18 @@ const App = () => {
                           <span className="text-sm font-semibold text-white">快捷访问</span>
                         </div>
 
-                        <div className="grid grid-cols-4 gap-1.5 lg:grid-cols-2 lg:gap-3 lg:content-start">
+                        <div className="grid grid-cols-4 gap-1.5 lg:grid-cols-2 lg:gap-x-4 lg:gap-y-1 lg:content-start">
                           {/* 收藏夹 */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('collector'); setActiveTab('settings'); }}
-                            className="relative h-12 bg-[#1a1c20] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#252830] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#1a1c20] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#252830] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                           >
-                            <svg className="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-cyan-400 lg:text-gray-400 lg:group-hover:text-cyan-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-cyan-400 font-medium">收藏</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-cyan-400 transition-colors">收藏</span>
                             {collectedCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-cyan-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
+                              <span className="absolute -top-1 -right-1 lg:static lg:ml-auto min-w-[14px] h-[14px] lg:h-[18px] lg:min-w-[18px] px-1 bg-cyan-500/90 lg:bg-cyan-500/15 lg:text-cyan-300 rounded-full text-[8px] lg:text-[10px] font-bold text-white flex items-center justify-center z-10">
                                 {collectedCount > 99 ? '99+' : collectedCount}
                               </span>
                             )}
@@ -1578,15 +1565,15 @@ const App = () => {
                           {/* 提醒 */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('reminder'); setActiveTab('settings'); }}
-                            className="relative h-12 bg-[#1f1b16] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#2a241c] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#1f1b16] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#2a241c] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                           >
-                            <svg className="w-5 h-5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-amber-400 lg:text-gray-400 lg:group-hover:text-amber-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <circle cx="12" cy="12" r="10" />
                               <polyline points="12 6 12 12 16 14" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-amber-400 font-medium">提醒</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-amber-400 transition-colors">提醒</span>
                             {reminderCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-amber-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
+                              <span className="absolute -top-1 -right-1 lg:static lg:ml-auto min-w-[14px] h-[14px] lg:h-[18px] lg:min-w-[18px] px-1 bg-amber-500/90 lg:bg-amber-500/15 lg:text-amber-300 rounded-full text-[8px] lg:text-[10px] font-bold text-white flex items-center justify-center z-10">
                                 {reminderCount > 99 ? '99+' : reminderCount}
                               </span>
                             )}
@@ -1595,15 +1582,15 @@ const App = () => {
                           {/* TODO */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setSettingsInitialView('todo'); setActiveTab('settings'); }}
-                            className="relative h-12 bg-[#161a22] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e232e] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#161a22] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#1e232e] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                           >
-                            <svg className="w-5 h-5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-blue-400 lg:text-gray-400 lg:group-hover:text-blue-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M9 11l3 3L22 4" />
                               <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-blue-400 font-medium">待办</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-blue-400 transition-colors">待办</span>
                             {todoCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-blue-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
+                              <span className="absolute -top-1 -right-1 lg:static lg:ml-auto min-w-[14px] h-[14px] lg:h-[18px] lg:min-w-[18px] px-1 bg-blue-500/90 lg:bg-blue-500/15 lg:text-blue-300 rounded-full text-[8px] lg:text-[10px] font-bold text-white flex items-center justify-center z-10">
                                 {todoCount > 99 ? '99+' : todoCount}
                               </span>
                             )}
@@ -1612,18 +1599,18 @@ const App = () => {
                           {/* 笔记 */}
                           <button
                             onClick={() => { subPageSourceRef.current = 'home'; setIsNotesOpen(true); }}
-                            className="relative h-12 bg-[#1d161d] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#271e27] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#1d161d] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#271e27] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                             title="笔记"
                           >
-                            <svg className="w-5 h-5 text-purple-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-purple-300 lg:text-gray-400 lg:group-hover:text-purple-300 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                               <polyline points="14 2 14 8 20 8" />
                               <line x1="16" y1="13" x2="8" y2="13" />
                               <line x1="16" y1="17" x2="8" y2="17" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-purple-300 font-medium">笔记</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-purple-300 transition-colors">笔记</span>
                             {notesCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-purple-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
+                              <span className="absolute -top-1 -right-1 lg:static lg:ml-auto min-w-[14px] h-[14px] lg:h-[18px] lg:min-w-[18px] px-1 bg-purple-500/90 lg:bg-purple-500/15 lg:text-purple-300 rounded-full text-[8px] lg:text-[10px] font-bold text-white flex items-center justify-center z-10">
                                 {notesCount > 99 ? '99+' : notesCount}
                               </span>
                             )}
@@ -1636,33 +1623,33 @@ const App = () => {
                               setSettingsInitialView('transcriber');
                               setActiveTab('settings');
                             }}
-                            className="relative h-12 bg-[#191621] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#211e2b] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#191621] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#211e2b] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                             title="音频转写"
                           >
-                            <svg className="w-5 h-5 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-violet-400 lg:text-gray-400 lg:group-hover:text-violet-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
                               <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                               <line x1="12" y1="19" x2="12" y2="23" />
                               <line x1="8" y1="23" x2="16" y2="23" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-violet-400 font-medium">转写</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-violet-400 transition-colors">转写</span>
                           </button>
 
                           {/* 回收站 */}
                           <button
                             onClick={() => setIsRecycleBinOpen(true)}
-                            className="relative h-12 bg-[#1a1618] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#241e20] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#1a1618] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#241e20] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                             title="回收站"
                           >
-                            <svg className="w-5 h-5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-rose-400 lg:text-gray-400 lg:group-hover:text-rose-400 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <polyline points="3 6 5 6 21 6" />
                               <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                               <line x1="10" y1="11" x2="10" y2="17" />
                               <line x1="14" y1="11" x2="14" y2="17" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-rose-400 font-medium">回收站</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-rose-400 transition-colors">回收站</span>
                             {recycleBinCount > 0 && (
-                              <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 bg-rose-500 rounded-full text-[8px] font-bold text-white flex items-center justify-center z-10">
+                              <span className="absolute -top-1 -right-1 lg:static lg:ml-auto min-w-[14px] h-[14px] lg:h-[18px] lg:min-w-[18px] px-1 bg-rose-500/90 lg:bg-rose-500/15 lg:text-rose-300 rounded-full text-[8px] lg:text-[10px] font-bold text-white flex items-center justify-center z-10">
                                 {recycleBinCount > 99 ? '99+' : recycleBinCount}
                               </span>
                             )}
@@ -1671,31 +1658,31 @@ const App = () => {
                           {/* 工作流 */}
                           <button
                             onClick={() => setIsDailyWorkflowOpen(true)}
-                            className="relative h-12 bg-[#1a1f16] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#232d1e] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#1a1f16] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#232d1e] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                             title="每日工作流"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 text-lime-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-lime-400 lg:text-gray-400 lg:group-hover:text-lime-400 transition-colors">
                               <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5">
                                 <path d="M3.375 7.5a3 3 0 1 0 6 0a3 3 0 0 0-6 0m11.25 11a3 3 0 1 0 6 0a3 3 0 0 0-6 0m-8.25-14V.75m0 9.75v12.75"/>
                                 <path d="M9.375 7.5h5.25a3 3 0 0 1 3 3v5"/>
                               </g>
                             </svg>
-                            <span className="hidden lg:block text-sm text-lime-400 font-medium">工作流</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-lime-400 transition-colors">工作流</span>
                           </button>
 
                           {/* 应用 */}
                           <button
                             onClick={() => setIsAppsModalOpen(true)}
-                            className="relative h-12 bg-[#161a16] border border-white/10 rounded-lg flex items-center justify-center lg:h-14 lg:justify-start lg:gap-3 lg:px-4 hover:bg-[#1e231e] transition-all active:scale-[0.98]"
+                            className="group relative h-12 lg:h-9 bg-[#161a16] lg:bg-transparent border border-white/10 lg:border-transparent rounded-lg lg:rounded-md flex items-center justify-center lg:justify-start lg:gap-2 lg:px-3 hover:bg-[#1e231e] lg:hover:bg-white/[0.04] transition-colors active:scale-[0.98]"
                             title="应用"
                           >
-                            <svg className="w-5 h-5 text-cyber-lime" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <svg className="w-5 h-5 lg:w-[18px] lg:h-[18px] text-cyber-lime lg:text-gray-400 lg:group-hover:text-cyber-lime transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                               <rect x="3" y="3" width="7" height="7" rx="1.5" />
                               <rect x="14" y="3" width="7" height="7" rx="1.5" />
                               <rect x="3" y="14" width="7" height="7" rx="1.5" />
                               <rect x="14" y="14" width="7" height="7" rx="1.5" />
                             </svg>
-                            <span className="hidden lg:block text-sm text-cyber-lime font-medium">应用</span>
+                            <span className="hidden lg:block text-sm font-semibold text-gray-300 group-hover:text-cyber-lime transition-colors">应用</span>
                           </button>
                         </div>
                       </div>
