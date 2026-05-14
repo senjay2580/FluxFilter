@@ -48,7 +48,7 @@ const formatPubdate = (pubdate: string | number): string => {
 
 // 视频卡片占位骨架屏
 const VideoCardSkeleton = () => (
-  <div className="aspect-[16/10] w-full bg-white/5 rounded-2xl animate-pulse"
+  <div className="aspect-[16/10] w-full bg-white/5 rounded-lg animate-pulse"
     style={{ minHeight: '220px' }} />
 );
 
@@ -161,13 +161,9 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
     <>
       <div
         ref={containerRef}
-        className="group relative rounded-[1.25rem] overflow-hidden
-                 bg-[#0a0a0d]
-                 border border-white/[0.08]
-                 shadow-xl shadow-black/20
-                 hover:shadow-2xl hover:shadow-black/30
-                 hover:border-white/[0.12]
-                 active:scale-[0.98] transition-all duration-300 cursor-pointer
+        className="group relative rounded-lg overflow-hidden
+                 bg-[#0d0d10]
+                 active:scale-[0.98] transition-transform duration-200 cursor-pointer
                  transform-gpu flex flex-col"
         style={{
           contentVisibility: 'auto',
