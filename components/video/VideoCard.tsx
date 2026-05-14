@@ -239,10 +239,10 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               )}
             </div>
 
-            {/* Content Section - 平台渐变背景 */}
-            <div className={`p-2.5 overflow-hidden ${
-              isYouTube 
-                ? 'bg-gradient-to-r from-red-950/80 via-[#0d0d10] to-[#0d0d10]' 
+            {/* Content Section — bilibili-style text region; gradient strip retained as platform accent */}
+            <div className={`p-2 md:px-3 md:py-2.5 overflow-hidden ${
+              isYouTube
+                ? 'bg-gradient-to-r from-red-950/80 via-[#0d0d10] to-[#0d0d10]'
                 : 'bg-gradient-to-r from-pink-500/30 via-[#0d0d10] to-[#0d0d10]'
             }`}>
               <div className="flex gap-2 items-start">
@@ -260,10 +260,10 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  {/* 标题 */}
+                  {/* 标题 — bilibili sizing/weight */}
                   <h3
                     ref={titleRef}
-                    className="text-white font-semibold leading-tight line-clamp-2 text-[13.5px] cursor-default"
+                    className="text-white font-medium leading-snug line-clamp-2 text-[14px] cursor-default"
                     onMouseEnter={(e) => {
                       const el = e.currentTarget;
                       if (el.scrollHeight > el.clientHeight || title.length > 30) {
@@ -277,17 +277,24 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                     {title}
                   </h3>
 
-                  {/* UP主和三个点按钮 */}
+                  {/* UP主 · pubdate · 三点按钮 — bilibili-style meta row */}
                   <div className="flex items-center justify-between gap-2 mt-1.5">
-                    <span className="text-[11.5px] text-cyber-lime font-semibold truncate">
-                      {author}
-                    </span>
+                    <div className="flex items-center gap-1 min-w-0 flex-1">
+                      <span className="text-[12px] text-gray-400 hover:text-white transition-colors truncate">
+                        {author}
+                      </span>
+                      {pubdate && (
+                        <span className="shrink-0 text-[12px] text-gray-500">
+                          · {pubdate}
+                        </span>
+                      )}
+                    </div>
 
-                    {/* 三个点按钮 */}
+                    {/* 三个点按钮 — PC: hover-to-reveal, Mobile: always visible */}
                     {onAddToWatchlist && (
                       <button
                         onClick={handleMoreClick}
-                        className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-all duration-200 active:scale-95 ${drawerOpen ? 'bg-white/10' : 'hover:bg-white/5'}`}
+                        className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition-opacity duration-200 active:scale-95 md:opacity-0 md:group-hover:opacity-100 ${drawerOpen ? 'bg-white/10 md:opacity-100' : 'hover:bg-white/5'}`}
                       >
                         <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="currentColor">
                           <circle cx="5" cy="12" r="2" />
