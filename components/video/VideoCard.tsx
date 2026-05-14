@@ -180,7 +180,7 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               <img
                 src={thumbnail || ''}
                 alt={title}
-                className={`w-full h-full object-cover transform-gpu transition-transform duration-500 group-hover:scale-105 ${imageLoaded ? 'animate-card-fade' : 'opacity-0'}`}
+                className={`w-full h-full object-cover transform-gpu transition-transform duration-500 md:group-hover:scale-105 ${imageLoaded ? 'animate-card-fade' : 'opacity-0'}`}
                 loading="eager"
                 decoding="async"
                 fetchPriority="high"
@@ -190,15 +190,11 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                   (e.target as HTMLImageElement).style.display = 'none';
                 }}
               />
-              {/* 渐变遮罩 */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent"></div>
+              {/* 渐变遮罩 — bilibili-style, only bottom 30% and weaker */}
+              <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/60 to-transparent pointer-events-none"></div>
 
-              {/* Duration Badge - 带背景色块 */}
-              <div className="absolute top-3 right-3 px-2.5 py-1 bg-black/80 backdrop-blur-sm rounded-lg text-[11px] font-bold text-white flex items-center gap-1.5 shadow-lg">
-                <svg className="w-3 h-3 text-white/80" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <circle cx="12" cy="12" r="10" />
-                  <polyline points="12 6 12 12 16 14" />
-                </svg>
+              {/* Duration Badge — bottom-right, no icon, bilibili style */}
+              <div className="absolute bottom-2 right-2 px-1.5 py-0.5 bg-black/75 rounded-md text-[11px] font-medium text-white">
                 {duration}
               </div>
 
@@ -212,44 +208,30 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
                 </div>
               )}
 
-              {/* 底部数据展示条 */}
-              <div className="absolute bottom-0 left-0 right-0 px-3 py-2">
-                <div className="flex items-center justify-between">
-                  {pubdate && (
-                    <div className="flex items-center gap-1 text-[11px] font-semibold text-white"
-                      style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
-                      <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </svg>
-                      <span>{pubdate}</span>
-                    </div>
-                  )}
-                  {stats && (
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-1 text-[11px] font-semibold text-white"
-                        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
-                        <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                        <span>{formatNumber(stats.views)}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-[11px] font-semibold text-white"
-                        style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
-                        <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                        </svg>
-                        <span>{formatNumber(stats.danmaku)}</span>
-                      </div>
-                    </div>
-                  )}
+              {/* 底部数据 — bilibili-style: views + danmaku on bottom-left, duration is bottom-right (sibling) */}
+              {stats && (
+                <div className="absolute bottom-2 left-2 flex items-center gap-3">
+                  <div className="flex items-center gap-1 text-[11px] font-medium text-white"
+                    style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
+                    <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span>{formatNumber(stats.views)}</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] font-medium text-white"
+                    style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)' }}>
+                    <svg className="w-3.5 h-3.5 drop-shadow-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                    <span>{formatNumber(stats.danmaku)}</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* 已收藏星标 - 放在右下角 */}
+              {/* 已收藏星标 — top-left; if charging badge also present, offset right to avoid overlap */}
               {isInWatchlist && (
-                <div className="absolute bottom-10 right-2 p-1 bg-black/50 rounded">
+                <div className={`absolute top-2 ${accessRestriction ? 'left-12' : 'left-2'} p-1 bg-black/50 rounded`}>
                   <svg className="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                   </svg>
