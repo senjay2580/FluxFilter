@@ -239,12 +239,8 @@ const VideoCard: React.FC<VideoCardProps> = ({ video, onAddToWatchlist, onRemove
               )}
             </div>
 
-            {/* Content Section — bilibili-style text region; gradient strip retained as platform accent */}
-            <div className={`p-2 md:px-3 md:py-2.5 overflow-hidden ${
-              isYouTube
-                ? 'bg-gradient-to-r from-red-950/80 via-[#0d0d10] to-[#0d0d10]'
-                : 'bg-gradient-to-r from-pink-500/30 via-[#0d0d10] to-[#0d0d10]'
-            }`}>
+            {/* Content Section — bilibili-style flat dark, no platform gradient */}
+            <div className="p-2 md:px-3 md:py-2.5 overflow-hidden bg-[#0d0d10]">
               <div className="flex gap-2 items-start">
                 {/* 头像 */}
                 <div className="shrink-0">
