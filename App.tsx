@@ -2022,7 +2022,7 @@ const App = () => {
                     {/* 视频列表 */}
                     {!loading && filteredVideos.length > 0 && (
                       <div>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-x-4 gap-y-6 lg:gap-x-4 lg:gap-y-8">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4 gap-x-2 gap-y-4 md:gap-x-3 md:gap-y-5 lg:gap-x-4 lg:gap-y-6">
                           {filteredVideos.slice(0, visibleCount).map((video) => (
                             <VideoCard
                               key={video.bvid}
